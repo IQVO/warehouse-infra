@@ -1,0 +1,39 @@
+# facility-layout — Facility Layout bounded context (physical warehouse
+# structure: site/zone/aisle/slot hierarchy).
+#
+# Startup: runs migrations before serving.
+#
+# Kafka: chart now templates EVENT_PUBLISHER/KAFKA_BROKERS and the analytics
+# projector+reports pair (PR #39, merged 2026-08-30 -- the "KNOWN GAP" this
+# file used to document is fixed). Live now that warehouse-infra runs a real
+# Kafka release (kafka.tf).
+
+replicaCount: 1
+
+config:
+  httpAddr: ":8080"
+  migrationsPath: "migrations"
+  eventPublisher: "kafka"
+
+kafka:
+  enabled: true
+  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
+
+analytics:
+  enabled: true
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  failureThreshold: 6
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  failureThreshold: 6

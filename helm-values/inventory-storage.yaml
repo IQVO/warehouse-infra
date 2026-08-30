@@ -5,18 +5,24 @@
 # below is relaxed accordingly (the chart default, 5s + 3 failures, can kill
 # the pod mid-migration on a slow first boot).
 #
-# Kafka: publish-only, and gated off here — EVENT_PUBLISHER=log keeps events on
-# stdout. There is no Kafka broker in this cluster.
+# Kafka: live now that warehouse-infra runs a real Kafka release (kafka.tf).
+#
+# Analytics: the projector+reports pair (ADR-0010) is turned on here — see
+# wes-work-planning.yaml's comment for the full rationale.
 
 replicaCount: 1
 
 config:
   httpAddr: ":8080"
-  eventPublisher: "log"
+  eventPublisher: "kafka"
   migrationsPath: "migrations"
 
 kafka:
-  enabled: false
+  enabled: true
+  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
+
+analytics:
+  enabled: true
 
 livenessProbe:
   httpGet:

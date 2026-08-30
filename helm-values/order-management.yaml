@@ -1,0 +1,48 @@
+# order-management — Order Management bounded context (the missing upstream
+# Open Host Service: order intake, allocation via inventory-storage, release
+# via wes-work-planning).
+#
+# Startup: runs migrations before serving (MIGRATIONS_PATH default "migrations").
+#
+# Kafka: outbound-publish-only (no inbound consumer). Live now that
+# warehouse-infra runs a real Kafka release (kafka.tf).
+#
+# HTTP outbound dependencies (inventory-storage, wes-work-planning) default
+# to the chart's own "permissive" no-op client unless explicitly pointed at
+# the other services' in-cluster DNS names — see charts/order-management
+# /values.yaml for the exact keys once that wiring is added.
+#
+# Analytics: the projector+reports pair (ADR-0010) is turned on here — see
+# wes-work-planning.yaml's comment for the full rationale.
+
+replicaCount: 1
+
+config:
+  httpAddr: ":8080"
+  eventPublisher: "kafka"
+
+inventoryStorage:
+  mode: "http"
+  baseUrl: "http://inventory-storage.warehouse-systems.svc.cluster.local:80"
+
+kafka:
+  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
+
+analytics:
+  enabled: true
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  failureThreshold: 6
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  failureThreshold: 6

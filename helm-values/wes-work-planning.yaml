@@ -9,16 +9,30 @@
 # applied by hand. Applying them is a one-liner against the wes_work_planning
 # database; wiring a migrate-on-boot step belongs in the service repo, not here.
 #
-# Kafka: publish-only and gated off — EVENT_PUBLISHER=log.
+# Kafka: publish-only. Live now that warehouse-infra runs a real Kafka
+# release (kafka.tf) — see warehouse-infra terraform/kafka.tf.
+#
+# Analytics: the projector+reports pair (ADR-0010) is turned on here.
+# terraform/services.tf feeds analytics.database.projectorUrl/reportsUrl from
+# a Terraform-generated role (see locals.tf's analytics_database_urls); the
+# database/role itself is created by hand against the live Postgres instance
+# the same way wes_work_planning's own OLTP migrations are (see the KNOWN GAP
+# note above and init-databases.sql.tftpl — initdb only runs on a truly empty
+# data directory, so an already-initialized cluster needs the new CREATE
+# ROLE/DATABASE statements applied manually once).
 
 replicaCount: 1
 
 config:
   httpAddr: ":8080"
-  eventPublisher: "log"
+  eventPublisher: "kafka"
 
 kafka:
-  enabled: false
+  enabled: true
+  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
+
+analytics:
+  enabled: true
 
 livenessProbe:
   httpGet:

@@ -170,6 +170,51 @@ variable "deploy_services" {
 }
 
 # ---------------------------------------------------------------------------
+# Kafka
+#
+# Independent on/off switch from deploy_services: the fleet's services all
+# default to EVENT_PUBLISHER=log / kafka.enabled=false in their own
+# helm-values, so nothing breaks with Kafka off. Turning it on is what lets
+# EVENT_PUBLISHER=kafka actually deliver anywhere.
+# ---------------------------------------------------------------------------
+
+variable "deploy_kafka" {
+  description = "Whether to install the single-broker Kafka release (kafka.tf)."
+  type        = bool
+  default     = true
+}
+
+variable "kafka_chart_version" {
+  description = <<-EOT
+    Bitnami kafka chart version, pulled from the OCI registry
+    oci://registry-1.docker.io/bitnamicharts/kafka.
+  EOT
+  type        = string
+  default     = "32.4.3"
+}
+
+variable "kafka_image_tag" {
+  description = "Kafka image tag under docker.io/bitnamilegacy. Must match the chart's appVersion."
+  type        = string
+  default     = "4.0.0-debian-12-r10"
+}
+
+variable "kafka_persistence_enabled" {
+  description = <<-EOT
+    Whether the Kafka controller/broker gets a PersistentVolumeClaim.
+
+    Defaults to false (emptyDir), matching postgres_persistence_enabled's
+    reasoning: a laptop kind cluster is disposable, and every topic here is
+    either integration events (replayable from the OLTP source of truth) or
+    an analytics fan-out (rebuildable by a projector re-consuming from
+    FirstOffset) — nothing stored in Kafka itself is the sole copy of
+    anything.
+  EOT
+  type        = bool
+  default     = false
+}
+
+# ---------------------------------------------------------------------------
 # Observability
 #
 # A separate namespace and a separate on/off switch from the services, on

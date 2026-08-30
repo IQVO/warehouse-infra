@@ -7,17 +7,24 @@
 #
 # It also runs postgres.Migrate() before serving; probes are relaxed for the
 # same reason as inventory-storage.
+#
+# Analytics: the projector+reports pair (ADR-0010) is turned on here — see
+# wes-work-planning.yaml's comment for the full rationale.
 
 replicaCount: 1
 
 config:
   httpAddr: ":8080"
-  eventPublisher: "log"
+  eventPublisher: "kafka"
   migrationsPath: "migrations"
   maxHoursPerShift: "8.0"
 
 kafka:
-  enabled: false
+  enabled: true
+  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
+
+analytics:
+  enabled: true
 
 livenessProbe:
   httpGet:

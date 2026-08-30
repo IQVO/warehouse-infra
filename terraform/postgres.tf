@@ -32,6 +32,21 @@ resource "random_password" "service_db" {
   special = false # keep it URL-safe: no chars needing percent-encoding in the DSN
 }
 
+# ---------------------------------------------------------------------------
+# Per-service ANALYTICS database passwords — same generated-never-committed
+# posture as service_db above, one extra role per service in
+# local.analytics_services (see locals.tf's analytics_* locals). A single
+# role per service for now (the chart's own reportsUrl-falls-back-to-
+# projectorUrl default), not yet the separate read-only reports role the
+# governance charter's promotion path describes.
+# ---------------------------------------------------------------------------
+resource "random_password" "service_analytics_db" {
+  for_each = local.analytics_services
+
+  length  = 24
+  special = false
+}
+
 resource "helm_release" "postgresql" {
   depends_on = [kubernetes_namespace.data]
 
@@ -98,6 +113,10 @@ resource "helm_release" "postgresql" {
               services = {
                 for name, svc in local.services :
                 name => merge(svc, { password = local.service_passwords[name] })
+              }
+              analytics_services = {
+                for name in local.analytics_services :
+                name => merge(local.analytics_db_info[name], { password = local.analytics_service_passwords[name] })
               }
             }
           )

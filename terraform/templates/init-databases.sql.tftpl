@@ -21,3 +21,20 @@ CREATE DATABASE ${svc.db} WITH OWNER ${svc.user} ENCODING 'UTF8';
 REVOKE ALL ON DATABASE ${svc.db} FROM PUBLIC;
 GRANT CONNECT, TEMPORARY ON DATABASE ${svc.db} TO ${svc.user};
 %{ endfor ~}
+
+-- ---------------------------------------------------------------------------
+-- Analytics data-mesh (ADR-0010 in each service repo): one extra database +
+-- role per analytics-enabled service, same least-privilege pattern as the
+-- OLTP databases above. This role is used as BOTH the projector's
+-- (read-write) and reports' (currently same-role) connection today -- see
+-- terraform/locals.tf's analytics_database_urls comment on the promotion
+-- path to a distinct read-only reports role.
+-- ---------------------------------------------------------------------------
+%{ for name, svc in analytics_services ~}
+
+-- ${name} (analytics)
+CREATE ROLE ${svc.user} WITH LOGIN PASSWORD '${svc.password}';
+CREATE DATABASE ${svc.db} WITH OWNER ${svc.user} ENCODING 'UTF8';
+REVOKE ALL ON DATABASE ${svc.db} FROM PUBLIC;
+GRANT CONNECT, TEMPORARY ON DATABASE ${svc.db} TO ${svc.user};
+%{ endfor ~}

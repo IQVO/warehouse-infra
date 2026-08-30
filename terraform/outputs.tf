@@ -46,6 +46,12 @@ output "database_urls" {
   sensitive   = true
 }
 
+output "analytics_database_urls" {
+  description = "ANALYTICS_DATABASE_URL (projector, read-write) per analytics-enabled service. LOCAL DEV credentials. Same value is also used as ANALYTICS_READER_DATABASE_URL until a distinct read-only role is introduced (see docs/analytics/governance-charter.md's promotion path)."
+  value       = local.analytics_database_urls
+  sensitive   = true
+}
+
 output "psql_command" {
   description = "Drop into psql as the superuser on the shared Postgres release."
   value = join(" ", [

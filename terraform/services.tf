@@ -66,47 +66,67 @@ resource "helm_release" "service" {
     file("${path.module}/../helm-values/${each.key}.yaml"),
 
     # Computed config. Appended last so it takes precedence.
-    yamlencode({
-      image = {
-        repository = "warehouse/${each.key}"
-        tag        = var.image_tag
-        # The image only ever exists in the kind nodes' containerd store, put
-        # there by `kind load docker-image`. IfNotPresent stops the kubelet
-        # trying to pull it from Docker Hub and ImagePullBackOff-ing.
-        pullPolicy = "IfNotPresent"
-      }
-
-      service = {
-        type       = "ClusterIP"
-        port       = 80
-        targetPort = each.value.port
-      }
-
-      # The chart turns this into a Secret and mounts it as DATABASE_URL.
-      database = {
-        url = local.database_urls[each.key]
-      }
-
-      # Kong route. `host: ""` makes the rule host-agnostic, so it matches
-      # requests to http://localhost/<prefix> regardless of the Host header.
-      # konghq.com/strip-path drops the /<service> prefix before proxying, so
-      # the pod still sees the paths its router actually registers
-      # (GET /healthz, not GET /inventory-storage/healthz).
-      ingress = {
-        enabled   = true
-        className = "kong"
-        annotations = {
-          "konghq.com/strip-path" = "true"
+    yamlencode(merge(
+      {
+        image = {
+          repository = "warehouse/${each.key}"
+          tag        = var.image_tag
+          # The image only ever exists in the kind nodes' containerd store, put
+          # there by `kind load docker-image`. IfNotPresent stops the kubelet
+          # trying to pull it from Docker Hub and ImagePullBackOff-ing.
+          pullPolicy = "IfNotPresent"
         }
-        hosts = [{
-          host = ""
-          paths = [{
-            path     = each.value.path
-            pathType = "Prefix"
+
+        service = {
+          type       = "ClusterIP"
+          port       = 80
+          targetPort = each.value.port
+        }
+
+        # The chart turns this into a Secret and mounts it as DATABASE_URL.
+        database = {
+          url = local.database_urls[each.key]
+        }
+
+        # Kong route. `host: ""` makes the rule host-agnostic, so it matches
+        # requests to http://localhost/<prefix> regardless of the Host header.
+        # konghq.com/strip-path drops the /<service> prefix before proxying, so
+        # the pod still sees the paths its router actually registers
+        # (GET /healthz, not GET /inventory-storage/healthz).
+        ingress = {
+          enabled   = true
+          className = "kong"
+          annotations = {
+            "konghq.com/strip-path" = "true"
+          }
+          hosts = [{
+            host = ""
+            paths = [{
+              path     = each.value.path
+              pathType = "Prefix"
+            }]
           }]
-        }]
-      }
-    }),
+        }
+      },
+      # The "analytics report part" (ADR-0010): a projector (only writer)
+      # + reports (read-only HTTP reader) pair, gated behind
+      # analytics.enabled in each of these six charts. A single generated
+      # role/database is used as both projectorUrl and reportsUrl for now
+      # (see locals.tf's analytics_database_urls comment on the promotion
+      # path to a distinct read-only role) -- every chart's own
+      # values.yaml already documents reportsUrl falling back to
+      # projectorUrl when left empty, so this is exactly that documented
+      # local/dev baseline, not a workaround.
+      contains(local.analytics_services, each.key) ? {
+        analytics = {
+          enabled = true
+          database = {
+            projectorUrl = local.analytics_database_urls[each.key]
+            reportsUrl   = local.analytics_database_urls[each.key]
+          }
+        }
+      } : {}
+    )),
   ]
 }
 
@@ -114,7 +134,7 @@ resource "helm_release" "service" {
 # Deliberately NO dependency on the observability stack.
 #
 # helm_release.service above depends on the namespace, Postgres, Kong and the
-# image build — and on nothing in observability.tf. That is the wiring, and it
+# image build -- and on nothing in observability.tf. That is the wiring, and it
 # is a decision rather than an oversight:
 #
 #   * The services' OTLP exporters are non-blocking. A service whose collector

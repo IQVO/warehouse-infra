@@ -1,0 +1,44 @@
+# labor-performance — Labor Performance bounded context (engineered labor
+# standards + actual-vs-standard scoring). Pure Kafka CONSUMER of
+# fulfillment-execution's TaskCompleted event (warehouse.fulfillment.events)
+# — it has no outbound domain-event publisher of its own to gate.
+#
+# Startup: runs migrations before serving.
+#
+# Kafka: kafka.enabled gates whether KAFKA_BROKERS is set in the container
+# env at all. Unlike every OTHER service in this fleet, labor-performance's
+# Kafka consumer is NOT cosmetic-on-failure: it is this service's ONLY
+# inbound data path (a pure Kafka consumer of fulfillment-execution's
+# TaskCompleted, per its own CLAUDE.md), and cmd/labor/main.go treats a
+# consumer dial failure as FATAL (process exits), unlike
+# fulfillment-execution's non-fatal background-goroutine failure. This MUST
+# be enabled with a real, reachable broker or the pod crash-loops.
+
+replicaCount: 1
+
+config:
+  httpAddr: ":8080"
+  migrationsPath: "migrations"
+  logLevel: "info"
+  kafkaConsumerGroup: "labor-performance"
+  corsAllowedOrigins: "http://localhost:5173,http://localhost:5187"
+
+kafka:
+  enabled: true
+  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  failureThreshold: 6
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  failureThreshold: 6

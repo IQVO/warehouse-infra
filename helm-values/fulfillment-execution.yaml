@@ -2,26 +2,32 @@
 #
 # Startup: runs postgres.Migrate() before serving.
 #
-# KAFKA CAVEAT: unlike the other three, this service's INBOUND consumer
-# (WorkReleased -> CreateTask) starts unconditionally in main(), independent of
-# EVENT_PUBLISHER. There is no Kafka broker in this cluster, so the consumer
-# goroutine will log connection failures on a loop. That is cosmetic: it runs
-# in its own goroutine, the HTTP server is unaffected, and GET /healthz keeps
-# returning 200. `kafka.brokers` is pointed at a placeholder in-cluster name so
-# the failures are obviously about a missing broker rather than about the
-# binary's localhost:9092 default leaking into a pod.
+# Kafka: live now that warehouse-infra runs a real Kafka release (kafka.tf).
+# The inbound consumer (WorkReleased -> CreateTask) starts unconditionally
+# regardless of EVENT_PUBLISHER; with a real broker reachable it now
+# actually consumes instead of looping connection failures.
 #
-# `kafka.enabled: false` still gates the OUTBOUND TaskCompleted publisher off.
+# `kafka.enabled: true` also turns on the OUTBOUND TaskCompleted publisher.
+#
+# Analytics: the projector+reports pair (ADR-0010) is turned on here — see
+# wes-work-planning.yaml's comment for the full rationale. This was
+# temporarily left off (Dockerfile deploy gap, PR #47) and re-enabled once
+# that fix merged 2026-08-30 -- see terraform/locals.tf's analytics_services
+# comment for the important caveat about REPOS_ROOT/fulfillment-execution
+# needing to be a clean checkout before the next terraform apply.
 
 replicaCount: 1
 
 config:
   httpAddr: ":8080"
-  eventPublisher: "log"
+  eventPublisher: "kafka"
 
 kafka:
-  enabled: false
+  enabled: true
   brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
+
+analytics:
+  enabled: true
 
 livenessProbe:
   httpGet:
