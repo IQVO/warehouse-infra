@@ -19,10 +19,23 @@
 # in dev — see each service's own filecatalog loader for the mechanism).
 #
 # Schema (one entry per process path):
-#   id:                    string, matches fulfillment-execution's task.Type
-#                          values (PICK, PACK, REBIN, SLAM) and
-#                          wes-work-planning's PathId values exactly —
-#                          this is the join key across all three services.
+#   id:                    string, the canonical path identity —
+#                          fulfillment-execution's task.Type values
+#                          (PICK, PACK, REBIN, SLAM).
+#   matchPrefix:           string, lower-case. A REAL path_id anywhere in
+#                          this fleet is almost never the bare canonical
+#                          id — it carries a station/zone/scenario suffix
+#                          chosen by whichever upstream service enqueues
+#                          the work: order-management's default is the
+#                          plain "pick"; other producers use forms like
+#                          "pick-zone-a" or "pick-soak". matchPrefix
+#                          declares the family: a path_id belongs to this
+#                          entry if it equals matchPrefix exactly, or
+#                          starts with matchPrefix + "-" (case-
+#                          insensitive). Every consuming service's
+#                          Catalogue.Lookup implements this exact rule —
+#                          see fulfillment-execution's
+#                          internal/domain/pathcatalog package.
 #   direct:                bool. true = a WorkReleased unit for this path
 #                          goes straight into an execution task (today's
 #                          reality for all four paths in this one-building
@@ -45,21 +58,25 @@ building: sortable-fc
 
 paths:
   - id: PICK
+    matchPrefix: pick
     direct: true
     requiredCapabilities:
       - pick
 
   - id: PACK
+    matchPrefix: pack
     direct: true
     requiredCapabilities:
       - pack
 
   - id: REBIN
+    matchPrefix: rebin
     direct: true
     requiredCapabilities:
       - rebin
 
   - id: SLAM
+    matchPrefix: slam
     direct: true
     requiredCapabilities:
       - slam
