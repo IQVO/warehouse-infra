@@ -1,0 +1,65 @@
+# Process-path catalogue — sortable-fc (the one building topology this
+# fleet actually runs today).
+#
+# This is a PUBLISHED LANGUAGE, not a domain aggregate and not owned by any
+# single bounded context: fulfillment-execution (task dispatch/claim),
+# wes-work-planning (WorkPool/WorkReleased path_id validation), and
+# workforce-management (capability vocabulary for shift planning) all read
+# this SAME file rather than each hardcoding their own copy of "what paths
+# exist and what capability do they need." Per the reference architecture
+# this fleet is modelled against: "declare paths; let each building
+# instantiate its own topology."
+#
+# warehouse-infra is the right owner for this file for the same reason
+# terraform/locals.tf's `services` map lives here: both are facts about
+# WHAT EXISTS IN THIS DEPLOYMENT (a building's topology), not business
+# logic belonging to any one context. Neither is a Terraform resource —
+# this file is plain data, mounted/read by each service the same way
+# regardless of how it gets there (ConfigMap in-cluster, a local file path
+# in dev — see each service's own filecatalog loader for the mechanism).
+#
+# Schema (one entry per process path):
+#   id:                    string, matches fulfillment-execution's task.Type
+#                          values (PICK, PACK, REBIN, SLAM) and
+#                          wes-work-planning's PathId values exactly —
+#                          this is the join key across all three services.
+#   direct:                bool. true = a WorkReleased unit for this path
+#                          goes straight into an execution task (today's
+#                          reality for all four paths in this one-building
+#                          topology). false is reserved for a future
+#                          multi-hop path (e.g. Rebin as a distinct
+#                          fan-in stage some other topology might route
+#                          through an intermediate queue) — not used yet,
+#                          included so the schema does not need to change
+#                          shape the first time that need appears.
+#   requiredCapabilities:  []string. The exact capability vocabulary
+#                          workforce-management plans headcount against
+#                          and fulfillment-execution's Task.RequiredCapabilities
+#                          is built from. Must be non-empty.
+#
+# A malformed or missing file is a BOOT-TIME failure for every consuming
+# service, never a silent partial/empty catalogue — see each service's
+# filecatalog.Load doc comment.
+
+building: sortable-fc
+
+paths:
+  - id: PICK
+    direct: true
+    requiredCapabilities:
+      - pick
+
+  - id: PACK
+    direct: true
+    requiredCapabilities:
+      - pack
+
+  - id: REBIN
+    direct: true
+    requiredCapabilities:
+      - rebin
+
+  - id: SLAM
+    direct: true
+    requiredCapabilities:
+      - slam

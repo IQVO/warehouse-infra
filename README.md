@@ -65,6 +65,20 @@ the sidecars accept Kong's plaintext traffic without extra configuration.
 
 ---
 
+## Process-path catalogue
+
+`config/process-paths/sortable-fc.yaml` is the published-language source of
+truth for this fleet's process paths (`PICK`, `PACK`, `REBIN`, `SLAM`) —
+their ids, and the capability vocabulary each one requires. It is read by
+three services (fulfillment-execution, wes-work-planning,
+workforce-management), none of which owns it individually, for the same
+reason `terraform/locals.tf`'s `services` map lives in this repo: it is a
+fact about what exists in this deployment, not business logic belonging to
+any one bounded context. See the file's own header comment for the full
+schema and rationale.
+
+---
+
 ## Prerequisites
 
 Versions this was actually built and verified against, on `darwin/arm64`:
