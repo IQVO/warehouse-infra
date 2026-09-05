@@ -64,67 +64,92 @@ resource "helm_release" "ops_agent" {
   wait    = true
 
   values = [
-    yamlencode({
-      image = {
-        repository = "warehouse/warehouse-ops-agent"
-        tag        = var.image_tag
-        pullPolicy = "IfNotPresent"
-      }
-
-      service = {
-        type       = "ClusterIP"
-        port       = 80
-        targetPort = 8095
-      }
-
-      # Real, in-cluster REST base URLs for the console-bff order-lifecycle
-      # fan-out (cmd/agent/main.go's restclient wiring) — these ARE live
-      # today, unlike the MCP upstreams above.
-      restUrls = {
-        orderManagement      = "http://order-management.${var.apps_namespace}.svc.cluster.local:80"
-        inventoryStorage     = "http://inventory-storage.${var.apps_namespace}.svc.cluster.local:80"
-        wesWorkPlanning      = "http://wes-work-planning.${var.apps_namespace}.svc.cluster.local:80"
-        fulfillmentExecution = "http://fulfillment-execution.${var.apps_namespace}.svc.cluster.local:80"
-      }
-
-      # Real, in-cluster REST base URLs for the console-bff's WMS/WES
-      # dashboard fan-out (GET /console/reports/wms and /wes -- see
-      # warehouse-ops-agent PR #27). Each points at that context's own
-      # ANALYTICS reports Service -- a SEPARATE Deployment+Service from the
-      # OLTP one above, named "<service>-reports" by every analytics-enabled
-      # chart's own reportsFullname helper (see locals.tf's analytics_services
-      # set, which now includes all seven contexts). These are only live once
-      # `analytics.enabled=true` is actually applied for that service (which
-      # `contains(local.analytics_services, each.key)` in services.tf already
-      # gates) -- an entry here for a service whose analytics rollout hasn't
-      # applied yet just means the BFF's restclient gets a connection refused
-      # and that one dashboard section degrades to available:false, per its
-      # own documented per-section degradation contract. Not a crash.
-      reportsUrls = {
-        orderManagement      = "http://order-management-reports.${var.apps_namespace}.svc.cluster.local:80"
-        inventoryStorage     = "http://inventory-storage-reports.${var.apps_namespace}.svc.cluster.local:80"
-        wesWorkPlanning      = "http://wes-work-planning-reports.${var.apps_namespace}.svc.cluster.local:80"
-        fulfillmentExecution = "http://fulfillment-execution-reports.${var.apps_namespace}.svc.cluster.local:80"
-        workforceManagement  = "http://workforce-management-reports.${var.apps_namespace}.svc.cluster.local:80"
-        facilityLayout       = "http://facility-layout-reports.${var.apps_namespace}.svc.cluster.local:80"
-        laborPerformance     = "http://labor-performance-reports.${var.apps_namespace}.svc.cluster.local:80"
-      }
-
-      ingress = {
-        enabled   = true
-        className = "kong"
-        annotations = {
-          "konghq.com/strip-path" = "true"
+    yamlencode(merge(
+      {
+        image = {
+          repository = "warehouse/warehouse-ops-agent"
+          tag        = var.image_tag
+          pullPolicy = "IfNotPresent"
         }
-        hosts = [{
-          host = ""
-          paths = [{
-            path     = "/warehouse-ops-agent"
-            pathType = "Prefix"
+
+        service = {
+          type       = "ClusterIP"
+          port       = 80
+          targetPort = 8095
+        }
+
+        # Real, in-cluster REST base URLs for the console-bff order-lifecycle
+        # fan-out (cmd/agent/main.go's restclient wiring) — these ARE live
+        # today, unlike the MCP upstreams above.
+        restUrls = {
+          orderManagement      = "http://order-management.${var.apps_namespace}.svc.cluster.local:80"
+          inventoryStorage     = "http://inventory-storage.${var.apps_namespace}.svc.cluster.local:80"
+          wesWorkPlanning      = "http://wes-work-planning.${var.apps_namespace}.svc.cluster.local:80"
+          fulfillmentExecution = "http://fulfillment-execution.${var.apps_namespace}.svc.cluster.local:80"
+        }
+
+        # Real, in-cluster REST base URLs for the console-bff's WMS/WES
+        # dashboard fan-out (GET /console/reports/wms and /wes -- see
+        # warehouse-ops-agent PR #27). Each points at that context's own
+        # ANALYTICS reports Service -- a SEPARATE Deployment+Service from the
+        # OLTP one above, named "<service>-reports" by every analytics-enabled
+        # chart's own reportsFullname helper (see locals.tf's analytics_services
+        # set, which now includes all seven contexts). These are only live once
+        # `analytics.enabled=true` is actually applied for that service (which
+        # `contains(local.analytics_services, each.key)` in services.tf already
+        # gates) -- an entry here for a service whose analytics rollout hasn't
+        # applied yet just means the BFF's restclient gets a connection refused
+        # and that one dashboard section degrades to available:false, per its
+        # own documented per-section degradation contract. Not a crash.
+        reportsUrls = {
+          orderManagement      = "http://order-management-reports.${var.apps_namespace}.svc.cluster.local:80"
+          inventoryStorage     = "http://inventory-storage-reports.${var.apps_namespace}.svc.cluster.local:80"
+          wesWorkPlanning      = "http://wes-work-planning-reports.${var.apps_namespace}.svc.cluster.local:80"
+          fulfillmentExecution = "http://fulfillment-execution-reports.${var.apps_namespace}.svc.cluster.local:80"
+          workforceManagement  = "http://workforce-management-reports.${var.apps_namespace}.svc.cluster.local:80"
+          facilityLayout       = "http://facility-layout-reports.${var.apps_namespace}.svc.cluster.local:80"
+          laborPerformance     = "http://labor-performance-reports.${var.apps_namespace}.svc.cluster.local:80"
+        }
+
+        # Kong route. NO Ingress at all once Gateway API is on (see the
+        # gatewayApi block below) -- disabled-but-present would otherwise
+        # still create a Kong route object nothing removes.
+        ingress = {
+          enabled   = !var.deploy_gateway_api
+          className = "kong"
+          annotations = {
+            "konghq.com/strip-path" = "true"
+          }
+          hosts = [{
+            host = ""
+            paths = [{
+              path     = "/warehouse-ops-agent"
+              pathType = "Prefix"
+            }]
           }]
-        }]
-      }
-    }),
+        }
+      },
+      # Gateway API routing -- see gateway-api.tf's header for the full
+      # pilot history. warehouse-ops-agent isn't in local.services (it has
+      # no database, see this file's own header), so it gets its own
+      # gatewayApi block here rather than going through
+      # local.gateway_api_pilot_services.
+      var.deploy_gateway_api ? {
+        gatewayApi = {
+          enabled = true
+          parentRefs = [{
+            name        = local.gateway_name
+            namespace   = var.kong_namespace
+            sectionName = "http"
+          }]
+          hosts = [{
+            path     = "/warehouse-ops-agent"
+            pathType = "PathPrefix"
+          }]
+          stripPath = true
+        }
+      } : {}
+    )),
   ]
 }
 

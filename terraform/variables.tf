@@ -490,3 +490,47 @@ variable "loki_retention_period" {
   default     = "24h"
 }
 
+# ---------------------------------------------------------------------------
+# Gateway API — pilot phase (see gateway-api.tf and kong.tf's header).
+# ---------------------------------------------------------------------------
+
+variable "deploy_gateway_api" {
+  description = <<-EOT
+    Whether to install the Gateway API CRDs, GatewayClass, and the shared
+    Gateway (gateway-api.tf). Independent of Kong's own deployment: Kong
+    installs unconditionally either way, this only adds the Gateway API
+    platform pieces on top.
+
+    RESOLVED: an earlier iteration of this pilot found KIC 3.5's `Gateway`
+    controller appearing to silently stop reconciling after one pass at
+    startup, reproduced across two KIC patch versions and two Helm
+    deployment topologies (single-release and gatewayDiscovery
+    split-release). Root cause turned out to be a real, documented KIC
+    behavior, not a bug: `GatewayClass` objects require the
+    `konghq.com/gatewayclass-unmanaged: "true"` annotation to be
+    reconciled when Kong's dataplane is deployed via
+    `deployment.kong.enabled=true` rather than provisioned dynamically by
+    KIC/Kong Gateway Operator per-Gateway (an "unmanaged" gateway in KIC's
+    terminology -- exactly this fleet's topology). Without the
+    annotation, the `Gateway` controller has no code path to follow and
+    goes idle after its first pass. With it, the Gateway immediately
+    reaches `Accepted: True` / `Programmed: True`
+    ("this unmanaged gateway has been picked up by the controller and
+    will be processed"), and a real end-to-end curl through a resulting
+    HTTPRoute on a path that only exists via that route (not the
+    pre-existing Ingress) returned 200. See gateway-api.tf's GatewayClass
+    comment for the full verification trail.
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "gateway_api_version" {
+  description = <<-EOT
+    kubernetes-sigs/gateway-api release tag for the standard-channel CRD
+    bundle, resolved from
+    https://github.com/kubernetes-sigs/gateway-api/releases/latest.
+  EOT
+  type        = string
+  default     = "v1.6.2"
+}

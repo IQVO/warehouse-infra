@@ -7,10 +7,20 @@
 # with KIC enabled by default. `kong/ingress` is an umbrella that splits the
 # controller and the gateway into two subchart releases wired together by
 # gatewayDiscovery — more moving parts, more to go wrong on a laptop, and no
-# benefit at this scale. Routing is therefore plain Kubernetes `Ingress`
-# objects with ingressClassName: kong, which is what KIC watches out of the
-# box and what the services' existing Helm charts already know how to emit.
-# No Gateway API CRDs are required.
+# benefit at this scale.
+#
+# Routing was originally plain Kubernetes `Ingress` objects only. As of the
+# Gateway API pilot (gateway-api.tf), KIC's Gateway API reconcilers
+# (Gateway, HTTPRoute, GRPCRoute, ReferenceGrant) are ALSO live -- verified
+# against the real `kong/kubernetes-ingress-controller:3.5` image bundled by
+# this chart version: `--enable-controller-gwapi-httproute` and its Gateway
+# API siblings default to `true` in the same binary, alongside the existing
+# `--enable-controller-ingress-class-networkingv1`. No values change was
+# needed here to turn Gateway API on; ingressController.enabled=true starts
+# both reconcilers in the same controller process. This means Ingress and
+# HTTPRoute can coexist service-by-service during the migration -- no
+# fleet-wide flag day, and a service not yet migrated keeps routing exactly
+# as it always has via its existing `Ingress` object (services.tf).
 #
 # Exposure: proxy Service is NodePort (there is no cloud load balancer here);
 # kind's extraPortMappings publish those NodePorts on the host. See main.tf.

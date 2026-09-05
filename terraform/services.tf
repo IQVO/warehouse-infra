@@ -26,7 +26,19 @@ locals {
       ],
     )))
   }
+
+  # Gateway API (gateway-api.tf): every service in local.services now
+  # migrates from Ingress to HTTPRoute, chart-rendered via each service's
+  # own `gatewayApi` values block (added to all 7 charts in the fan-out
+  # that followed the fulfillment-execution pilot -- see gateway-api.tf's
+  # header for the pilot history and the real KIC bug/fix it uncovered).
+  # A service in this set gets NO `ingress` block in its Helm values below
+  # (Kong would otherwise route the same path twice, once via each
+  # mechanism) and instead gets `gatewayApi.enabled=true` with the shared
+  # Gateway as its parentRef.
+  gateway_api_pilot_services = var.deploy_gateway_api ? toset(keys(local.services)) : toset([])
 }
+
 
 resource "null_resource" "build_and_load" {
   for_each = var.deploy_services ? local.services : {}
@@ -88,13 +100,19 @@ resource "helm_release" "service" {
           url = local.database_urls[each.key]
         }
 
-        # Kong route. `host: ""` makes the rule host-agnostic, so it matches
+        # Kong route. `host: "" ` makes the rule host-agnostic, so it matches
         # requests to http://localhost/<prefix> regardless of the Host header.
         # konghq.com/strip-path drops the /<service> prefix before proxying, so
         # the pod still sees the paths its router actually registers
         # (GET /healthz, not GET /inventory-storage/healthz).
+        #
+        # A service in local.gateway_api_pilot_services gets NO Ingress at
+        # all -- its routing is the chart's own `gatewayApi` block instead
+        # (below), so this block is entirely skipped for it rather than
+        # disabled-but-present, which would otherwise still create a Kong
+        # route object nothing removes.
         ingress = {
-          enabled   = true
+          enabled   = !contains(local.gateway_api_pilot_services, each.key)
           className = "kong"
           annotations = {
             "konghq.com/strip-path" = "true"
@@ -136,6 +154,30 @@ resource "helm_release" "service" {
         pathCatalogue = {
           enabled = true
           content = local.path_catalogue_content
+        }
+      } : {},
+      # Gateway API routing (see local.gateway_api_pilot_services above and
+      # gateway-api.tf's header for the full pilot history). Mirrors
+      # exactly what the `ingress` block above would have expressed for
+      # this service -- same path prefix, same strip-prefix behavior via
+      # HTTPRoute's own `filters` block -- so this is a like-for-like
+      # routing swap, not a behavior change. `sectionName: "http"` matches
+      # the shared Gateway's one listener name (gateway-api.tf); Kong's
+      # KIC only reconciles a parentRef whose sectionName resolves to a
+      # real listener on that Gateway.
+      contains(local.gateway_api_pilot_services, each.key) ? {
+        gatewayApi = {
+          enabled = true
+          parentRefs = [{
+            name        = local.gateway_name
+            namespace   = var.kong_namespace
+            sectionName = "http"
+          }]
+          hosts = [{
+            path     = each.value.path
+            pathType = "PathPrefix"
+          }]
+          stripPath = true
         }
       } : {}
     )),
