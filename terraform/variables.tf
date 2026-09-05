@@ -442,3 +442,51 @@ variable "kiali_chart_version" {
   type        = string
   default     = "2.31.0"
 }
+
+# ---------------------------------------------------------------------------
+# Logging — Loki + Alloy (see logging.tf for the full rationale).
+# ---------------------------------------------------------------------------
+
+variable "deploy_logging" {
+  description = <<-EOT
+    Whether to install Loki + Alloy (logging.tf). Independent of
+    deploy_observability's other components so `-var=deploy_logging=false`
+    can drop just the log stack while keeping traces/metrics, but gated
+    behind deploy_observability too since logging without the rest of the
+    observability namespace makes no sense on its own.
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "loki_chart_version" {
+  description = <<-EOT
+    grafana/loki chart version, resolved with `helm search repo grafana/loki
+    --versions` against https://grafana.github.io/helm-charts.
+  EOT
+  type        = string
+  default     = "7.3.0"
+}
+
+variable "alloy_chart_version" {
+  description = <<-EOT
+    grafana/alloy chart version, resolved with `helm search repo
+    grafana/alloy --versions` against https://grafana.github.io/helm-charts.
+    Alloy (not Promtail) is Grafana Labs' current log-collection agent;
+    Promtail is in long-term support only.
+  EOT
+  type        = string
+  default     = "1.12.1"
+}
+
+variable "loki_retention_period" {
+  description = <<-EOT
+    How long Loki keeps ingested logs before its compactor deletes them.
+    24h matches Prometheus's own retention (observability.tf) and the same
+    "disposable laptop cluster" reasoning: nothing here is meant to survive
+    long-term, and a laptop's disk is the actual constraint.
+  EOT
+  type        = string
+  default     = "24h"
+}
+

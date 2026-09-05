@@ -214,6 +214,7 @@ resource "helm_release" "grafana" {
   depends_on = [
     helm_release.prometheus,
     helm_release.jaeger,
+    helm_release.loki,
   ]
 
   name       = local.grafana_release
@@ -250,7 +251,7 @@ resource "helm_release" "grafana" {
     datasources = {
       "datasources.yaml" = {
         apiVersion = 1
-        datasources = [
+        datasources = concat([
           {
             name      = "Prometheus"
             uid       = "prometheus"
@@ -275,9 +276,36 @@ resource "helm_release" "grafana" {
             access = "proxy"
             url    = "http://${local.observability_dns.jaeger}:${local.jaeger_query_port}"
           },
-        ]
+          ],
+          # Loki (logging.tf). Conditional because deploy_logging can be
+          # false while deploy_observability stays true -- a datasource
+          # pointing at a Service that was never installed would leave
+          # Grafana showing a permanently-red datasource health check.
+          var.deploy_logging ? [{
+            name   = "Loki"
+            uid    = "loki"
+            type   = "loki"
+            access = "proxy"
+            url    = "http://loki.${var.observability_namespace}.svc.cluster.local:3100"
+            jsonData = {
+              # Every service's slog output already carries the active
+              # trace/span ID (telemetry.WithTraceContext) as a field in the
+              # JSON body; Loki's derived-fields regex below pulls it out of
+              # the raw log line and turns it into a click-through to the
+              # matching Jaeger trace, so "found a suspicious log line" and
+              # "found a slow trace" land in the same UI either direction.
+              derivedFields = [{
+                datasourceUid = "jaeger"
+                matcherRegex  = "\"trace_id\":\"([a-f0-9]+)\""
+                name          = "trace_id"
+                url           = "$${__value.raw}"
+              }]
+            }
+          }] : []
+        )
       }
     }
+
 
     # One dashboard, provisioned from the same values, so the install is not
     # an empty Grafana. It charts the Go runtime metrics the services emit via
