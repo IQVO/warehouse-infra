@@ -20,6 +20,22 @@ resource "kind_cluster" "warehouse" {
     node {
       role = "control-plane"
 
+      # Widen the apiserver's service-node-port-range so Kafka's EXTERNAL
+      # listener can take NodePort 9092 (see variables.tf kafka_node_port).
+      # The default range starts at 30000, and a Service asking for 9092
+      # under that default is rejected outright ("provided port is not in
+      # the valid range"). Everything else here (Kong, Grafana, Jaeger,
+      # Prometheus, Kiali) sits in the 30000s and is unaffected by widening
+      # the lower bound.
+      kubeadm_config_patches = [
+        <<-EOT
+        kind: ClusterConfiguration
+        apiServer:
+          extraArgs:
+            service-node-port-range: "${var.service_node_port_range}"
+        EOT
+      ]
+
       extra_port_mappings {
         container_port = var.kong_proxy_http_node_port
         host_port      = var.kong_proxy_http_host_port
@@ -58,6 +74,19 @@ resource "kind_cluster" "warehouse" {
       extra_port_mappings {
         container_port = var.kiali_node_port
         host_port      = var.kiali_host_port
+        listen_address = "0.0.0.0"
+        protocol       = "TCP"
+      }
+
+      # Kafka's EXTERNAL listener. Unlike the UI mappings above this one is
+      # not a browser convenience: it is what lets the single in-cluster
+      # broker serve host-side clients (e2e-tests, `go run` development) so
+      # the platform does not need a second, unmanaged docker-compose broker.
+      # See variables.tf's "Kafka host exposure" block for why the broker
+      # advertises two different addresses.
+      extra_port_mappings {
+        container_port = var.kafka_node_port
+        host_port      = var.kafka_host_port
         listen_address = "0.0.0.0"
         protocol       = "TCP"
       }

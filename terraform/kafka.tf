@@ -94,6 +94,25 @@ resource "helm_release" "kafka" {
       "transaction.state.log.min.isr"            = "1"
     }
 
+    # The EXTERNAL listener + its per-pod NodePort Service. This is what
+    # makes this the ONLY broker the platform needs: host-side clients
+    # (e2e-tests, local `go run`) reach the same broker the pods use,
+    # instead of a separate docker-compose container that shared nothing
+    # but a port number. `domain` is what the broker advertises to those
+    # host clients, and it must be an address resolvable ON THE HOST —
+    # "localhost" works because kind publishes the NodePort there via
+    # main.tf's extra_port_mappings.
+    externalAccess = {
+      enabled = var.kafka_external_access_enabled
+      controller = {
+        service = {
+          type      = "NodePort"
+          domain    = "localhost"
+          nodePorts = [var.kafka_node_port]
+        }
+      }
+    }
+
     metrics = {
       kafka = {
         enabled = false
@@ -108,4 +127,11 @@ resource "helm_release" "kafka" {
 output "kafka_brokers" {
   description = "In-cluster Kafka bootstrap address (PLAINTEXT), or empty if deploy_kafka=false."
   value       = var.deploy_kafka ? "kafka.${var.apps_namespace}.svc.cluster.local:9092" : ""
+}
+
+# Host-side bootstrap address for the SAME broker: what e2e-tests/env.sh and
+# a local `go run` should use. Empty when the broker is cluster-internal only.
+output "kafka_brokers_host" {
+  description = "Host-reachable Kafka bootstrap address for out-of-cluster clients (e2e-tests, local go run)."
+  value       = var.deploy_kafka && var.kafka_external_access_enabled ? "localhost:${var.kafka_host_port}" : ""
 }

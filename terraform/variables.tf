@@ -273,6 +273,76 @@ variable "kafka_persistence_enabled" {
 }
 
 # ---------------------------------------------------------------------------
+# Kafka host exposure — ONE broker for the whole platform.
+#
+# Before this existed, the fleet ran TWO Kafkas: this in-cluster release for
+# pods, and a separate docker-compose broker (container "warehouse-kafka",
+# ~/warehouse-systems/docker-compose.kafka.yml) on host port 9092 for the
+# out-of-cluster consumers — `go run` local development and the e2e-tests
+# harness (its env.sh pins KAFKA_BROKERS=localhost:9092). Two brokers with
+# the same name and no relationship is a topology, not a convenience: an
+# event published in-cluster was invisible to a host consumer and vice
+# versa, so which broker you were on silently changed the behaviour.
+#
+# The Bitnami chart's externalAccess gives the single in-cluster broker a
+# SECOND advertised listener. Kafka clients bootstrap by asking the broker
+# for its advertised address and then reconnect to whatever it answers, so
+# a broker serving both audiences must advertise a different address to
+# each: in-cluster pods keep the pod's headless DNS name on the CLIENT
+# listener, while host clients get EXTERNAL://localhost:9092. That is why
+# this is externalAccess and not simply another NodePort Service like
+# exposure.tf's UIs — a plain Service would route the TCP connection
+# correctly and then hand the host client an unreachable in-cluster
+# address on the very next round trip.
+# ---------------------------------------------------------------------------
+
+variable "kafka_external_access_enabled" {
+  description = <<-EOT
+    Whether the in-cluster Kafka broker also advertises a host-reachable
+    EXTERNAL listener on localhost:<kafka_host_port>. Set false to make the
+    broker cluster-internal only (nothing on the host can reach it).
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "kafka_node_port" {
+  description = <<-EOT
+    NodePort inside the cluster for Kafka's EXTERNAL listener.
+
+    Deliberately 9092 — the same number as the host port — so there is one
+    Kafka port to remember across the whole fleet. This is BELOW the default
+    service-node-port-range (30000-32767), which is why main.tf patches the
+    apiserver's --service-node-port-range; without that patch the Service is
+    rejected with "provided port is not in the valid range".
+  EOT
+  type        = number
+  default     = 9092
+}
+
+variable "kafka_host_port" {
+  description = <<-EOT
+    Host port mapped to Kafka's NodePort. Kafka is reachable from the host at
+    localhost:<this>, which is the address e2e-tests/env.sh and every service
+    repo's README already use.
+  EOT
+  type        = number
+  default     = 9092
+}
+
+variable "service_node_port_range" {
+  description = <<-EOT
+    The apiserver's --service-node-port-range, applied via a kubeadm config
+    patch in main.tf. Widened from the 30000-32767 default down to 9000 so
+    Kafka's NodePort can be 9092 (see kafka_node_port). Kong's and the
+    observability UIs' NodePorts stay in the 30000s and are unaffected.
+  EOT
+  type        = string
+  default     = "9000-32767"
+}
+
+
+# ---------------------------------------------------------------------------
 # Observability
 #
 # A separate namespace and a separate on/off switch from the services, on
