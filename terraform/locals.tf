@@ -155,6 +155,24 @@ locals {
     for name in local.analytics_services :
     name => "postgres://${local.analytics_db_info[name].user}:${local.analytics_service_passwords[name]}@${local.postgres_host}:${local.postgres_port}/${local.analytics_db_info[name].db}?sslmode=disable"
   }
+
+  # ---------------------------------------------------------------------
+  # Process-path catalogue (ADR-0017 in fulfillment-execution / ADR-0012 in
+  # wes-work-planning / ADR-0013 in workforce-management): these three
+  # services read a boot-time-required YAML file (PATH_CATALOGUE_FILE) that
+  # declares the fleet's process paths and their required capabilities. It
+  # is a PUBLISHED LANGUAGE owned by warehouse-infra (same reasoning as the
+  # `services` map above: a fact about what exists in THIS deployment, not
+  # business logic belonging to any one bounded context) -- read from disk
+  # once here and fed identically into all three charts' pathCatalogue.content
+  # so they can never disagree about what paths exist.
+  path_catalogue_services = [
+    "fulfillment-execution",
+    "wes-work-planning",
+    "workforce-management",
+  ]
+
+  path_catalogue_content = file("${path.module}/../config/process-paths/sortable-fc.yaml")
 }
 
 # ---------------------------------------------------------------------------
@@ -185,6 +203,7 @@ locals {
   jaeger_query_port = 16686
   prometheus_port   = 9090
   grafana_port      = 3000
+  kiali_port        = 20001
 
   observability_dns = {
     otel_collector = "${local.otel_collector_release}.${var.observability_namespace}.svc.cluster.local"

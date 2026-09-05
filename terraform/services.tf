@@ -125,6 +125,18 @@ resource "helm_release" "service" {
             reportsUrl   = local.analytics_database_urls[each.key]
           }
         }
+      } : {},
+      # Process-path catalogue (ADR-0017 in fulfillment-execution / ADR-0012
+      # in wes-work-planning / ADR-0013 in workforce-management): these three
+      # services fail fast at boot without it. config/process-paths/sortable-fc.yaml
+      # is the fleet's single published-language source of truth (see that
+      # file's own header comment) -- fed to every consuming chart's
+      # pathCatalogue.content verbatim so all three always agree.
+      contains(local.path_catalogue_services, each.key) ? {
+        pathCatalogue = {
+          enabled = true
+          content = local.path_catalogue_content
+        }
       } : {}
     )),
   ]

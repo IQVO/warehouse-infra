@@ -63,6 +63,64 @@ variable "kong_proxy_https_host_port" {
 }
 
 # ---------------------------------------------------------------------------
+# Observability + Kiali north-south exposure
+#
+# Same pattern as Kong above: no cloud load balancer, so each UI's Service is
+# a NodePort and kind's extraPortMappings publish that NodePort on a host
+# port at cluster-creation time. This replaces ad-hoc `kubectl port-forward`
+# for these UIs — a host port survives pod restarts and multiple terminal
+# tabs; a port-forward process does neither.
+# ---------------------------------------------------------------------------
+
+variable "grafana_node_port" {
+  description = "NodePort inside the cluster for Grafana."
+  type        = number
+  default     = 30300
+}
+
+variable "grafana_host_port" {
+  description = "Host port mapped to Grafana's NodePort. Grafana is reachable at http://localhost:<this>/."
+  type        = number
+  default     = 3000
+}
+
+variable "jaeger_node_port" {
+  description = "NodePort inside the cluster for the Jaeger query UI."
+  type        = number
+  default     = 30686
+}
+
+variable "jaeger_host_port" {
+  description = "Host port mapped to Jaeger's NodePort. Jaeger is reachable at http://localhost:<this>/."
+  type        = number
+  default     = 16686
+}
+
+variable "prometheus_node_port" {
+  description = "NodePort inside the cluster for the Prometheus UI."
+  type        = number
+  default     = 30909
+}
+
+variable "prometheus_host_port" {
+  description = "Host port mapped to Prometheus's NodePort. Prometheus is reachable at http://localhost:<this>/."
+  type        = number
+  default     = 9090
+}
+
+variable "kiali_node_port" {
+  description = "NodePort inside the cluster for the Kiali UI."
+  type        = number
+  default     = 30200
+}
+
+variable "kiali_host_port" {
+  description = "Host port mapped to Kiali's NodePort. Kiali is reachable at http://localhost:<this>/."
+  type        = number
+  default     = 20001
+}
+
+# ---------------------------------------------------------------------------
 # Namespaces
 # ---------------------------------------------------------------------------
 
@@ -292,4 +350,25 @@ variable "grafana_admin_password" {
   type        = string
   default     = "admin"
   sensitive   = true
+}
+
+# ---------------------------------------------------------------------------
+# Kiali — service mesh observability UI for Istio.
+# ---------------------------------------------------------------------------
+
+variable "deploy_kiali" {
+  description = "Whether to install Kiali (kiali.tf). Depends on Istio and Prometheus; has no effect if either is off."
+  type        = bool
+  default     = true
+}
+
+variable "kiali_chart_version" {
+  description = <<-EOT
+    kiali/kiali-server chart version from https://kiali.org/helm-charts.
+
+    2.31.0 is the current release, resolved with `helm search repo
+    kiali/kiali-server --versions`.
+  EOT
+  type        = string
+  default     = "2.31.0"
 }

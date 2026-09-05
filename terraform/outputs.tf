@@ -85,12 +85,16 @@ output "observability_namespace" {
   value       = var.deploy_observability ? var.observability_namespace : ""
 }
 
-output "observability_port_forwards" {
-  description = "Port-forward commands for the observability UIs. Grafana logs in as admin / <grafana_admin_password>."
+output "observability_urls" {
+  description = "Fixed localhost URLs for the observability UIs, reachable via kind's extraPortMappings (main.tf) -- no port-forward needed. Empty when deploy_observability = false."
   value = var.deploy_observability ? {
-    jaeger     = "kubectl --context ${local.kube_context} port-forward -n ${var.observability_namespace} svc/${local.jaeger_release} ${local.jaeger_query_port}:${local.jaeger_query_port}     # http://localhost:${local.jaeger_query_port}"
-    prometheus = "kubectl --context ${local.kube_context} port-forward -n ${var.observability_namespace} svc/${local.prometheus_release}-server ${local.prometheus_port}:${local.prometheus_port}   # http://localhost:${local.prometheus_port}"
-    grafana    = "kubectl --context ${local.kube_context} port-forward -n ${var.observability_namespace} svc/${local.grafana_release} ${local.grafana_port}:${local.grafana_port}       # http://localhost:${local.grafana_port}"
-    collector  = "kubectl --context ${local.kube_context} port-forward -n ${var.observability_namespace} svc/${local.otel_collector_release} ${local.otel_otlp_grpc_port}:${local.otel_otlp_grpc_port}         # OTLP/gRPC from the host"
+    jaeger     = "http://localhost:${var.jaeger_host_port}"
+    prometheus = "http://localhost:${var.prometheus_host_port}"
+    grafana    = "http://localhost:${var.grafana_host_port} (admin / <grafana_admin_password>)"
   } : {}
+}
+
+output "kiali_url" {
+  description = "Fixed localhost URL for the Kiali service-mesh UI, reachable via kind's extraPortMappings (main.tf). Empty when deploy_kiali or deploy_observability is false."
+  value       = var.deploy_kiali && var.deploy_observability ? "http://localhost:${var.kiali_host_port}" : ""
 }

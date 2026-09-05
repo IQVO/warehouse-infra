@@ -1,9 +1,10 @@
 # ---------------------------------------------------------------------------
 # The kind cluster: one control-plane + var.worker_count workers.
 #
-# extraPortMappings on the control-plane publish Kong's NodePorts on host
-# ports. NodePorts answer on every node, so mapping them on the control-plane
-# alone is enough no matter where the Kong pod actually lands.
+# extraPortMappings on the control-plane publish Kong's NodePort, plus the
+# observability UIs' (Grafana/Jaeger/Prometheus) and Kiali's NodePorts, on
+# host ports. NodePorts answer on every node, so mapping them on the
+# control-plane alone is enough no matter where each pod actually lands.
 # ---------------------------------------------------------------------------
 
 resource "kind_cluster" "warehouse" {
@@ -29,6 +30,34 @@ resource "kind_cluster" "warehouse" {
       extra_port_mappings {
         container_port = var.kong_proxy_https_node_port
         host_port      = var.kong_proxy_https_host_port
+        listen_address = "0.0.0.0"
+        protocol       = "TCP"
+      }
+
+      extra_port_mappings {
+        container_port = var.grafana_node_port
+        host_port      = var.grafana_host_port
+        listen_address = "0.0.0.0"
+        protocol       = "TCP"
+      }
+
+      extra_port_mappings {
+        container_port = var.jaeger_node_port
+        host_port      = var.jaeger_host_port
+        listen_address = "0.0.0.0"
+        protocol       = "TCP"
+      }
+
+      extra_port_mappings {
+        container_port = var.prometheus_node_port
+        host_port      = var.prometheus_host_port
+        listen_address = "0.0.0.0"
+        protocol       = "TCP"
+      }
+
+      extra_port_mappings {
+        container_port = var.kiali_node_port
+        host_port      = var.kiali_host_port
         listen_address = "0.0.0.0"
         protocol       = "TCP"
       }

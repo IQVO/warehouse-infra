@@ -34,14 +34,22 @@ echo
 echo "Try it:"
 echo "  curl -i $(terraform output -raw kong_proxy_url)/inventory-storage/healthz"
 
-# The observability UIs are ClusterIP only — Kong routes the four services,
-# not the telemetry stack — so they are reached with a port-forward.
+# The observability UIs and Kiali are exposed the same way Kong is: a
+# NodePort published on the host via kind's extraPortMappings (see main.tf),
+# so they answer at a fixed http://localhost:<port>/ with nothing to
+# port-forward or keep alive in a background terminal.
 if [[ -n "$(terraform output -raw observability_namespace 2>/dev/null)" ]]; then
   echo
   echo "==> observability. Services send OTLP/gRPC to:"
   echo "  $(terraform output -raw otlp_endpoint)"
   echo
-  echo "UIs (each needs its own port-forward; Grafana logs in as admin / admin):"
-  terraform output -json observability_port_forwards \
-    | python3 -c 'import json,sys; [print("  " + v) for v in json.load(sys.stdin).values()]'
+  echo "UIs (Grafana logs in as admin / admin):"
+  terraform output -json observability_urls \
+    | python3 -c 'import json,sys; [print(f"  {k}: {v}") for k, v in json.load(sys.stdin).items()]'
+fi
+
+kiali_url="$(terraform output -raw kiali_url 2>/dev/null || true)"
+if [[ -n "$kiali_url" ]]; then
+  echo
+  echo "==> Kiali (service mesh topology, traffic health): $kiali_url"
 fi
