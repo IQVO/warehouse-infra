@@ -92,14 +92,20 @@ locals {
 
   # ---------------------------------------------------------------------
   # Analytics data-mesh (ADR-0010 in each service repo): the "report part"
-  # (cmd/<svc>-projector, cmd/<svc>-reports) alongside the six services
+  # (cmd/<svc>-projector, cmd/<svc>-reports) alongside the seven services
   # whose charts ship the projector-deployment.yaml/reports-deployment.yaml/
-  # analytics-secret.yaml templates. labor-performance is deliberately
-  # excluded — it is a pure Kafka consumer with no analytics chart of its
-  # own (see warehouse-systems-fleet-ops skill's kubernetes-deployment.md
-  # audit note); warehouse-ops-agent (not in local.services at all — see
-  # ops-agent.tf) has no database, so it never had an analytics chart
-  # either.
+  # analytics-secret.yaml templates. warehouse-ops-agent (not in
+  # local.services at all — see ops-agent.tf) has no database, so it never
+  # had an analytics chart either.
+  #
+  # labor-performance WAS excluded here (its chart shipped no
+  # projector-deployment.yaml/reports-deployment.yaml/analytics-secret.yaml
+  # at all, despite the OLTP-side analytics code landing in PR #9 — a real
+  # deploy gap, not the CrashLoopBackOff kind fulfillment-execution hit,
+  # but the same root cause: infra can't enable what the chart doesn't
+  # ship). That gap closed via labor-performance's own
+  # feature/analytics-chart-wiring PR, mirroring order-management's
+  # ADR-0006 chart shape verbatim. Re-included in the set below.
   #
   # fulfillment-execution WAS temporarily excluded here (its Dockerfile
   # never built/copied the projector/reports binaries its own chart
@@ -129,6 +135,7 @@ locals {
     "inventory-storage",
     "workforce-management",
     "facility-layout",
+    "labor-performance",
   ])
 
   analytics_db_info = {
