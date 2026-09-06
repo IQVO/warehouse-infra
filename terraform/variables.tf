@@ -573,3 +573,48 @@ variable "deploy_process_path_kafka_source" {
   type        = bool
   default     = false
 }
+
+variable "deploy_facility_events_integration" {
+  description = <<-EOT
+    Whether inventory-storage sources location classifications from
+    facility-layout's Kafka topic (warehouse.facility.events) instead of
+    calling that service synchronously over HTTP on every stow.
+
+    Default false: inventory-storage's chart already defaults
+    LOCATION_LOOKUP_MODE to "permissive", so leaving this false is a pure
+    no-op against every existing deployment.
+
+    Setting this true switches BOTH sides of the integration together, so
+    they can never end up half-wired:
+
+      (1) facility-layout's config.eventPublisher flips from the chart's
+          "log" default (Postgres outbox only -- nothing ever reaches
+          Kafka) to "kafka", and kafka.enabled=true so the chart renders
+          KAFKA_BROKERS. Without this there is literally no
+          warehouse.facility.events topic for anyone to consume.
+
+      (2) inventory-storage gets LOCATION_LOOKUP_MODE=kafka via extraEnv.
+          Its chart already sets kafka.enabled (it publishes its own
+          integration events), so KAFKA_BROKERS is already present --
+          but the consumer REQUIRES it, and inventory-storage's
+          composition root fails startup loudly if it is missing rather
+          than silently degrading.
+
+    Ordering caveat, and the reason this is one flag rather than two: a
+    fresh consumer replays the topic from its earliest offset, so it can
+    only cache what has actually been PUBLISHED. facility-layout events
+    that predate the publisher flip live only in that service's Postgres
+    outbox and will never appear on the topic. On a cluster with existing
+    layout data, re-register (or re-import) the layout after flipping this
+    so the events are emitted -- an empty/partial cache is not a hard
+    failure but a FAIL-OPEN one (every lookup reports Known=false and
+    stows are waved through unclassified), which inventory-storage logs
+    loudly at startup.
+
+    Rollback is pure configuration: set this false and re-apply, and
+    inventory-storage returns to its previous lookup mode. See
+    inventory-storage's ADR 0013 for the full decision record.
+  EOT
+  type        = bool
+  default     = false
+}

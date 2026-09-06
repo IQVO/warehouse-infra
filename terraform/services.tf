@@ -206,6 +206,48 @@ resource "helm_release" "service" {
           enabled = true
         }
       } : {},
+      # facility-layout -> inventory-storage location-classification
+      # integration (inventory-storage ADR-0013). Same "flip both sides
+      # together" shape as the process-path block above, for the same
+      # reason: a publisher with no consumer, or a consumer whose topic is
+      # never written, are both silently broken states.
+      #
+      # var.deploy_facility_events_integration=false (default): unchanged.
+      # facility-layout keeps the chart's "log" default (Postgres outbox
+      # only, nothing reaches Kafka) and inventory-storage keeps its
+      # default LOCATION_LOOKUP_MODE.
+      #
+      # true: facility-layout publishes its Published Language to
+      # warehouse.facility.events, and inventory-storage maintains a local
+      # cache from that topic instead of calling facility-layout over HTTP
+      # on every stow. NOTE this only makes the CONSUMER stop depending on
+      # facility-layout at runtime -- see variables.tf for the replay
+      # caveat about events that predate the publisher flip.
+      each.key == "facility-layout" && var.deploy_facility_events_integration ? {
+        config = {
+          eventPublisher = "kafka"
+        }
+        kafka = {
+          enabled = true
+        }
+      } : {},
+      # inventory-storage's side of that same integration. Kept as its own
+      # merge entry (rather than folded into the block above) because the
+      # two services need DIFFERENT keys: facility-layout needs a publisher
+      # switch, inventory-storage needs a consumer-mode env var. Note both
+      # branches of this ternary declare the SAME key set -- see the
+      # process-path block's comment for the "Inconsistent conditional
+      # result types" failure that rule exists to avoid.
+      each.key == "inventory-storage" ? (var.deploy_facility_events_integration ? {
+        extraEnv = [
+          {
+            name  = "LOCATION_LOOKUP_MODE"
+            value = "kafka"
+          },
+        ]
+        } : {
+        extraEnv = []
+      }) : {},
       # Gateway API routing (see local.gateway_api_pilot_services above and
       # gateway-api.tf's header for the full pilot history). Mirrors
       # exactly what the `ingress` block above would have expressed for
