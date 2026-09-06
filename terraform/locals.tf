@@ -66,6 +66,13 @@ locals {
       path       = "/labor-performance"
       chart_path = "${path.module}/../../labor-performance/charts/labor-performance"
     }
+    "process-path-management" = {
+      db         = "process_path_management"
+      user       = "process_path_management"
+      port       = 8080
+      path       = "/process-path-management"
+      chart_path = "${path.module}/../../process-path-management/charts/process-path-management"
+    }
   }
 
   # Per-service database passwords are GENERATED, never committed. Each service
@@ -166,6 +173,22 @@ locals {
   # business logic belonging to any one bounded context) -- read from disk
   # once here and fed identically into all three charts' pathCatalogue.content
   # so they can never disagree about what paths exist.
+  #
+  # SUPERSEDED (var.deploy_process_path_kafka_source, default false): the
+  # static file above is being replaced by process-path-management (its own
+  # bounded context, added to local.services above), which publishes
+  # ProcessPathCreated/Updated/Deactivated onto
+  # warehouse.process-path-management.events. Each of the three consumers
+  # already ships a PATH_CATALOGUE_SOURCE=file|kafka switch (default
+  # "file", so this flag defaults to false = zero behavior change). When
+  # true: each consumer's pathCatalogue.enabled flips to false (no file
+  # mount) and PATH_CATALOGUE_SOURCE=kafka is injected via extraEnv (see
+  # services.tf); process-path-management's own config.eventPublisher
+  # flips to "kafka" so there is something to consume. The static YAML
+  # file and this flag are BOTH kept until the switch is proven live in
+  # this cluster -- retiring config/process-paths/sortable-fc.yaml
+  # entirely is a follow-up once var.deploy_process_path_kafka_source has
+  # defaulted to true for a full cycle.
   path_catalogue_services = [
     "fulfillment-execution",
     "wes-work-planning",

@@ -1,0 +1,47 @@
+# process-path-management — Process Path Management bounded context.
+#
+# New service (added 2026-09-06): the fleet's process-path catalogue as a
+# real bounded context (Generic Subdomain, same classification as
+# facility-layout), replacing the static config/process-paths/sortable-fc.yaml
+# file this repo's three consumers (fulfillment-execution, wes-work-planning,
+# workforce-management) previously boot-loaded directly. See
+# terraform/locals.tf's path_catalogue_* comment and
+# terraform/variables.tf's deploy_process_path_kafka_source for the full
+# rollout-order rationale.
+#
+# Kafka: brokers pointed at the real in-cluster broker (kafka.tf) so the
+# value is correct the moment var.deploy_process_path_kafka_source flips
+# config.eventPublisher/kafka.enabled to "kafka"/true via Terraform's
+# computed values (see services.tf) -- kept here, not there, purely
+# because every other service in this fleet keeps its static kafka.brokers
+# address in its own helm-values file, and Terraform only ever computes
+# the parts that differ per-environment (database URL, image tag, route).
+#
+# This service has NO inbound Kafka consumer of its own (see its own
+# README/docs) -- it is the SOURCE of the process-path published
+# language, never a consumer, so there is no consumer-group config to set
+# here unlike the fleet's other Kafka-consuming services.
+
+replicaCount: 1
+
+config:
+  httpAddr: ":8080"
+
+kafka:
+  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 6
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 3
+  periodSeconds: 5
+  failureThreshold: 6

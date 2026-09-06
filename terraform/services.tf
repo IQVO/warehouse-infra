@@ -150,10 +150,60 @@ resource "helm_release" "service" {
       # is the fleet's single published-language source of truth (see that
       # file's own header comment) -- fed to every consuming chart's
       # pathCatalogue.content verbatim so all three always agree.
+      #
+      # var.deploy_process_path_kafka_source=false (default): unchanged,
+      # exactly as before this variable existed.
+      #
+      # var.deploy_process_path_kafka_source=true: the file mount is
+      # disabled instead (pathCatalogue.enabled=false -- no ConfigMap
+      # volume/mount rendered at all) and PATH_CATALOGUE_SOURCE=kafka is
+      # injected via extraEnv. KAFKA_BROKERS needs no separate wiring:
+      # every one of these three charts already sets it unconditionally
+      # (it also feeds each chart's own EVENT_PUBLISHER/consumer wiring).
+      # See variables.tf's full rollout-order rationale.
+      # Process-path catalogue source, either the static file (default) or
+      # process-path-management's Kafka topic (var.deploy_process_path_kafka_source).
+      # A single ternary whose two branches share the SAME top-level key
+      # set (pathCatalogue, extraEnv) is used deliberately: Terraform's
+      # object-type unification for a ternary's two results is far more
+      # forgiving when both sides declare the same keys (even if a
+      # nested value differs, e.g. enabled=true+content=... vs
+      # enabled=false) than when one side omits a key outright -- an
+      # earlier version of this block that varied WHICH keys were
+      # present between the true/false cases failed
+      # `terraform validate` with "Inconsistent conditional result
+      # types" for exactly that reason.
       contains(local.path_catalogue_services, each.key) ? {
         pathCatalogue = {
+          enabled = !var.deploy_process_path_kafka_source
+          content = var.deploy_process_path_kafka_source ? "" : local.path_catalogue_content
+        }
+        extraEnv = var.deploy_process_path_kafka_source ? [
+          {
+            name  = "PATH_CATALOGUE_SOURCE"
+            value = "kafka"
+          },
+        ] : []
+        } : {
+        pathCatalogue = { enabled = false, content = "" }
+        extraEnv      = []
+      },
+      # process-path-management's own event publisher: the chart defaults
+      # config.eventPublisher to "log" (never touches Kafka) so a plain
+      # `terraform apply` with the default var.deploy_process_path_kafka_source
+      # = false deploys a fully working REST API that just doesn't publish
+      # anywhere yet -- correct, since nothing is consuming that topic in
+      # that case either. Flipping the shared toggle to true switches BOTH
+      # sides of the integration together: this publisher AND the three
+      # consumers above, so they can never end up half-wired (a publisher
+      # with no live consumer, or a consumer expecting Kafka data that
+      # never arrives).
+      each.key == "process-path-management" && var.deploy_process_path_kafka_source ? {
+        config = {
+          eventPublisher = "kafka"
+        }
+        kafka = {
           enabled = true
-          content = local.path_catalogue_content
         }
       } : {},
       # Gateway API routing (see local.gateway_api_pilot_services above and

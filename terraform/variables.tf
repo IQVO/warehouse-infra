@@ -534,3 +534,42 @@ variable "gateway_api_version" {
   type        = string
   default     = "v1.6.2"
 }
+
+variable "deploy_process_path_kafka_source" {
+  description = <<-EOT
+    Whether fulfillment-execution, wes-work-planning, and
+    workforce-management source their process-path catalogue from
+    process-path-management's Kafka topic
+    (warehouse.process-path-management.events) instead of the static
+    config/process-paths/sortable-fc.yaml file (see locals.tf's
+    path_catalogue_* comment for the full "SUPERSEDED" rationale).
+
+    Default false: every consumer's chart already defaults
+    PATH_CATALOGUE_SOURCE to "file", so leaving this false is a pure
+    no-op against every deployment that predates process-path-management
+    -- the file mount stays exactly as it was.
+
+    Setting this true does three things per consumer (fulfillment-execution,
+    wes-work-planning, workforce-management): (1) pathCatalogue.enabled
+    flips to false, so the file ConfigMap volume/mount disappears from
+    that chart's render; (2) PATH_CATALOGUE_SOURCE=kafka is injected via
+    the chart's own extraEnv (each chart already unconditionally sets
+    KAFKA_BROKERS, so no separate wiring is needed for that); (3) nothing
+    else about the consumer changes -- same Service, same route, same
+    database.
+
+    It also flips process-path-management's OWN config.eventPublisher
+    from the chart's "log" default to "kafka", since there would
+    otherwise be nothing for the three consumers to actually consume.
+
+    This is deliberately independent from var.deploy_services (which
+    controls whether process-path-management is deployed AT ALL, since
+    it is unconditionally a member of local.services): a cluster can run
+    process-path-management without any consumer having switched over
+    yet, which is the intended rollout order -- deploy the new service
+    first, prove its own REST API and Kafka publish path work, THEN flip
+    this flag once satisfied.
+  EOT
+  type        = bool
+  default     = false
+}
