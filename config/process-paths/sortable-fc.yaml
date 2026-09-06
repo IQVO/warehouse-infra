@@ -1,6 +1,32 @@
 # Process-path catalogue — sortable-fc (the one building topology this
 # fleet actually runs today).
 #
+# ┌───────────────────────────────────────────────────────────────────┐
+# │ SUPERSEDED — FROZEN, ROLLBACK-ONLY. DO NOT EDIT TO CHANGE PATHS.  │
+# └───────────────────────────────────────────────────────────────────┘
+#
+# process-path-management is now the source of truth for the process-path
+# catalogue. When var.deploy_process_path_kafka_source is true (it is, in
+# the `warehouse` kind cluster), fulfillment-execution, wes-work-planning
+# and workforce-management no longer read this file at all: their
+# pathCatalogue ConfigMap volume is not rendered, PATH_CATALOGUE_SOURCE is
+# "kafka", and each replays warehouse.process-path-management.events into
+# an in-memory cache, gating its own readiness on that replay completing.
+# Changes propagate to the RUNNING pods live — no restart, no redeploy.
+#
+# To add/change/retire a path, use process-path-management's REST API.
+# Editing this file changes nothing while the flag is true.
+#
+# This file is retained for exactly one reason: it is the rollback target.
+# Setting var.deploy_process_path_kafka_source = false restores the file
+# mount and the boot-time loader, so the content below must stay a valid,
+# accurate description of the building. It was migrated into
+# process-path-management by scripts/seed-process-paths.py (see
+# scripts/README-process-path-seed.md) — if you ever legitimately change
+# it, re-run that script so both sides agree.
+#
+# --- everything below describes the ORIGINAL file-based design ---
+#
 # This is a PUBLISHED LANGUAGE, not a domain aggregate and not owned by any
 # single bounded context: fulfillment-execution (task dispatch/claim),
 # wes-work-planning (WorkPool/WorkReleased path_id validation), and
