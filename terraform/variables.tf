@@ -622,3 +622,21 @@ variable "deploy_facility_events_integration" {
   type        = bool
   default     = true
 }
+
+variable "deploy_mcp_servers" {
+  description = <<-EOT
+    Whether to deploy each context's MCP server (fulfillment-execution,
+    wes-work-planning, inventory-storage, workforce-management,
+    facility-layout -- see terraform/mcp.tf) and wire their endpoints and
+    read keys into warehouse-ops-agent.
+
+    Default true since 2026-09-07: this is what makes warehouse-ops-agent's
+    "MCP tools as actuators" real (its ADR 0004). false is the rollback:
+    every chart's mcp.enabled falls back to its own default (false), the
+    -mcp Deployments/Services/Secrets are removed, and the agent's
+    *_MCP_ENDPOINT values go back to empty -- which its config treats as
+    "skip this client", not a crash.
+  EOT
+  type        = bool
+  default     = true
+}

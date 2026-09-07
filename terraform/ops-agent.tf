@@ -6,15 +6,11 @@
 # environment overlay, same division of responsibility as helm-values/*.yaml
 # for the database-backed services in services.tf.
 #
-# MCP upstream endpoints (upstreams.* in its chart) are deliberately left
-# UNSET here: none of the other seven services' Docker images build the
-# cmd/mcp binary yet (only the main REST binary is built/deployed — verified
-# by inspecting each Dockerfile), so there is no live MCP endpoint anywhere
-# in this cluster for this agent to call. Its own internal/config treats an
-# unset MCP endpoint as "skip this client," not a crash, so this is a real,
-# intentionally partial deployment (REST fan-out live, MCP upstreams not),
-# not a broken one. Wiring MCP server deployment fleet-wide is a separate,
-# larger follow-up (a Dockerfile + chart change in five repos).
+# MCP upstreams (upstreams.* / credentials.* in its chart) are wired from
+# terraform/mcp.tf when var.deploy_mcp_servers is true: each of the five
+# contexts' `<svc>-mcp` Services plus that context's READ key. This is the
+# agent's actual actuator surface (its ADR 0004); before 2026-09-07 no MCP
+# server existed in the cluster and every endpoint here was empty.
 # ---------------------------------------------------------------------------
 
 locals {
@@ -76,6 +72,21 @@ resource "helm_release" "ops_agent" {
           type       = "ClusterIP"
           port       = 80
           targetPort = 8095
+        }
+
+        upstreams = {
+          wesWorkPlanning      = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["wes-work-planning"] : "" }
+          fulfillmentExecution = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["fulfillment-execution"] : "" }
+          inventoryStorage     = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["inventory-storage"] : "" }
+          workforceManagement  = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["workforce-management"] : "" }
+          facilityLayout       = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["facility-layout"] : "" }
+        }
+        credentials = {
+          wesWorkPlanningReadKey      = var.deploy_mcp_servers ? random_password.mcp_read_key["wes-work-planning"].result : ""
+          fulfillmentExecutionReadKey = var.deploy_mcp_servers ? random_password.mcp_read_key["fulfillment-execution"].result : ""
+          inventoryStorageReadKey     = var.deploy_mcp_servers ? random_password.mcp_read_key["inventory-storage"].result : ""
+          workforceManagementReadKey  = var.deploy_mcp_servers ? random_password.mcp_read_key["workforce-management"].result : ""
+          facilityLayoutReadKey       = var.deploy_mcp_servers ? random_password.mcp_read_key["facility-layout"].result : ""
         }
 
         # Real, in-cluster REST base URLs for the console-bff order-lifecycle

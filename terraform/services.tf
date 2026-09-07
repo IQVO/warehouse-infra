@@ -209,6 +209,15 @@ resource "helm_release" "service" {
           enabled = true
         }
       } : {},
+      # MCP server per context (terraform/mcp.tf). Same key set on both
+      # branches, per the ternary rule documented above.
+      contains(local.mcp_services, each.key) ? {
+        mcp = {
+          enabled      = var.deploy_mcp_servers
+          readKey      = var.deploy_mcp_servers ? random_password.mcp_read_key[each.key].result : ""
+          readWriteKey = var.deploy_mcp_servers ? random_password.mcp_readwrite_key[each.key].result : ""
+        }
+      } : {},
       # facility-layout -> inventory-storage location-classification
       # integration (inventory-storage ADR-0013). Same "flip both sides
       # together" shape as the process-path block above, for the same
