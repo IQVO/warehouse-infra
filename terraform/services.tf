@@ -178,15 +178,18 @@ resource "helm_release" "service" {
           enabled = !var.deploy_process_path_kafka_source
           content = var.deploy_process_path_kafka_source ? "" : local.path_catalogue_content
         }
-        extraEnv = var.deploy_process_path_kafka_source ? [
+        # Synchronous HTTP edge config (local.sync_edge_env) rides along in
+        # the same extraEnv list, since a chart's extraEnv is one flat
+        # list and a second merge entry would replace, not append.
+        extraEnv = concat(var.deploy_process_path_kafka_source ? [
           {
             name  = "PATH_CATALOGUE_SOURCE"
             value = "kafka"
           },
-        ] : []
+        ] : [], lookup(local.sync_edge_env, each.key, []))
         } : {
         pathCatalogue = { enabled = false, content = "" }
-        extraEnv      = []
+        extraEnv      = lookup(local.sync_edge_env, each.key, [])
       },
       # process-path-management's own event publisher: the chart defaults
       # config.eventPublisher to "log" (never touches Kafka) so a plain

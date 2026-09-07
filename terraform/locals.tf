@@ -192,6 +192,58 @@ locals {
   # var.deploy_process_path_kafka_source=false. Deleting the file, this
   # block, and the consumers' filecatalog loaders is a follow-up once the
   # kafka source has soaked for a full cycle.
+  # ---------------------------------------------------------------------------
+  # Synchronous HTTP edges between contexts (the fleet's Customer/Supplier
+  # REST calls). Every consumer binary defaults its *_MODE to "permissive"
+  # (never reaches the network), which is the right default for a bare
+  # `go run` -- but in THIS cluster every supplier is deployed, so leaving
+  # the defaults in place silently degrades real behaviour:
+  #
+  #   - workforce-management INSTALLED_CAPACITY_MODE=permissive is fail-LOUD:
+  #     every POST /shift-plans returned 503 (ADR-0014 there) -- found live
+  #     on 2026-09-07 while verifying the outbox rollout.
+  #   - wes-work-planning / fulfillment-execution
+  #     PRODUCT_CLASSIFICATION_MODE=permissive is fail-open: WorkReleased
+  #     never carries hazmat/fragile hints, so no station gating happens.
+  #   - workforce-management LABOR_PERFORMANCE_MODE=permissive: ProposePathPlan
+  #     always proposes 0 heads (no measured rate).
+  #
+  # order-management's inventory-storage edge was already wired (its
+  # helm-values file); inventory-storage's facility-layout edge moved to
+  # Kafka (var.deploy_facility_events_integration). This map covers the
+  # rest, keyed by consumer, injected via each chart's extraEnv. Suppliers
+  # are addressed by their in-cluster Service (port 80).
+  #
+  # NOTE: services.tf's computed merge sets `extraEnv` for EVERY service
+  # (it must -- both branches of the catalogue ternary need the same key
+  # set), and that computed layer overrides the helm-values/*.yaml file.
+  # So an extraEnv entry in a helm-values file is silently dropped; any
+  # per-service env that has no dedicated chart value MUST live here.
+  # labor-performance's EVENT_PUBLISHER is the first such case: its chart
+  # never rendered that variable, so the binary ran the log publisher and
+  # warehouse.labor-performance.analytics stayed at offset 0 until
+  # 2026-09-07 -- the labor projector/reports pair never saw an event.
+  # ---------------------------------------------------------------------------
+  sync_edge_env = {
+    "labor-performance" = [
+      { name = "EVENT_PUBLISHER", value = "kafka" },
+    ]
+    "wes-work-planning" = [
+      { name = "PRODUCT_CLASSIFICATION_MODE", value = "http" },
+      { name = "INVENTORY_STORAGE_BASE_URL", value = "http://inventory-storage.${var.apps_namespace}.svc.cluster.local:80" },
+    ]
+    "fulfillment-execution" = [
+      { name = "PRODUCT_CLASSIFICATION_MODE", value = "http" },
+      { name = "INVENTORY_STORAGE_BASE_URL", value = "http://inventory-storage.${var.apps_namespace}.svc.cluster.local:80" },
+    ]
+    "workforce-management" = [
+      { name = "INSTALLED_CAPACITY_MODE", value = "http" },
+      { name = "FULFILLMENT_EXECUTION_BASE_URL", value = "http://fulfillment-execution.${var.apps_namespace}.svc.cluster.local:80" },
+      { name = "LABOR_PERFORMANCE_MODE", value = "http" },
+      { name = "LABOR_PERFORMANCE_BASE_URL", value = "http://labor-performance.${var.apps_namespace}.svc.cluster.local:80" },
+    ]
+  }
+
   path_catalogue_services = [
     "fulfillment-execution",
     "wes-work-planning",

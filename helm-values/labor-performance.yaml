@@ -1,7 +1,12 @@
 # labor-performance — Labor Performance bounded context (engineered labor
-# standards + actual-vs-standard scoring). Pure Kafka CONSUMER of
+# standards + actual-vs-standard scoring). Kafka CONSUMER of
 # fulfillment-execution's TaskCompleted event (warehouse.fulfillment.events)
-# — it has no outbound domain-event publisher of its own to gate.
+# AND, since its analytics data product (ADR-0007 there) and transactional
+# outbox (ADR-0010 there), a PUBLISHER onto warehouse.labor-performance.analytics.
+# The chart carries no eventPublisher value (its configmap never renders
+# EVENT_PUBLISHER); it is injected from terraform/locals.tf's sync_edge_env
+# (extraEnv in THIS file would be overridden by the computed layer -- see
+# that local's comment).
 #
 # Startup: runs migrations before serving.
 #
