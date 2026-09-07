@@ -174,21 +174,24 @@ locals {
   # once here and fed identically into all three charts' pathCatalogue.content
   # so they can never disagree about what paths exist.
   #
-  # SUPERSEDED (var.deploy_process_path_kafka_source, default false): the
-  # static file above is being replaced by process-path-management (its own
-  # bounded context, added to local.services above), which publishes
-  # ProcessPathCreated/Updated/Deactivated onto
-  # warehouse.process-path-management.events. Each of the three consumers
-  # already ships a PATH_CATALOGUE_SOURCE=file|kafka switch (default
-  # "file", so this flag defaults to false = zero behavior change). When
-  # true: each consumer's pathCatalogue.enabled flips to false (no file
-  # mount) and PATH_CATALOGUE_SOURCE=kafka is injected via extraEnv (see
-  # services.tf); process-path-management's own config.eventPublisher
-  # flips to "kafka" so there is something to consume. The static YAML
-  # file and this flag are BOTH kept until the switch is proven live in
-  # this cluster -- retiring config/process-paths/sortable-fc.yaml
-  # entirely is a follow-up once var.deploy_process_path_kafka_source has
-  # defaulted to true for a full cycle.
+  # SUPERSEDED AND FROZEN (cutover 2026-09-06; var.deploy_process_path_kafka_source
+  # now defaults to true): the source of truth for process paths is
+  # process-path-management (its own bounded context, in local.services
+  # above), which publishes ProcessPathCreated/Updated/Deactivated onto
+  # warehouse.process-path-management.events. Its store was seeded from
+  # this file by scripts/seed-process-paths.py (idempotent, re-runnable).
+  # Each of the three consumers ships a PATH_CATALOGUE_SOURCE=file|kafka
+  # switch; with the flag true each consumer's pathCatalogue.enabled is
+  # false (no file mount) and PATH_CATALOGUE_SOURCE=kafka is injected via
+  # extraEnv (see services.tf), and process-path-management's own
+  # config.eventPublisher is "kafka".
+  #
+  # DO NOT EDIT config/process-paths/sortable-fc.yaml to change the fleet's
+  # paths any more -- define/revise them through process-path-management's
+  # REST API. The file is kept ONLY as the rollback payload for
+  # var.deploy_process_path_kafka_source=false. Deleting the file, this
+  # block, and the consumers' filecatalog loaders is a follow-up once the
+  # kafka source has soaked for a full cycle.
   path_catalogue_services = [
     "fulfillment-execution",
     "wes-work-planning",

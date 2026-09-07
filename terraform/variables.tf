@@ -544,10 +544,12 @@ variable "deploy_process_path_kafka_source" {
     config/process-paths/sortable-fc.yaml file (see locals.tf's
     path_catalogue_* comment for the full "SUPERSEDED" rationale).
 
-    Default false: every consumer's chart already defaults
-    PATH_CATALOGUE_SOURCE to "file", so leaving this false is a pure
-    no-op against every deployment that predates process-path-management
-    -- the file mount stays exactly as it was.
+    Default true since the 2026-09-06 cutover: the cluster was flipped,
+    process-path-management was seeded (scripts/seed-process-paths.py)
+    and live propagation was verified without consumer restarts. Setting
+    this false is the documented rollback: every consumer's chart still
+    defaults PATH_CATALOGUE_SOURCE to "file", so the frozen
+    config/process-paths/sortable-fc.yaml mount returns unchanged.
 
     Setting this true does three things per consumer (fulfillment-execution,
     wes-work-planning, workforce-management): (1) pathCatalogue.enabled
@@ -571,7 +573,7 @@ variable "deploy_process_path_kafka_source" {
     this flag once satisfied.
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "deploy_facility_events_integration" {
@@ -580,9 +582,11 @@ variable "deploy_facility_events_integration" {
     facility-layout's Kafka topic (warehouse.facility.events) instead of
     calling that service synchronously over HTTP on every stow.
 
-    Default false: inventory-storage's chart already defaults
-    LOCATION_LOOKUP_MODE to "permissive", so leaving this false is a pure
-    no-op against every existing deployment.
+    Default true since the 2026-09-06 cutover (inventory-storage is
+    facility-layout's first real event consumer, ADR 0013). Setting this
+    false is the documented rollback: inventory-storage's chart still
+    defaults LOCATION_LOOKUP_MODE to "permissive", so the sync HTTP /
+    permissive path returns unchanged.
 
     Setting this true switches BOTH sides of the integration together, so
     they can never end up half-wired:
@@ -616,5 +620,5 @@ variable "deploy_facility_events_integration" {
     inventory-storage's ADR 0013 for the full decision record.
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
