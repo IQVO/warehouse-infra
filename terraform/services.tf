@@ -209,13 +209,13 @@ resource "helm_release" "service" {
           enabled = true
         }
       } : {},
-      # MCP server per context (terraform/mcp.tf). Same key set on both
-      # branches, per the ternary rule documented above.
+      # MCP server per context (terraform/mcp.tf). Auth removed fleet-wide
+      # (2026-09-09): MCP servers are unauthenticated now, so the chart's
+      # mcp.enabled flag alone controls whether the MCP Deployment exists --
+      # no keys needed.
       contains(local.mcp_services, each.key) ? {
         mcp = {
-          enabled      = var.deploy_mcp_servers
-          readKey      = var.deploy_mcp_servers ? random_password.mcp_read_key[each.key].result : ""
-          readWriteKey = var.deploy_mcp_servers ? random_password.mcp_readwrite_key[each.key].result : ""
+          enabled = var.deploy_mcp_servers
         }
       } : {},
       # facility-layout -> inventory-storage location-classification

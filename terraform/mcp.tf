@@ -1,16 +1,18 @@
 # ---------------------------------------------------------------------------
 # MCP servers (each context's ADR-0008 "MCP inbound adapter"). Each of the
 # five contexts warehouse-ops-agent consumes ships a `cmd/mcp` binary in its
-# image and an `mcp.*` block in its chart (mcp-deployment/-service/-secret,
-# Service `<release>-mcp` on port 8090, Streamable HTTP at `/` and `/mcp`,
-# unauthenticated `/healthz` for the probes). Until 2026-09-07 none of this
-# was deployed anywhere -- see the header comment that used to live in
-# ops-agent.tf -- so the agent's MCP upstreams were all empty.
+# image and an `mcp.*` block in its chart (mcp-deployment/-service, Service
+# `<release>-mcp` on port 8090, Streamable HTTP at `/` and `/mcp`, open
+# `/healthz` for the probes). Until 2026-09-07 none of this was deployed
+# anywhere -- see the header comment that used to live in ops-agent.tf -- so
+# the agent's MCP upstreams were all empty.
 #
-# One read key and one read-write key per context. The read key is what
-# warehouse-ops-agent receives (its v1 posture is read-only, per its own
-# governance note); the read-write key is provisioned now so a later
-# write-capable slice needs no infra change, but is handed to nobody yet.
+# Static-bearer MCP auth (read/read-write keys) was removed fleet-wide (the
+# nine backend repos' MCP servers are now unauthenticated) -- see each
+# repo's "remove REST OIDC and MCP static bearer auth" PR. This file now
+# only computes which contexts have an MCP server and where it lives;
+# `var.deploy_mcp_servers` still gates whether the MCP *server* itself is
+# deployed, a separate, still-valid concern from auth.
 # ---------------------------------------------------------------------------
 
 locals {
@@ -26,18 +28,4 @@ locals {
     for name in local.mcp_services :
     name => "http://${name}-mcp.${var.apps_namespace}.svc.cluster.local:8090/mcp"
   }
-}
-
-resource "random_password" "mcp_read_key" {
-  for_each = var.deploy_mcp_servers ? local.mcp_services : toset([])
-
-  length  = 40
-  special = false
-}
-
-resource "random_password" "mcp_readwrite_key" {
-  for_each = var.deploy_mcp_servers ? local.mcp_services : toset([])
-
-  length  = 40
-  special = false
 }

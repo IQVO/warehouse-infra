@@ -6,11 +6,15 @@
 # environment overlay, same division of responsibility as helm-values/*.yaml
 # for the database-backed services in services.tf.
 #
-# MCP upstreams (upstreams.* / credentials.* in its chart) are wired from
-# terraform/mcp.tf when var.deploy_mcp_servers is true: each of the five
-# contexts' `<svc>-mcp` Services plus that context's READ key. This is the
-# agent's actual actuator surface (its ADR 0004); before 2026-09-07 no MCP
-# server existed in the cluster and every endpoint here was empty.
+# MCP upstreams (upstreams.* in its chart) are wired from terraform/mcp.tf
+# when var.deploy_mcp_servers is true: each of the five contexts' `<svc>-mcp`
+# Service endpoints. This is the agent's actual actuator surface (its
+# ADR 0004); before 2026-09-07 no MCP server existed in the cluster and
+# every endpoint here was empty. Static-bearer MCP auth (the credentials.*
+# ReadKey values that used to ride alongside these endpoints) was removed
+# fleet-wide (2026-09-09) -- the upstream chart's own credentials.* ReadKey
+# fields and Secret/env wiring were dropped in the same PR, so this
+# Terraform side keeps only the endpoints; no keys are needed to call them.
 # ---------------------------------------------------------------------------
 
 locals {
@@ -81,14 +85,6 @@ resource "helm_release" "ops_agent" {
           workforceManagement  = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["workforce-management"] : "" }
           facilityLayout       = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["facility-layout"] : "" }
         }
-        credentials = {
-          wesWorkPlanningReadKey      = var.deploy_mcp_servers ? random_password.mcp_read_key["wes-work-planning"].result : ""
-          fulfillmentExecutionReadKey = var.deploy_mcp_servers ? random_password.mcp_read_key["fulfillment-execution"].result : ""
-          inventoryStorageReadKey     = var.deploy_mcp_servers ? random_password.mcp_read_key["inventory-storage"].result : ""
-          workforceManagementReadKey  = var.deploy_mcp_servers ? random_password.mcp_read_key["workforce-management"].result : ""
-          facilityLayoutReadKey       = var.deploy_mcp_servers ? random_password.mcp_read_key["facility-layout"].result : ""
-        }
-
         # Real, in-cluster REST base URLs for the console-bff order-lifecycle
         # fan-out (cmd/agent/main.go's restclient wiring) — these ARE live
         # today, unlike the MCP upstreams above.
