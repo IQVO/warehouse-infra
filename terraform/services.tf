@@ -260,6 +260,28 @@ resource "helm_release" "service" {
         } : {
         extraEnv = []
       }) : {},
+      # order-management's process-path catalogue validation
+      # (order-management ADR-0013). Independent of the
+      # var.deploy_process_path_kafka_source block above -- OM is a NEW
+      # consumer of this topic, not a file-to-kafka cutover -- so this is
+      # its own single-service ternary, same "both branches declare the
+      # SAME key set" shape as the inventory-storage block directly
+      # above, for the same "Inconsistent conditional result types"
+      # reason. KAFKA_BROKERS needs no separate wiring here: OM's
+      # helm-values already sets config.eventPublisher=kafka
+      # unconditionally (it already publishes integration/analytics
+      # events), so the chart always renders KAFKA_BROKERS regardless of
+      # this flag.
+      each.key == "order-management" ? (var.deploy_order_management_path_catalogue_kafka ? {
+        extraEnv = [
+          {
+            name  = "PATH_CATALOGUE_SOURCE"
+            value = "kafka"
+          },
+        ]
+        } : {
+        extraEnv = []
+      }) : {},
       # Gateway API routing (see local.gateway_api_pilot_services above and
       # gateway-api.tf's header for the full pilot history). Mirrors
       # exactly what the `ingress` block above would have expressed for

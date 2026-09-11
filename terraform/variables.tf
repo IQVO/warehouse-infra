@@ -576,6 +576,45 @@ variable "deploy_process_path_kafka_source" {
   default     = true
 }
 
+variable "deploy_order_management_path_catalogue_kafka" {
+  description = <<-EOT
+    Whether order-management validates a resolved process-path against
+    process-path-management's Kafka topic
+    (warehouse.process-path-management.events) before persisting an
+    order, instead of skipping that validation entirely (order-management
+    ADR-0013 / PATH_CATALOGUE_SOURCE=none|kafka).
+
+    This is INDEPENDENT of var.deploy_process_path_kafka_source above:
+    order-management is a NEW consumer of this topic (it never had a
+    static file-based catalogue like fulfillment-execution /
+    wes-work-planning / workforce-management did), so there is no
+    rollback-to-file case to preserve here -- only "skip validation"
+    (false, the chart's default) or "validate for real" (true).
+
+    Default false until the discriminating live-propagation probe
+    (see order-management's process-path-selection plan, Phase 4) has
+    been run against this specific consumer: flipping this before that
+    verification would silently start rejecting real orders if
+    order-management's own kafkacatalog consumer has any wiring bug the
+    probe would have caught. Setting this true injects
+    PATH_CATALOGUE_SOURCE=kafka via order-management's chart extraEnv;
+    KAFKA_BROKERS needs no separate wiring since order-management's
+    helm-values already sets config.eventPublisher=kafka unconditionally
+    (it already publishes integration/analytics events), so the chart
+    already renders KAFKA_BROKERS regardless of this flag.
+
+    Flipped to true on 2026-09-10 after the Phase 4 probe verified live
+    propagation end-to-end (see the process-path-selection plan's Phase 4
+    section for the exact commands run): a fresh path defined in
+    process-path-management became acceptable to order-management within
+    seconds with no restart, and deactivating it flipped order-management
+    back to rejecting it with its own 400 -- the actual regression this
+    whole feature exists to fix.
+  EOT
+  type        = bool
+  default     = true
+}
+
 variable "deploy_facility_events_integration" {
   description = <<-EOT
     Whether inventory-storage sources location classifications from
