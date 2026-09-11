@@ -79,11 +79,21 @@ resource "helm_release" "ops_agent" {
         }
 
         upstreams = {
-          wesWorkPlanning      = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["wes-work-planning"] : "" }
-          fulfillmentExecution = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["fulfillment-execution"] : "" }
-          inventoryStorage     = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["inventory-storage"] : "" }
-          workforceManagement  = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["workforce-management"] : "" }
-          facilityLayout       = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["facility-layout"] : "" }
+          wesWorkPlanning       = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["wes-work-planning"] : "" }
+          fulfillmentExecution  = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["fulfillment-execution"] : "" }
+          inventoryStorage      = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["inventory-storage"] : "" }
+          workforceManagement   = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["workforce-management"] : "" }
+          facilityLayout        = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["facility-layout"] : "" }
+          # Second-wave upstreams (warehouse-ops-agent PR #44's mcpclients).
+          # labor-performance is actually CONSUMED as of PR #45 (ADR 0008,
+          # FlowBalanceAdvisory's utilization correlation) -- this entry
+          # is what makes that live, not just wired-but-unconsumed. The
+          # other two have no consuming use case yet; wired here anyway
+          # so the next one to graduate needs no infra change, matching
+          # the chart-side fix in warehouse-ops-agent PR #46.
+          orderManagement       = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["order-management"] : "" }
+          laborPerformance      = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["labor-performance"] : "" }
+          processPathManagement = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["process-path-management"] : "" }
         }
         # Real, in-cluster REST base URLs for the console-bff order-lifecycle
         # fan-out (cmd/agent/main.go's restclient wiring) — these ARE live
