@@ -143,6 +143,18 @@ locals {
     "workforce-management",
     "facility-layout",
     "labor-performance",
+    # Added 2026-09-11 (fleet-wide bounded-context wiring plan, Phase 5):
+    # process-path-management shipped its own analytics data product
+    # (projector + reports binaries, warehouse.process-path-management.analytics
+    # topic, "Process Path Catalogue Growth & Change" report bucketed by
+    # day) in the same PR that closed this fleet's last remaining
+    # analytics gap -- 8 of 8 backend contexts now have one. Every
+    # downstream local (analytics_db_info, analytics_service_passwords,
+    # analytics_database_urls) and the postgres.tf init-job template and
+    # services.tf's `contains(local.analytics_services, each.key)` gate
+    # already derive from this single set, so no other file needs a
+    # change to pick this service up.
+    "process-path-management",
   ])
 
   analytics_db_info = {
