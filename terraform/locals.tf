@@ -251,7 +251,13 @@ locals {
     "workforce-management" = [
       { name = "INSTALLED_CAPACITY_MODE", value = "http" },
       { name = "FULFILLMENT_EXECUTION_BASE_URL", value = "http://fulfillment-execution.${var.apps_namespace}.svc.cluster.local:80" },
-      { name = "LABOR_PERFORMANCE_MODE", value = "http" },
+      # LABOR_PERFORMANCE_MODE=kafka-cache (workforce-management ADR-0019):
+      # ProposePathPlan's measured-rate + observed-idle-share enrichment now
+      # comes from an event-fed local cache of labor-performance's
+      # warehouse.labor-performance.events (TaskPerformanceRecorded), not a
+      # synchronous GET per request. LABOR_PERFORMANCE_BASE_URL is kept below
+      # only as the rollback value if this ever needs to flip back to "http".
+      { name = "LABOR_PERFORMANCE_MODE", value = "kafka-cache" },
       { name = "LABOR_PERFORMANCE_BASE_URL", value = "http://labor-performance.${var.apps_namespace}.svc.cluster.local:80" },
     ]
   }
