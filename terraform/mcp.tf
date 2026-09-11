@@ -22,6 +22,19 @@ locals {
     "inventory-storage",
     "workforce-management",
     "facility-layout",
+    # Added 2026-09-11 (fleet-wide bounded-context wiring plan, Phase 1):
+    # order-management and labor-performance already shipped a `cmd/mcp`
+    # binary but had no chart templates to deploy it (mcp_cmd=1,
+    # chart_mcp=0 in the wiring audit); process-path-management had no MCP
+    # server at all until this same wiring pass built one (two read-only
+    # tools: get_process_path, list_process_paths). All three now carry
+    # identical mcp-deployment/-service chart templates to the five
+    # contexts above, so `services.tf`'s existing
+    # `contains(local.mcp_services, each.key)` gate picks them up with no
+    # further change needed there.
+    "order-management",
+    "labor-performance",
+    "process-path-management",
   ])
 
   mcp_endpoint = {
