@@ -29,10 +29,21 @@ terraform apply -input=false -auto-approve "$@"
 
 echo
 echo "==> done. cluster is up."
+echo
+echo "The product has two independent host-facing edges (docs/exposure/localhost-edge-topology.md):"
+echo
+echo "  UI   $(terraform output -json product_endpoints | python3 -c 'import json,sys; print(json.load(sys.stdin)["ui"])' 2>/dev/null)"
+echo "  API  $(terraform output -json product_endpoints | python3 -c 'import json,sys; print(json.load(sys.stdin)["api"])' 2>/dev/null)"
+echo
 terraform output routes
 echo
 echo "Try it:"
-echo "  curl -i $(terraform output -raw kong_proxy_url)/inventory-storage/healthz"
+# NOTE the /api prefix: API routes moved off the bare /<service> namespace
+# because it collided with the console shell's own client-side routes
+# (/order-management is a page in the SPA as well as an API prefix).
+echo "  open $(terraform output -raw web_url 2>/dev/null || echo http://localhost)"
+echo "  curl -i $(terraform output -raw kong_proxy_url)/api/inventory-storage/healthz"
+echo "  bash scripts/test-exposure-policy.sh   # asserts the two edges stay separate"
 
 # The observability UIs and Kiali are exposed the same way Kong is: a
 # NodePort published on the host via kind's extraPortMappings (see main.tf),
