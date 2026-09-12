@@ -249,6 +249,8 @@ locals {
     "wes-work-planning" = [
       { name = "PRODUCT_CLASSIFICATION_MODE", value = "http" },
       { name = "INVENTORY_STORAGE_BASE_URL", value = "http://inventory-storage.${var.apps_namespace}.svc.cluster.local:80" },
+      { name = "TRAVEL_DISTANCE_MODE", value = "http" },
+      { name = "FACILITY_LAYOUT_BASE_URL", value = "http://facility-layout.${var.apps_namespace}.svc.cluster.local:80" },
     ]
     "fulfillment-execution" = [
       { name = "PRODUCT_CLASSIFICATION_MODE", value = "http" },
