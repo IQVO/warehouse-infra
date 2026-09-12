@@ -79,11 +79,11 @@ resource "helm_release" "ops_agent" {
         }
 
         upstreams = {
-          wesWorkPlanning       = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["wes-work-planning"] : "" }
-          fulfillmentExecution  = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["fulfillment-execution"] : "" }
-          inventoryStorage      = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["inventory-storage"] : "" }
-          workforceManagement   = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["workforce-management"] : "" }
-          facilityLayout        = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["facility-layout"] : "" }
+          wesWorkPlanning      = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["wes-work-planning"] : "" }
+          fulfillmentExecution = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["fulfillment-execution"] : "" }
+          inventoryStorage     = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["inventory-storage"] : "" }
+          workforceManagement  = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["workforce-management"] : "" }
+          facilityLayout       = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["facility-layout"] : "" }
           # Second-wave upstreams (warehouse-ops-agent PR #44's mcpclients).
           # labor-performance is actually CONSUMED as of PR #45 (ADR 0008,
           # FlowBalanceAdvisory's utilization correlation) -- this entry
@@ -140,7 +140,7 @@ resource "helm_release" "ops_agent" {
           hosts = [{
             host = ""
             paths = [{
-              path     = "/warehouse-ops-agent"
+              path     = "${var.api_path_prefix}/warehouse-ops-agent"
               pathType = "Prefix"
             }]
           }]
@@ -160,7 +160,7 @@ resource "helm_release" "ops_agent" {
             sectionName = "http"
           }]
           hosts = [{
-            path     = "/warehouse-ops-agent"
+            path     = "${var.api_path_prefix}/warehouse-ops-agent"
             pathType = "PathPrefix"
           }]
           stripPath = true
@@ -172,5 +172,5 @@ resource "helm_release" "ops_agent" {
 
 output "ops_agent_route" {
   description = "Kong route for warehouse-ops-agent, once deployed."
-  value       = var.deploy_services ? "http://localhost:${var.kong_proxy_http_host_port}/warehouse-ops-agent" : ""
+  value       = var.deploy_services ? "http://localhost:${var.kong_proxy_http_host_port}${var.api_path_prefix}/warehouse-ops-agent" : ""
 }

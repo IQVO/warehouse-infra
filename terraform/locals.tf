@@ -9,6 +9,12 @@
 #
 # `port` was read from each service's cmd/*/main.go: all four default
 # HTTP_ADDR to ":8080" and the Dockerfiles all EXPOSE 8080.
+#
+# `path` is the PUBLIC route behind Kong, namespaced under var.api_path_prefix
+# ("/api") since ADR-0005. It used to be a bare "/<service>", which collides
+# head-on with the console shell's own client-side routes -- "/order-management"
+# is a page in the SPA as well as an API prefix. Kong strips the whole prefix
+# before forwarding, so each Go router keeps its existing unprefixed contract.
 # ---------------------------------------------------------------------------
 
 locals {
@@ -21,56 +27,56 @@ locals {
       db         = "inventory_storage"
       user       = "inventory_storage"
       port       = 8080
-      path       = "/inventory-storage"
+      path       = "${var.api_path_prefix}/inventory-storage"
       chart_path = "${path.module}/../../inventory-storage/charts/inventory-storage"
     }
     "wes-work-planning" = {
       db         = "wes_work_planning"
       user       = "wes_work_planning"
       port       = 8080
-      path       = "/wes-work-planning"
+      path       = "${var.api_path_prefix}/wes-work-planning"
       chart_path = "${path.module}/../../wes-work-planning/charts/wes-work-planning"
     }
     "workforce-management" = {
       db         = "workforce_management"
       user       = "workforce_management"
       port       = 8080
-      path       = "/workforce-management"
+      path       = "${var.api_path_prefix}/workforce-management"
       chart_path = "${path.module}/../../workforce-management/charts/workforce-management"
     }
     "fulfillment-execution" = {
       db         = "fulfillment_execution"
       user       = "fulfillment_execution"
       port       = 8080
-      path       = "/fulfillment-execution"
+      path       = "${var.api_path_prefix}/fulfillment-execution"
       chart_path = "${path.module}/../../fulfillment-execution/charts/fulfillment-execution"
     }
     "order-management" = {
       db         = "order_management"
       user       = "order_management"
       port       = 8080
-      path       = "/order-management"
+      path       = "${var.api_path_prefix}/order-management"
       chart_path = "${path.module}/../../order-management/charts/order-management"
     }
     "facility-layout" = {
       db         = "facility_layout"
       user       = "facility_layout"
       port       = 8080
-      path       = "/facility-layout"
+      path       = "${var.api_path_prefix}/facility-layout"
       chart_path = "${path.module}/../../facility-layout/charts/facility-layout"
     }
     "labor-performance" = {
       db         = "labor_performance"
       user       = "labor_performance"
       port       = 8080
-      path       = "/labor-performance"
+      path       = "${var.api_path_prefix}/labor-performance"
       chart_path = "${path.module}/../../labor-performance/charts/labor-performance"
     }
     "process-path-management" = {
       db         = "process_path_management"
       user       = "process_path_management"
       port       = 8080
-      path       = "/process-path-management"
+      path       = "${var.api_path_prefix}/process-path-management"
       chart_path = "${path.module}/../../process-path-management/charts/process-path-management"
     }
   }

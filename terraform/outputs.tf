@@ -14,12 +14,36 @@ output "kubeconfig_path" {
 }
 
 output "kong_proxy_url" {
-  description = "Base URL of the Kong proxy as reachable from the host."
+  description = "Base URL of the Kong proxy (the API origin) as reachable from the host."
   value       = "http://localhost:${var.kong_proxy_http_host_port}"
 }
 
+# The two product entrypoints, side by side, because the single most common
+# question about this topology is "which port serves what". See
+# docs/exposure/localhost-edge-topology.md.
+output "product_endpoints" {
+  description = "The product's two independent host-facing edges: UI (nginx) and API (Kong)."
+  value = {
+    ui  = var.deploy_frontends ? "${local.web_origin} (console shell + /mfes/<context>/ remotes, served by nginx)" : "(deploy_frontends = false)"
+    api = "${local.api_origin}${var.api_path_prefix}/<context> (Kong; never serves assets)"
+  }
+}
+
+output "frontend_routes" {
+  description = "Web gateway route table: host path -> in-cluster frontend Service."
+  value = var.deploy_frontends ? merge(
+    {
+      "${local.web_origin}/" = "${local.console_service_host}:80"
+    },
+    {
+      for name, fe in local.frontend_remotes :
+      "${local.web_origin}/mfes/${name}/" => "${local.frontend_service_host[name]}:80"
+    },
+  ) : {}
+}
+
 output "routes" {
-  description = "Kong route table: host path prefix -> in-cluster service:port."
+  description = "Kong API route table: host path prefix -> in-cluster service:port. APIs only -- frontend routing is the web gateway's (see frontend_routes)."
   value = {
     for name, svc in local.services :
     "http://localhost:${var.kong_proxy_http_host_port}${svc.path}" =>

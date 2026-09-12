@@ -64,6 +64,11 @@ resource "helm_release" "service" {
     helm_release.postgresql,
     helm_release.kong,
     null_resource.build_and_load,
+    # The frontend image has to be in the kind node's containerd store before
+    # this release renders a pod referencing it, or the frontend pod lands in
+    # ImagePullBackOff (pullPolicy is IfNotPresent, and nothing publishes
+    # these images to a registry).
+    null_resource.build_and_load_frontend,
   ]
 
   name      = each.key
@@ -282,6 +287,26 @@ resource "helm_release" "service" {
         } : {
         extraEnv = []
       }) : {},
+      # The context's own Module Federation remote, served by its own nginx
+      # pod (frontends.tf builds the image; the chart owns the workload
+      # shape). Deliberately NO ingress/httproute here: frontend routing
+      # belongs to the Nginx web gateway, and routing it through Kong is
+      # exactly what ADR-0005 forbids. The Service stays ClusterIP so the
+      # gateway remains the single host-facing frontend endpoint.
+      contains(keys(local.frontend_remotes), each.key) ? {
+        frontend = {
+          enabled = true
+          image = {
+            repository = "warehouse/${each.key}-frontend"
+            # Content-addressed, NOT the fixed "local" tag this file uses for
+            # the Go image above. See frontends.tf's comment: a fixed tag
+            # leaves the pod template identical after a rebuild, so the old
+            # bundle keeps serving until something else changes the spec.
+            tag        = "local-${local.frontend_source_hash[each.key]}"
+            pullPolicy = "IfNotPresent"
+          }
+        }
+      } : {},
       # Gateway API routing (see local.gateway_api_pilot_services above and
       # gateway-api.tf's header for the full pilot history). Mirrors
       # exactly what the `ingress` block above would have expressed for

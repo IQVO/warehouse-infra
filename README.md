@@ -1,13 +1,30 @@
 # warehouse-infra
 
-A fully local Kubernetes environment for the four `warehouse-systems` bounded
-contexts: a **kind** cluster running **PostgreSQL**, **Istio** (sidecar mesh)
-and **Kong** (north-south API gateway), all provisioned by a single
+A fully local Kubernetes environment for the `warehouse-systems` bounded
+contexts: a **kind** cluster running **PostgreSQL**, **Kafka**, **Istio**
+(sidecar mesh), the observability stack, **Kong** (north-south API gateway) and
+an **Nginx web gateway** (the product UI), all provisioned by a single
 `terraform apply`.
 
 Nothing here talks to a cloud. There is no cloud load balancer, no registry
 push, no remote state — images are built locally and side-loaded into kind, and
-Kong is reached through kind's `extraPortMappings`.
+both gateways are reached through kind's `extraPortMappings`.
+
+The product has **two independent host-facing edges**, and neither proxies to
+the other:
+
+```
+http://localhost        ->  Nginx web gateway  ->  console shell + /mfes/<context>/ remotes
+http://localhost:8000   ->  Kong               ->  /api/<context> REST APIs
+```
+
+Kong never serves HTML/CSS/JavaScript; the web gateway never proxies an API.
+Both bind to `127.0.0.1` only, because every REST and MCP endpoint here is
+currently unauthenticated. The rationale, the rejected alternatives and the
+consequences (CORS becomes load-bearing) are in
+[docs/exposure/localhost-edge-topology.md](docs/exposure/localhost-edge-topology.md).
+`scripts/test-exposure-policy.sh` asserts the separation against the live
+cluster.
 
 ---
 
@@ -15,7 +32,8 @@ Kong is reached through kind's `extraPortMappings`.
 
 ```
                     HOST (macOS / Linux)
-   curl http://localhost/inventory-storage/healthz
+   open http://localhost            (UI, via the Nginx web gateway)
+   curl http://localhost:8000/api/inventory-storage/healthz
                           │
                           │  kind extraPortMappings
                           │  host :80  -> node :30080
@@ -183,26 +201,48 @@ terraform apply -auto-approve \
 
 ## Route table
 
+### APIs — Kong, on `http://localhost:8000`
+
 Kong routes purely on path prefix (no Host header required), and strips the
-prefix before proxying, so each pod sees the paths its own chi router actually
-registers.
+whole `/api/<context>` prefix before proxying, so each pod sees the paths its
+own chi router actually registers.
 
-| Host URL                                        | Kong route (strip-path)         | In-cluster service                                            | Container port |
-|-------------------------------------------------|---------------------------------|---------------------------------------------------------------|----------------|
-| `http://localhost/inventory-storage/*`          | `/inventory-storage` → `/*`     | `inventory-storage.warehouse-systems.svc.cluster.local`       | 8080           |
-| `http://localhost/wes-work-planning/*`          | `/wes-work-planning` → `/*`     | `wes-work-planning.warehouse-systems.svc.cluster.local`       | 8080           |
-| `http://localhost/workforce-management/*`       | `/workforce-management` → `/*`  | `workforce-management.warehouse-systems.svc.cluster.local`    | 8080           |
-| `http://localhost/fulfillment-execution/*`      | `/fulfillment-execution` → `/*` | `fulfillment-execution.warehouse-systems.svc.cluster.local`   | 8080           |
+The prefix is not decoration: the old routes were a bare `/<service>`, which
+collides head-on with the console shell's own client-side routes —
+`/order-management` is a page in the SPA as well as an API namespace.
 
-Port 8080 is not an assumption: all four `cmd/*/main.go` default `HTTP_ADDR` to
-`":8080"` and all four Dockerfiles `EXPOSE 8080`.
+| Host URL                                                  | Kong route (strip-path)              | In-cluster service                                          |
+|-----------------------------------------------------------|--------------------------------------|-------------------------------------------------------------|
+| `http://localhost:8000/api/order-management/*`            | `/api/order-management` → `/*`       | `order-management.warehouse-systems.svc.cluster.local`      |
+| `http://localhost:8000/api/inventory-storage/*`           | `/api/inventory-storage` → `/*`      | `inventory-storage.warehouse-systems.svc.cluster.local`     |
+| `http://localhost:8000/api/wes-work-planning/*`           | `/api/wes-work-planning` → `/*`      | `wes-work-planning.warehouse-systems.svc.cluster.local`     |
+| `http://localhost:8000/api/fulfillment-execution/*`       | `/api/fulfillment-execution` → `/*`  | `fulfillment-execution.warehouse-systems.svc.cluster.local` |
+| `http://localhost:8000/api/workforce-management/*`        | `/api/workforce-management` → `/*`   | `workforce-management.warehouse-systems.svc.cluster.local`  |
+| `http://localhost:8000/api/facility-layout/*`             | `/api/facility-layout` → `/*`        | `facility-layout.warehouse-systems.svc.cluster.local`       |
+| `http://localhost:8000/api/labor-performance/*`           | `/api/labor-performance` → `/*`      | `labor-performance.warehouse-systems.svc.cluster.local`     |
+| `http://localhost:8000/api/process-path-management/*`     | `/api/process-path-management` → `/*`| `process-path-management...svc.cluster.local`                |
+| `http://localhost:8000/api/warehouse-ops-agent/*`         | `/api/warehouse-ops-agent` → `/*`    | `warehouse-ops-agent.warehouse-systems.svc.cluster.local`   |
+
+Container port 8080 is not an assumption: every `cmd/*/main.go` defaults
+`HTTP_ADDR` to `":8080"` and every Dockerfile `EXPOSE`s 8080.
 
 ```bash
-curl -i http://localhost/inventory-storage/healthz
+curl -i http://localhost:8000/api/inventory-storage/healthz
 ```
 
-`terraform output routes` prints the same table for the ports you actually
-applied.
+### UI — the Nginx web gateway, on `http://localhost`
+
+| Host URL                              | In-cluster service                                            |
+|---------------------------------------|---------------------------------------------------------------|
+| `http://localhost/`                   | `warehouse-console.warehouse-systems.svc.cluster.local`       |
+| `http://localhost/mfes/<context>/*`   | `<context>-frontend.warehouse-systems.svc.cluster.local`      |
+
+The gateway strips `/mfes/<context>` before proxying, so each remote's own nginx
+sees root-relative paths. Each remote is built with Vite base
+`/mfes/<context>/`, which keeps its chunks inside its own namespace.
+
+`terraform output routes`, `frontend_routes` and `product_endpoints` print the
+live tables for the ports you actually applied.
 
 ---
 

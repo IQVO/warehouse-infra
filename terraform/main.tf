@@ -1,10 +1,17 @@
 # ---------------------------------------------------------------------------
 # The kind cluster: one control-plane + var.worker_count workers.
 #
-# extraPortMappings on the control-plane publish Kong's NodePort, plus the
-# observability UIs' (Grafana/Jaeger/Prometheus) and Kiali's NodePorts, on
-# host ports. NodePorts answer on every node, so mapping them on the
-# control-plane alone is enough no matter where each pod actually lands.
+# extraPortMappings on the control-plane publish the two PRODUCT edges -- the
+# Nginx web gateway (UI) and Kong (APIs) -- plus the observability UIs'
+# (Grafana/Jaeger/Prometheus) and Kiali's NodePorts, on host ports. NodePorts
+# answer on every node, so mapping them on the control-plane alone is enough no
+# matter where each pod actually lands.
+#
+# The two product edges bind to 127.0.0.1 only: this fleet's REST/MCP endpoints
+# are unauthenticated, so they must not be reachable from the local network.
+#
+# These mappings are IMMUTABLE in kind. Changing a host port here requires
+# destroying and recreating the cluster -- it is not a rolling change.
 # ---------------------------------------------------------------------------
 
 resource "kind_cluster" "warehouse" {
@@ -36,10 +43,28 @@ resource "kind_cluster" "warehouse" {
         EOT
       ]
 
+      # The Nginx web gateway: the product UI on http://localhost/.
+      #
+      # listen_address is 127.0.0.1, NOT 0.0.0.0, for both product edges. Every
+      # REST and MCP endpoint in this fleet is currently unauthenticated, so
+      # binding them to all interfaces would publish the whole warehouse to any
+      # other device on the network. The platform UIs below keep their historical
+      # 0.0.0.0 binding.
+      extra_port_mappings {
+        container_port = var.web_gateway_node_port
+        host_port      = var.web_gateway_host_port
+        listen_address = "127.0.0.1"
+        protocol       = "TCP"
+      }
+
+      # Kong: the product API origin on http://localhost:8000. Note this used to
+      # be host port 80 -- it moved to make room for the web gateway above, and
+      # kind port mappings are immutable, so that move required recreating the
+      # cluster.
       extra_port_mappings {
         container_port = var.kong_proxy_http_node_port
         host_port      = var.kong_proxy_http_host_port
-        listen_address = "0.0.0.0"
+        listen_address = "127.0.0.1"
         protocol       = "TCP"
       }
 

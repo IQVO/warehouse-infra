@@ -33,6 +33,99 @@ variable "worker_count" {
 # the only ingress path into the cluster from the host.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Frontends and the Nginx web gateway (ADR-0005).
+#
+# The product has TWO host-facing entrypoints and they are deliberately
+# independent -- the web gateway serves frontend bytes, Kong serves APIs, and
+# neither proxies to the other. Both bind to 127.0.0.1 only, because every
+# REST/MCP endpoint in this fleet is currently unauthenticated.
+# ---------------------------------------------------------------------------
+
+variable "deploy_frontends" {
+  description = <<-EOT
+    Deploy the product UI: the warehouse-console shell, the eight bounded-context
+    Module Federation remotes (each served by its own nginx pod), and the Nginx
+    web gateway that routes between them on host port 80.
+
+    Requires each context repo's frontend chart templates (frontend.enabled) and
+    warehouse-console's runtime /config.json support, all merged 2026-09-12.
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "web_gateway_node_port" {
+  description = "NodePort for the Nginx web gateway."
+  type        = number
+  default     = 30081
+}
+
+variable "web_gateway_host_port" {
+  description = <<-EOT
+    Host port for the Nginx web gateway -- where the product UI actually lives.
+    Defaults to 80 so the console is at http://localhost/.
+
+    Note Kong moved OFF port 80 to make room for this (see
+    kong_proxy_http_host_port, now 8000). kind's extraPortMappings are
+    immutable, so changing either port requires a cluster destroy/recreate.
+  EOT
+  type        = number
+  default     = 80
+}
+
+variable "cluster_dns_ip" {
+  description = <<-EOT
+    ClusterIP of kube-dns, used as the Nginx web gateway's `resolver`.
+
+    This must be an IP, not a DNS name: nginx cannot resolve its own resolver,
+    and a name here fails config parsing outright with "host not found in
+    resolver" -- the container never starts. Caught by running `nginx -t`
+    against the rendered config before deploying it.
+
+    10.96.0.10 is kubeadm's deterministic choice (the .10 address of the
+    default 10.96.0.0/16 service CIDR, confirmed live against this cluster),
+    so it survives a destroy/recreate. Override if the service CIDR changes.
+  EOT
+  type        = string
+  default     = "10.96.0.10"
+}
+
+variable "web_gateway_image" {
+  description = "Image for the Nginx web gateway. Unprivileged: it listens on 8080 as uid 101."
+  type        = string
+  default     = "nginxinc/nginx-unprivileged:1.31-alpine"
+}
+
+variable "api_path_prefix" {
+  description = <<-EOT
+    Public path prefix for every bounded-context API behind Kong, e.g.
+    /api/order-management. Kong strips it before forwarding, so each Go router
+    keeps its existing unprefixed contract.
+
+    This exists because the old routes were /<service>, which collide head-on
+    with the console shell's own client-side routes (/order-management is a
+    page in the SPA). Separating the namespaces is what lets both live at
+    localhost without ambiguity.
+  EOT
+  type        = string
+  default     = "/api"
+}
+
+variable "kong_cors_enabled" {
+  description = <<-EOT
+    Attach Kong's CORS plugin to every API route, granting exactly the web
+    gateway's origin.
+
+    This is load-bearing rather than optional: the product deliberately serves
+    assets and APIs from two different origins, so without it every browser
+    call from the console is blocked. Never widen this to "*" -- these
+    endpoints are unauthenticated.
+  EOT
+  type        = bool
+  default     = true
+}
+
 variable "kong_proxy_http_node_port" {
   description = "NodePort inside the cluster for Kong's HTTP proxy listener."
   type        = number
@@ -47,13 +140,15 @@ variable "kong_proxy_https_node_port" {
 
 variable "kong_proxy_http_host_port" {
   description = <<-EOT
-    Host port mapped to the Kong HTTP NodePort. Defaults to 80 so the gateway
-    is reachable at http://localhost/. Set this to e.g. 8000 if something else
-    on your machine already owns port 80 — kind cluster creation fails with a
-    bind error if the port is taken.
+    Host port mapped to the Kong HTTP NodePort: the product's API origin,
+    http://localhost:8000.
+
+    This was 80 until the Nginx web gateway took that port for the product UI
+    (ADR-0005). Kong serves APIs only and must never serve HTML/JS/CSS, so the
+    two edges get their own ports rather than one proxying to the other.
   EOT
   type        = number
-  default     = 80
+  default     = 8000
 }
 
 variable "kong_proxy_https_host_port" {
