@@ -79,12 +79,17 @@ fi
 
 echo "==> 3. Exactly two host-facing product Services"
 NODEPORTS="$("${KUBECTL[@]}" get svc -A -o jsonpath='{range .items[?(@.spec.type=="NodePort")]}{.metadata.namespace}{"/"}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)"
-PRODUCT_NODEPORTS="$(grep "^${NAMESPACE}/" <<<"${NODEPORTS}" || true)"
+# Kafka's broker listener (kafka-controller-*-external) shares this namespace but
+# is PLATFORM infra, not a product edge: it exists so host-side clients
+# (e2e-tests, `go run`) can reach the one in-cluster broker. The policy is about
+# the product's HTTP surface, so exclude it rather than let it mask a real
+# regression. Anything else appearing here IS a finding.
+PRODUCT_NODEPORTS="$(grep "^${NAMESPACE}/" <<<"${NODEPORTS}" | grep -v 'kafka-controller' || true)"
 PRODUCT_COUNT="$(grep -c . <<<"${PRODUCT_NODEPORTS}" || true)"
 if [[ "${PRODUCT_COUNT}" == "1" ]] && grep -q "web-gateway" <<<"${PRODUCT_NODEPORTS}"; then
-  pass "web-gateway is the only NodePort in ${NAMESPACE}"
+  pass "web-gateway is the only product NodePort in ${NAMESPACE}"
 else
-  fail "expected exactly one NodePort (web-gateway) in ${NAMESPACE}, found: ${PRODUCT_NODEPORTS//$'\n'/ }"
+  fail "expected exactly one product NodePort (web-gateway) in ${NAMESPACE}, found: ${PRODUCT_NODEPORTS//$'\n'/ }"
 fi
 
 echo "==> 4. The UI answers on the web origin"
@@ -124,12 +129,20 @@ done
 
 echo "==> 7. APIs are NOT reachable on the web origin"
 # If this passes, the gateway is quietly proxying APIs after all.
-CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${WEB_URL}/api/order-management/healthz" || echo 000)"
-if [[ "${CODE}" == "200" ]]; then
-  fail "GET ${WEB_URL}/api/order-management/healthz -> 200 (the gateway is proxying APIs)"
+# The status code alone does not answer this. The gateway's catch-all sends any
+# unknown path to the console, whose nginx applies the SPA fallback -- so
+# /api/... legitimately returns 200 text/html (the shell). That is NOT a policy
+# violation; the violation would be an actual API RESPONSE. Assert on the
+# content type and body instead.
+read -r CODE CTYPE < <(curl -s -o /tmp/.exposure-api-probe -w '%{http_code} %{content_type}' --max-time 10 "${WEB_URL}/api/order-management/healthz" || echo "000 none")
+if [[ "${CTYPE}" == *html* ]]; then
+  pass "web origin returns the SPA shell for /api/**, not an API (${CODE} ${CTYPE})"
+elif grep -qi '"status"' /tmp/.exposure-api-probe 2>/dev/null; then
+  fail "web origin served a real API response for /api/order-management/healthz -- the gateway is proxying APIs"
 else
-  pass "web origin does not serve APIs (${CODE})"
+  pass "web origin does not serve APIs (${CODE} ${CTYPE})"
 fi
+rm -f /tmp/.exposure-api-probe
 
 echo "==> 8. Frontend assets are NOT reachable through Kong"
 for probe in "/" "/mfes/order-management/remoteEntry.js"; do
@@ -170,20 +183,34 @@ fi
 echo "==> 10. Access logs confirm the separation held"
 GW_POD="$("${KUBECTL[@]}" -n "${NAMESPACE}" get pods -l app.kubernetes.io/name=web-gateway -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
 if [[ -n "${GW_POD}" ]]; then
-  if "${KUBECTL[@]}" -n "${NAMESPACE}" logs "${GW_POD}" --tail=2000 2>/dev/null | grep -qE '"[A-Z]+ /api/'; then
-    fail "web gateway access log contains an /api request"
+  # A logged /api line is expected (the probe above deliberately makes one) and
+  # is only a violation if the gateway PROXIED it to a backend. The log format
+  # records the chosen upstream, so compare that against the console's ClusterIP:
+  # anything else means an API upstream was reached from here.
+  CONSOLE_IP="$("${KUBECTL[@]}" -n "${NAMESPACE}" get svc warehouse-console -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)"
+  API_UPSTREAMS="$("${KUBECTL[@]}" -n "${NAMESPACE}" logs "${GW_POD}" --tail=2000 2>/dev/null \
+    | grep -E '"[A-Z]+ /api/' | grep -oE 'upstream=[0-9.]+:[0-9]+' | sort -u \
+    | grep -v "upstream=${CONSOLE_IP}:" || true)"
+  if [[ -n "${API_UPSTREAMS}" ]]; then
+    fail "web gateway proxied an /api request to a non-console upstream: ${API_UPSTREAMS//$'\n'/ }"
   else
-    pass "web gateway access log contains no /api request"
+    pass "web gateway never proxied /api to a backend (only the SPA shell)"
   fi
 fi
 
 KONG_POD="$("${KUBECTL[@]}" -n kong get pods -l app.kubernetes.io/name=kong -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
 if [[ -n "${KONG_POD}" ]]; then
-  if "${KUBECTL[@]}" -n kong logs "${KONG_POD}" -c proxy --tail=2000 2>/dev/null \
-      | grep -oE '"[A-Z]+ [^ "]+' | grep -qE '\.(html|css|js|woff2?|png|svg)|/mfes/'; then
-    fail "Kong access log contains a frontend asset request"
+  # An asset request appearing in Kong's log is expected (check 8 deliberately
+  # makes one). The violation would be Kong SERVING it, so require that every
+  # such request was refused -- a 2xx/3xx here means a frontend route exists on
+  # Kong, which the design forbids.
+  SERVED_ASSETS="$("${KUBECTL[@]}" -n kong logs "${KONG_POD}" -c proxy --tail=2000 2>/dev/null \
+    | grep -E '"[A-Z]+ [^"]*(\.(html|css|js|woff2?|png|svg)|/mfes/)' \
+    | grep -oE '" [23][0-9][0-9] ' || true)"
+  if [[ -n "${SERVED_ASSETS}" ]]; then
+    fail "Kong SERVED a frontend asset (expected every such request to be refused)"
   else
-    pass "Kong access log contains no frontend asset request"
+    pass "Kong refused every frontend asset request it saw"
   fi
 fi
 
