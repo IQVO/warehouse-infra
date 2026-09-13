@@ -1,0 +1,327 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "title": "Warehouse \u2014 API Gateway (Kong) overview",
+  "uid": "warehouse-kong-gateway-overview",
+  "tags": [
+    "warehouse",
+    "kong",
+    "gateway"
+  ],
+  "timezone": "browser",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "type": "row",
+      "title": "Kong Gateway health",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Datastore reachable",
+      "description": "kong_datastore_reachable. This chart runs Kong DB-less (env.database=off, see kong.tf), so this reflects Kong's own config-loading health, not an external Postgres/Cassandra dependency.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "kong_datastore_reachable",
+          "legendFormat": "{{pod}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Nginx metric/connection errors",
+      "description": "kong_nginx_metric_errors_total -- errors internal to Kong's own metrics collection (not request errors). Should stay at zero.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(kong_nginx_metric_errors_total[5m]))",
+          "legendFormat": "errors/sec"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Upstream target health",
+      "description": "kong_upstream_target_health: 1 = healthy, per upstream/target. A target stuck at 0 for a Service backing a bounded context's Deployment means Kong has marked every replica of that pod unreachable.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "kong_upstream_target_health",
+          "legendFormat": "{{upstream}} {{target}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Traffic by bounded context",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Request rate by context",
+      "description": "Requests/sec Kong is forwarding, summed by the Kong Service name (one per bounded context's route -- see locals.tf's `services` map / Gateway API HTTPRoute-derived Service naming, httproute.warehouse-systems.<context>.0).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (service) (rate(kong_http_requests_total[5m]))",
+          "legendFormat": "{{service}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx error rate by context",
+      "description": "5xx responses per bounded context's Kong Service, so one failing context is visible without averaging across the fleet.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (service) (rate(kong_http_requests_total{code=~\"5..\"}[5m]))",
+          "legendFormat": "{{service}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Latency",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Upstream latency p95 by context",
+      "description": "Time Kong spent waiting on each context's own pod (excludes Kong's own processing overhead) -- the fairest cross-context latency comparison since it isolates the application, not the gateway.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (service, le) (rate(kong_upstream_latency_ms_bucket[5m])))",
+          "legendFormat": "{{service}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Kong-added overhead p95 by context",
+      "description": "kong_kong_latency_ms: time Kong itself spends on the request (routing, plugins -- CORS, this Prometheus exporter) excluding the upstream call. A rise here fleet-wide, uncorrelated with any single context, points at the gateway (e.g. plugin config), not a bounded context.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (service, le) (rate(kong_kong_latency_ms_bucket[5m])))",
+          "legendFormat": "{{service}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Bandwidth",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Bandwidth by context and direction",
+      "description": "kong_bandwidth_bytes, ingress (client->Kong) vs. egress (Kong->client), by context. Useful for spotting a context whose responses have ballooned in size (e.g. an unpaginated list endpoint).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (service, direction) (rate(kong_bandwidth_bytes[5m]))",
+          "legendFormat": "{{service}} {{direction}}"
+        }
+      ]
+    }
+  ]
+}

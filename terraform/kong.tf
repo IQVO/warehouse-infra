@@ -68,6 +68,22 @@ resource "helm_release" "kong" {
       ingressClass = "kong"
     }
 
+    # Kong's own metrics are surfaced by the (cluster-scoped) `prometheus`
+    # KongClusterPlugin in kong-prometheus.tf, which the chart's `status`
+    # listener republishes at :8100/metrics -- see that file's header for
+    # why a plugin, not the chart's own `serviceMonitor` block, is the
+    # mechanism (this cluster's plain-server Prometheus chart has no CRDs
+    # to satisfy a ServiceMonitor with; see observability.tf's header).
+    # Annotating the pod directly lets Prometheus's existing chart-default
+    # `kubernetes-pods` scrape job pick it up with zero Prometheus-side
+    # config: no separate job, no extra Service, no port to punch through
+    # the kind host mapping.
+    podAnnotations = {
+      "prometheus.io/scrape" = "true"
+      "prometheus.io/port"   = "8100"
+      "prometheus.io/path"   = "/metrics"
+    }
+
     resources = {
       requests = { cpu = "100m", memory = "256Mi" }
       limits   = { cpu = "1000m", memory = "1Gi" }

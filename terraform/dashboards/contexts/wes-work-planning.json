@@ -1,0 +1,368 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "title": "Warehouse \u2014 WES \u2014 Work Planning & Release",
+  "uid": "warehouse-wes-work-planning",
+  "tags": [
+    "warehouse",
+    "wes-work-planning",
+    "bounded-context"
+  ],
+  "timezone": "browser",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "type": "row",
+      "title": "API Gateway (Kong) \u2014 north-south view of this context's route",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Request rate (Kong)",
+      "description": "Requests/sec Kong forwarded to this context's Service, by HTTP status code. Kong sees a request even when the upstream pod never got instrumented (e.g. crashed before otelchi ran).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (code) (rate(kong_http_requests_total{service=~\"httproute\\.warehouse-systems\\.wes-work-planning\\..*\"}[5m]))",
+          "legendFormat": "{{code}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Error rate (Kong, 5xx)",
+      "description": "5xx responses Kong returned or proxied for this context, as a fraction of all requests. A 5xx here with a flat upstream error rate on the service's own panel below means Kong itself (or the network to the upstream) is failing, not the application.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(kong_http_requests_total{service=~\"httproute\\.warehouse-systems\\.wes-work-planning\\..*\", code=~\"5..\"}[5m])) / clamp_min(sum(rate(kong_http_requests_total{service=~\"httproute\\.warehouse-systems\\.wes-work-planning\\..*\"}[5m])), 1e-9)",
+          "legendFormat": "5xx ratio"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency p95 (Kong request vs. upstream)",
+      "description": "kong_request_latency_ms is the full time Kong spent on the request (queueing + upstream + Kong overhead); kong_upstream_latency_ms isolates just the time waiting on this context's pod. A gap between the two that grows means Kong itself, not the service, is the bottleneck.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(kong_request_latency_ms_bucket{service=~\"httproute\\.warehouse-systems\\.wes-work-planning\\..*\"}[5m])))",
+          "legendFormat": "request (Kong total) p95"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute\\.warehouse-systems\\.wes-work-planning\\..*\"}[5m])))",
+          "legendFormat": "upstream (service) p95"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Service HTTP RED (OLTP + projector + reports + MCP)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Request rate by route",
+      "description": "http_server_request_duration_seconds_count, the otelchi RED metric every fleet service emits per ADR-0009. Filtered to service_name=~\"wes-(work-planning|projector|reports).*\" so the OLTP, analytics projector/reports and MCP processes all show up on one panel.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (service_name, http_route) (rate(http_server_request_duration_seconds_count{service_name=~\"wes-(work-planning|projector|reports).*\"}[5m]))",
+          "legendFormat": "{{service_name}} {{http_route}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Error rate (HTTP 5xx, by process)",
+      "description": "5xx responses this context's own processes returned, split by which process (OLTP vs. reports vs. MCP) so a reports-only outage doesn't get hidden inside a healthy OLTP average. Two label variants are unioned: newer otelchi/semconv releases in this fleet use http_response_status_code, older ones (riandyrn/otelchi metric package pre-dating the semconv bump) use http_status_code.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (service_name) (rate(http_server_request_duration_seconds_count{service_name=~\"wes-(work-planning|projector|reports).*\", http_response_status_code=~\"5..\"}[5m])) or sum by (service_name) (rate(http_server_request_duration_seconds_count{service_name=~\"wes-(work-planning|projector|reports).*\", http_status_code=~\"5..\"}[5m]))",
+          "legendFormat": "{{service_name}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Request duration p95, by process",
+      "description": "http.server.request.duration histogram (seconds), the ONLY sanctioned RED-latency source per ADR-0009 -- no service hand-rolls its own HTTP timer.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (service_name, le) (rate(http_server_request_duration_seconds_bucket{service_name=~\"wes-(work-planning|projector|reports).*\"}[5m])))",
+          "legendFormat": "{{service_name}} p95"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "WES \u2014 Work Planning & Release \u2014 business metrics (Tier 2, ADR-0009)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "wes_work_units_released_total",
+      "description": "Work units admitted into a process path's work pool by the release policy, by path.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (path_id) (rate(wes_work_units_released_total[5m]))",
+          "legendFormat": "{{path_id}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Go runtime (this context's processes)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Goroutines",
+      "description": "go.goroutine.count for service_name=~\"wes-(work-planning|projector|reports).*\". A steady climb with no matching traffic growth is a goroutine leak.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "go_goroutine_count{service_name=~\"wes-(work-planning|projector|reports).*\"} or runtime_go_goroutines{service_name=~\"wes-(work-planning|projector|reports).*\"}",
+          "legendFormat": "{{service_name}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Go memory used",
+      "description": "go.memory.used for service_name=~\"wes-(work-planning|projector|reports).*\".",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "go_memory_used_bytes{service_name=~\"wes-(work-planning|projector|reports).*\"} or runtime_go_mem_heap_alloc_bytes{service_name=~\"wes-(work-planning|projector|reports).*\"}",
+          "legendFormat": "{{service_name}} {{go_memory_type}}"
+        }
+      ]
+    }
+  ]
+}
