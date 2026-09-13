@@ -87,6 +87,39 @@ locals {
   console_chart_path   = "${path.module}/../../warehouse-console/charts/warehouse-console"
   console_release_name = "warehouse-console"
 
+  # Full computed Helm values for warehouse-console, extracted from the
+  # (now-removed) helm_release.console's `values` argument -- unchanged
+  # content, pure refactor -- so the ArgoCD Application in argocd-apps.tf
+  # reads from exactly the same computation.
+  console_helm_values = {
+    image = {
+      repository = "warehouse/warehouse-console-frontend"
+      tag        = "local-${local.console_source_hash}"
+      pullPolicy = "IfNotPresent"
+    }
+
+    # ClusterIP: the web gateway is the only host-facing frontend endpoint.
+    service = {
+      type       = "ClusterIP"
+      port       = 80
+      targetPort = 8080
+    }
+
+    # Frontend routing belongs to the web gateway, never to an Ingress or
+    # HTTPRoute -- an Ingress here would put console traffic through KONG,
+    # which is precisely what this design forbids.
+    ingress = {
+      enabled = false
+    }
+
+    # The runtime contract every remote reads. apiOrigin points at Kong's
+    # host endpoint, cross-origin from this page by design.
+    runtimeConfig = {
+      enabled   = true
+      apiOrigin = local.api_origin
+    }
+  }
+
   # Service DNS the web gateway proxies to. Every one of these is ClusterIP:
   # the gateway is the only frontend workload with a NodePort.
   #
@@ -153,52 +186,13 @@ resource "null_resource" "build_and_load_console" {
 # warehouse-console: its own Helm release.
 # ---------------------------------------------------------------------------
 
-resource "helm_release" "console" {
-  count = var.deploy_frontends ? 1 : 0
-
-  depends_on = [
-    kubernetes_namespace.apps,
-    null_resource.build_and_load_console,
-  ]
-
-  name      = local.console_release_name
-  chart     = local.console_chart_path
-  namespace = var.apps_namespace
-
-  timeout = 300
-  wait    = true
-
-  values = [
-    yamlencode({
-      image = {
-        repository = "warehouse/warehouse-console-frontend"
-        tag        = "local-${local.console_source_hash}"
-        pullPolicy = "IfNotPresent"
-      }
-
-      # ClusterIP: the web gateway is the only host-facing frontend endpoint.
-      service = {
-        type       = "ClusterIP"
-        port       = 80
-        targetPort = 8080
-      }
-
-      # Frontend routing belongs to the web gateway, never to an Ingress or
-      # HTTPRoute -- an Ingress here would put console traffic through KONG,
-      # which is precisely what this design forbids.
-      ingress = {
-        enabled = false
-      }
-
-      # The runtime contract every remote reads. apiOrigin points at Kong's
-      # host endpoint, cross-origin from this page by design.
-      runtimeConfig = {
-        enabled   = true
-        apiOrigin = local.api_origin
-      }
-    }),
-  ]
-}
+# ---------------------------------------------------------------------------
+# NOTE: there is deliberately NO `helm_release.console` resource here
+# anymore. ArgoCD (argocd-apps.tf's `kubectl_manifest.console_application`)
+# is now the sole owner of this release's lifecycle -- removed from
+# Terraform state via `terraform state rm` after verifying the Application
+# was already Synced/Healthy (never a `helm uninstall`).
+# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # The Nginx web gateway.
@@ -254,11 +248,12 @@ resource "kubernetes_deployment" "web_gateway" {
 
   depends_on = [
     kubernetes_config_map.web_gateway,
-    helm_release.console,
-    # ArgoCD now owns these releases (services.tf's NOTE on
-    # helm_release.service's removal) -- depend on the Applications
-    # actually being applied instead, so the gateway doesn't start routing
-    # to Services that don't exist yet on a from-scratch apply.
+    # ArgoCD now owns both the console release and the 8 service releases
+    # (this file's and services.tf's NOTEs on their helm_release removal)
+    # -- depend on the Applications actually being applied instead, so the
+    # gateway doesn't start routing to Services that don't exist yet on a
+    # from-scratch apply.
+    kubectl_manifest.console_application,
     kubectl_manifest.application,
   ]
 

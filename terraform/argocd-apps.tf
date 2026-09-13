@@ -52,3 +52,92 @@ resource "kubectl_manifest" "application" {
     kubernetes_secret.service_db,
   ]
 }
+
+# ---------------------------------------------------------------------------
+# warehouse-ops-agent and warehouse-console: the two chart-owning releases
+# that live OUTSIDE `local.services` (ops-agent has no database; console is
+# its own standalone release, not a per-context frontend). Each gets its own
+# explicit `kubectl_manifest` resource -- not a `for_each` over a map, since
+# there are only ever exactly these two and they have materially different
+# value shapes (no `database.existingSecret` for either, no Kong route
+# structure shared with the 8 services). Same pattern otherwise: reuse the
+# shared Helm-values computation (`local.ops_agent_helm_values`,
+# `local.console_helm_values` in ops-agent.tf / frontends.tf) rather than
+# re-deriving it here.
+# ---------------------------------------------------------------------------
+
+resource "kubectl_manifest" "ops_agent_application" {
+  count = var.deploy_services ? 1 : 0
+
+  yaml_body = yamlencode({
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "warehouse-ops-agent"
+      namespace = kubernetes_namespace.argocd.metadata[0].name
+    }
+    spec = {
+      project = "default"
+      source = {
+        repoURL        = "https://github.com/claudioed/warehouse-ops-agent.git"
+        targetRevision = "develop"
+        path           = "charts/warehouse-ops-agent"
+        helm = {
+          valuesObject = local.ops_agent_helm_values
+        }
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = var.apps_namespace
+      }
+      syncPolicy = {
+        automated = {
+          prune    = true
+          selfHeal = true
+        }
+      }
+    }
+  })
+
+  depends_on = [
+    helm_release.argocd,
+  ]
+}
+
+resource "kubectl_manifest" "console_application" {
+  count = var.deploy_frontends ? 1 : 0
+
+  yaml_body = yamlencode({
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = local.console_release_name
+      namespace = kubernetes_namespace.argocd.metadata[0].name
+    }
+    spec = {
+      project = "default"
+      source = {
+        repoURL        = "https://github.com/claudioed/warehouse-console.git"
+        targetRevision = "develop"
+        path           = "charts/warehouse-console"
+        helm = {
+          valuesObject = local.console_helm_values
+        }
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = var.apps_namespace
+      }
+      syncPolicy = {
+        automated = {
+          prune    = true
+          selfHeal = true
+        }
+      }
+    }
+  })
+
+  depends_on = [
+    helm_release.argocd,
+  ]
+}

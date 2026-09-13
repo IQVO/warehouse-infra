@@ -362,11 +362,13 @@ was staged for commit.
 
 ## Deploying a new bounded context (GitOps via ArgoCD)
 
-**ArgoCD is now the sole owner of every service's Helm release lifecycle.**
-Terraform still bootstraps the platform (kind, Postgres, Kafka, Istio, Kong,
-the Nginx web gateway, and ArgoCD itself) and still computes each service's
-full environment values, but it no longer runs `helm install`/`upgrade` for
-the 8 bounded-context services directly — it hands each one to ArgoCD instead.
+**ArgoCD is now the sole owner of every chart's Helm release lifecycle** —
+all 8 database-backed bounded-context services, `warehouse-ops-agent`, and
+`warehouse-console` (10 Applications total). Terraform still bootstraps the
+platform (kind, Postgres, Kafka, Istio, Kong, the Nginx web gateway, and
+ArgoCD itself) and still computes every release's full environment values,
+but it no longer runs `helm install`/`upgrade` directly for any of them — it
+hands each one to ArgoCD instead.
 
 **Registering a new service is still exactly one step: add it to
 `terraform/locals.tf`'s `local.services` map.** Nothing else changes. That
@@ -374,7 +376,11 @@ map feeds BOTH `terraform/services.tf`'s `local.service_full_values`
 computation (image tag, database secret ref, Kong/Gateway route, analytics,
 MCP, and every other conditional block already documented there) AND
 `terraform/argocd-apps.tf`'s `kubectl_manifest.application` resource, which
-`for_each`-es over that same map. A `terraform apply` after adding an entry:
+`for_each`-es over that same map. (`warehouse-ops-agent` and
+`warehouse-console` sit outside `local.services` — no database — and each
+gets its own single, explicitly-named `kubectl_manifest` resource instead;
+see `ops-agent.tf`'s `local.ops_agent_helm_values` and `frontends.tf`'s
+`local.console_helm_values`.) A `terraform apply` after adding an entry:
 
 1. Builds and side-loads the new service's image
    (`null_resource.build_and_load`, unchanged from before).
