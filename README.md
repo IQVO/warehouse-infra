@@ -83,6 +83,103 @@ the sidecars accept Kong's plaintext traffic without extra configuration.
 
 ---
 
+## Ports & hosts reference
+
+Every host port this cluster ever binds is an explicit `extra_port_mappings`
+entry on the kind control-plane node in `terraform/main.tf` — nothing here is
+discovered or auto-forwarded. kind port mappings are **immutable**: changing
+any host port below means destroying and recreating the cluster, not a
+rolling apply.
+
+This section is the port-level map (which host port reaches which Service,
+and which container port that Service targets). For the path-level API
+route table (Kong's `/api/<context>` prefixes) see "Route table" below.
+
+### Host-reachable ports (kind `extraPortMappings`, `main.tf`)
+
+| Host URL / port                  | `listen_address` | Container (NodePort) | Backing Service                         | What it is |
+|-----------------------------------|-------------------|-----------------------|------------------------------------------|------------|
+| `http://localhost` (`:80`)        | `127.0.0.1`       | `30081`               | `web-gateway` (`warehouse-systems`)       | **Product UI** — Nginx web gateway: console shell + `/mfes/<context>/` remotes |
+| `http://localhost:8000`           | `127.0.0.1`       | `30080`               | `kong-kong-proxy` (`kong`)                | **Product API** — Kong HTTP proxy, `/api/<context>/*` |
+| `https://localhost:443`           | `0.0.0.0`         | `30443`               | `kong-kong-proxy` (`kong`)                | Kong HTTPS proxy (unused by the product today; no chart routes TLS) |
+| `http://localhost:3000`           | `0.0.0.0`         | `30300`               | `grafana-nodeport` (`observability`)      | Grafana (`admin` / `var.grafana_admin_password`, default `admin`) |
+| `http://localhost:16686`          | `0.0.0.0`         | `30686`               | `jaeger-nodeport` (`observability`)       | Jaeger query UI |
+| `http://localhost:9090`           | `0.0.0.0`         | `30909`               | `prometheus-nodeport` (`observability`)   | Prometheus UI |
+| `http://localhost:20001`          | `0.0.0.0`         | `30200`               | `kiali-nodeport` (`istio-system`)         | Kiali service-mesh UI |
+| `localhost:9092` (Kafka protocol) | `0.0.0.0`         | `9092` *(below the default NodePort range — see `service_node_port_range`)* | `kafka-controller-0-external` (`warehouse-systems`) | Kafka's EXTERNAL listener, for host-side clients (e2e-tests, local `go run`) |
+
+The two **product edges** (`:80` and `:8000`) bind to `127.0.0.1` only —
+every REST/MCP endpoint in this fleet is currently unauthenticated (fleet
+auth was rolled out then fully reverted 2026-09-11), so they must not be
+reachable from the local network. Every other row above keeps its historical
+`0.0.0.0` binding (platform/observability tooling, not product surface).
+
+**ArgoCD has no host port mapping at all**, by deliberate design — it sits
+outside both product edges and is reached only via
+`kubectl port-forward svc/argocd-server -n argocd 8080:443`. See "ArgoCD"
+below.
+
+**Kong Manager** (`kong-kong-manager`, NodePort `8002`/`8445` inside the
+`kong` namespace) is also not mapped to a host port — nothing in `main.tf`
+publishes it. It exists only because the `kong/kong` chart always creates
+it; reach it with `kubectl port-forward` if you ever need Kong's admin UI.
+
+### In-cluster-only ports (ClusterIP — no host mapping, reached via `kubectl port-forward` or from inside the mesh)
+
+Every bounded-context service's OLTP pod listens on container port `8080`
+(`cmd/*/main.go` defaults `HTTP_ADDR` to `":8080"`; every Dockerfile
+`EXPOSE`s 8080), fronted by a `ClusterIP` Service on port `80`:
+
+| Service (`warehouse-systems` ns)         | Service port → target | What it is |
+|--------------------------------------------|------------------------|------------|
+| `<service>` (8 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management) | `80 → 8080` | OLTP REST API, routed by Kong |
+| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — all 8 services above, per `mcp.tf`'s `local.mcp_services` |
+| `<service>-reports`                        | `80 → 8092`             | Analytics read-only REST API (only where `analytics.enabled`, see `locals.tf`'s `analytics_services`) |
+| `<service>-frontend`                       | `80 → 8080`             | Module Federation remote, proxied by the web gateway at `/mfes/<context>/` |
+| `warehouse-console`                        | `80 → 8080`             | Console shell SPA, proxied by the web gateway at `/` |
+| `warehouse-ops-agent`                      | `80 → 8095`             | Console-bff / MCP-client aggregator, routed by Kong at `/api/warehouse-ops-agent` |
+| `postgres-postgresql` (`warehouse-data` ns)| `5432 → 5432`           | Shared Postgres release, one logical database per service |
+| `kafka` (`warehouse-systems` ns)           | `9092 → 9092`, `9095`   | Kafka's CLIENT listener (in-cluster only — see `kafka-controller-0-external` above for the host-reachable EXTERNAL listener) |
+| `otel-collector` (`observability` ns)      | `4317` (gRPC), `4318` (HTTP) | OTLP ingest — every service's exporter points here |
+| `istiod` (`istio-system` ns)               | `15010`/`15012`/`443`/`15014` | Istio control plane (sidecar injection webhook, xDS) |
+
+The analytics **projector** (`cmd/<svc>-projector`, admin port `8091`) has NO
+Service at all — it is a Kafka consumer with nothing to route HTTP traffic
+to, on purpose.
+
+**A structural gotcha worth knowing before you `kubectl port-forward pod/…`:**
+every chart's `selectorLabels` helper emits only
+`app.kubernetes.io/name`+`app.kubernetes.io/instance`, identical across the
+OLTP, MCP, projector, and reports pods of the same service — so the OLTP
+`Service` actually selects ALL of them, and which pod answers a given
+request is undefined. Port-forward `pod/<exact-name>`, never `deploy/` or
+`svc/`, when you need a specific one.
+
+### ArgoCD
+
+Installed by `terraform/argocd.tf` (`helm-values/argocd.yaml`) in its own
+`argocd` namespace. **Deliberately not on any host port** — neither product
+edge (`:80` Nginx, `:8000` Kong) is meant to carry deployment-control-plane
+traffic, and nothing in `main.tf`'s `extraPortMappings` publishes it.
+
+```bash
+kubectl -n argocd port-forward svc/argocd-server 8080:443
+```
+
+Then open `https://localhost:8080` (self-signed cert; click through the
+browser warning). Auth is **disabled**
+(`configs.params."server.disable.auth"` in `helm-values/argocd.yaml`) to
+match this fleet's fully-unauthenticated posture, so no login is needed.
+
+`argocd-server`'s in-cluster Service (`argocd` namespace) listens on `80`
+(HTTP, redirects) and `443` (HTTPS, the one used above); `argocd-repo-server`
+on `8081`; `argocd-applicationset-controller` on `7000`; `argocd-dex-server`
+on `5556`/`5557` (SSO, unused here since auth is off); `argocd-redis` on
+`6379`. None of these need a host port — only `argocd-server` is ever
+reached directly, and only via port-forward.
+
+---
+
 ## Process-path catalogue
 
 `config/process-paths/sortable-fc.yaml` is the published-language source of
