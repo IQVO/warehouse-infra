@@ -41,3 +41,22 @@ provider "helm" {
     client_key             = kind_cluster.warehouse.client_key
   }
 }
+
+# Same attribute-based auth as kubernetes/helm above, same load-bearing
+# reason: a config_path provider argument evaluates before kind_cluster
+# exists on a clean apply. load_config_file=false stops this provider from
+# ALSO trying its own default ~/.kube/config fallback.
+#
+# Used only for the ArgoCD `Application` CRD instances (argocd-apps.tf) --
+# the native `kubernetes_manifest` resource validates a manifest against the
+# live cluster's OpenAPI schema at `plan` time, which fails for a CRD
+# installed by a `helm_release` in the SAME apply (the CRD doesn't exist yet
+# when plan runs). `kubectl_manifest` applies via kubectl-apply semantics
+# and only needs the CRD to exist by `apply` time.
+provider "kubectl" {
+  host                   = kind_cluster.warehouse.endpoint
+  cluster_ca_certificate = kind_cluster.warehouse.cluster_ca_certificate
+  client_certificate     = kind_cluster.warehouse.client_certificate
+  client_key             = kind_cluster.warehouse.client_key
+  load_config_file       = false
+}

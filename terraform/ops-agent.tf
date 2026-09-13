@@ -53,7 +53,10 @@ resource "helm_release" "ops_agent" {
     kubernetes_namespace.apps,
     helm_release.kong,
     null_resource.build_and_load_ops_agent,
-    helm_release.service,
+    # ArgoCD now owns the 8 service releases (services.tf's NOTE on
+    # helm_release.service's removal) -- depend on the Applications
+    # actually being applied instead.
+    kubectl_manifest.application,
   ]
 
   name      = "warehouse-ops-agent"

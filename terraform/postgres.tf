@@ -47,6 +47,38 @@ resource "random_password" "service_analytics_db" {
   special = false
 }
 
+# ---------------------------------------------------------------------------
+# Per-service DATABASE_URL Secret — created directly by Terraform, ahead of
+# the ArgoCD cutover (see argocd-apps.tf).
+#
+# Before ArgoCD, each chart rendered its own Secret from a plaintext
+# `database.url` Helm value (see each chart's templates/secret.yaml). That
+# is fine for a one-shot `terraform apply`, but an ArgoCD Application CR's
+# `helm.valuesObject` is a plain Kubernetes custom resource field — visible
+# via `kubectl get application -o yaml` to anyone with read access to the
+# `argocd` namespace, and diffed/displayed in the ArgoCD UI. Putting a
+# plaintext DSN there would be a real regression versus today, even in an
+# otherwise-unauthenticated fleet, so Terraform now creates the Secret
+# itself and every Application passes only `database.existingSecret: "
+# <service>-db"` — never `database.url`. Every one of the 8 service charts
+# already supports `existingSecret` (verified during the ArgoCD rollout;
+# no chart changes were needed).
+# ---------------------------------------------------------------------------
+resource "kubernetes_secret" "service_db" {
+  for_each = local.services
+
+  metadata {
+    name      = "${each.key}-db"
+    namespace = var.apps_namespace
+  }
+
+  data = {
+    DATABASE_URL = local.database_urls[each.key]
+  }
+
+  depends_on = [kubernetes_namespace.apps]
+}
+
 resource "helm_release" "postgresql" {
   depends_on = [kubernetes_namespace.data]
 

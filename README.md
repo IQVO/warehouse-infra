@@ -310,11 +310,15 @@ So the split is:
 * `warehouse-infra/helm-values/<service>.yaml` — **static environment config**
   for this cluster: probe timings, event-publisher mode, Kafka settings.
 * `warehouse-infra/terraform/services.tf` — **computed environment config**:
-  image repository/tag, `database.url`, and the Kong `ingress` block. Appended
-  after the values file, so Terraform always wins.
+  image repository/tag, `database.existingSecret` (a pre-created Secret, not
+  a plaintext URL — see "Deploying a new bounded context" below), and the
+  Kong `ingress` block. Appended after the values file, so Terraform always
+  wins. Applied via an ArgoCD `Application` per service, not a direct
+  `helm_release` — see that section for why.
 
-`terraform/locals.tf` points each `helm_release` at the chart via a relative
-`chart_path` (`${path.module}/../../<service>/charts/<service>`).
+`terraform/locals.tf` points each service at its chart via a relative
+`chart_path` (`${path.module}/../../<service>/charts/<service>`), consumed by
+the ArgoCD `Application` source's `path` field (`argocd-apps.tf`).
 
 ### No application changes were required
 
@@ -353,6 +357,71 @@ to be.** Concretely:
 Because the existing charts covered everything, **nothing was added to any
 service repo** — there is no new `deploy/` folder anywhere and no service repo
 was staged for commit.
+
+---
+
+## Deploying a new bounded context (GitOps via ArgoCD)
+
+**ArgoCD is now the sole owner of every service's Helm release lifecycle.**
+Terraform still bootstraps the platform (kind, Postgres, Kafka, Istio, Kong,
+the Nginx web gateway, and ArgoCD itself) and still computes each service's
+full environment values, but it no longer runs `helm install`/`upgrade` for
+the 8 bounded-context services directly — it hands each one to ArgoCD instead.
+
+**Registering a new service is still exactly one step: add it to
+`terraform/locals.tf`'s `local.services` map.** Nothing else changes. That
+map feeds BOTH `terraform/services.tf`'s `local.service_full_values`
+computation (image tag, database secret ref, Kong/Gateway route, analytics,
+MCP, and every other conditional block already documented there) AND
+`terraform/argocd-apps.tf`'s `kubectl_manifest.application` resource, which
+`for_each`-es over that same map. A `terraform apply` after adding an entry:
+
+1. Builds and side-loads the new service's image
+   (`null_resource.build_and_load`, unchanged from before).
+2. Creates its `<service>-db` Secret directly
+   (`kubernetes_secret.service_db` in `postgres.tf`) — no chart ever sees a
+   plaintext `DATABASE_URL` value through an ArgoCD `Application`'s
+   Git/cluster-visible spec.
+3. Applies a new `Application` CR pointed at that service's own
+   `charts/<service>` in ITS OWN repo, with `syncPolicy.automated.prune` and
+   `.selfHeal` both on. ArgoCD picks it up, installs the release, and from
+   then on continuously reconciles it — including reverting manual
+   `kubectl` drift automatically, something the old one-shot `terraform
+   apply` never did.
+
+Check status with:
+
+```bash
+kubectl -n argocd port-forward svc/argocd-server 8080:443 &
+argocd app list                        # or: kubectl get applications -n argocd
+argocd app get <service>
+argocd app diff <service>              # should be empty on a healthy service
+```
+
+ArgoCD's own auth is **disabled** (`configs.params."server.disable.auth"` in
+`helm-values/argocd.yaml`), matching this fleet's fully-unauthenticated
+posture — every REST/MCP endpoint here already has no auth, and this was an
+explicit, deliberate choice to keep ArgoCD consistent with that rather than
+carve out an exception for the deployment control plane.
+
+**ArgoCD is deliberately NOT exposed through either of the two product
+edges** (`http://localhost` Nginx web gateway, `http://localhost:8000` Kong
+API gateway) — both are reserved for product traffic per
+[docs/exposure/localhost-edge-topology.md](docs/exposure/localhost-edge-topology.md).
+Local admin access is `kubectl port-forward` only, same as above.
+
+**Removing a service** is symmetric: delete its entry from `local.services`,
+`terraform apply`, and `prune: true` deletes both the `Application` and the
+Helm release it owned — no orphaned resources left behind.
+
+**Image tags are content-derived**, not the fixed `"local"` value from
+before this GitOps rollout: `local.service_image_tags[name]` hashes each
+service's Go source/migrations/Dockerfile/go.mod/go.sum (mirroring the
+existing `service_source_hash`). This is required, not cosmetic — ArgoCD's
+sync only fires on an actual diff, and a tag that never changes on rebuild
+gives it nothing to detect. This also happens to fix the older
+"rebuilt image alone does not roll a running Deployment" pitfall documented
+below, as a side effect.
 
 ---
 

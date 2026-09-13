@@ -255,7 +255,11 @@ resource "kubernetes_deployment" "web_gateway" {
   depends_on = [
     kubernetes_config_map.web_gateway,
     helm_release.console,
-    helm_release.service,
+    # ArgoCD now owns these releases (services.tf's NOTE on
+    # helm_release.service's removal) -- depend on the Applications
+    # actually being applied instead, so the gateway doesn't start routing
+    # to Services that don't exist yet on a from-scratch apply.
+    kubectl_manifest.application,
   ]
 
   metadata {

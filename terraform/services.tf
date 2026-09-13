@@ -37,6 +37,18 @@ locals {
   # mechanism) and instead gets `gatewayApi.enabled=true` with the shared
   # Gateway as its parentRef.
   gateway_api_pilot_services = var.deploy_gateway_api ? toset(keys(local.services)) : toset([])
+
+  # Content-derived image tag (ArgoCD rollout, Task 6). `var.image_tag`
+  # ("local", fixed) previously left a rebuilt image's pod spec
+  # byte-identical, which is exactly the documented "rebuilt image alone
+  # does not roll a running Deployment" pitfall -- and under ArgoCD it is
+  # no longer just an inconvenience: Argo's diffing IS what triggers a
+  # sync, so a tag that never changes gives Argo nothing to detect on a
+  # rebuild. Mirrors local.frontend_source_hash's existing pattern exactly.
+  service_image_tags = {
+    for name, hash in local.service_source_hash :
+    name => "local-${substr(hash, 0, 12)}"
+  }
 }
 
 
@@ -47,47 +59,50 @@ resource "null_resource" "build_and_load" {
 
   triggers = {
     source_hash = local.service_source_hash[each.key]
-    image       = "warehouse/${each.key}:${var.image_tag}"
+    image       = "warehouse/${each.key}:${local.service_image_tags[each.key]}"
     cluster     = var.cluster_name
   }
 
   provisioner "local-exec" {
-    command = "${path.module}/../scripts/build-and-load.sh '${each.key}' '${var.image_tag}' '${var.cluster_name}'"
+    command = "${path.module}/../scripts/build-and-load.sh '${each.key}' '${local.service_image_tags[each.key]}' '${var.cluster_name}'"
   }
 }
 
-resource "helm_release" "service" {
-  for_each = var.deploy_services ? local.services : {}
+# ---------------------------------------------------------------------------
+# NOTE: there is deliberately NO `helm_release.service` resource here
+# anymore. ArgoCD (argocd-apps.tf's `kubectl_manifest.application`, one per
+# service) is now the SOLE owner of these 8 Helm releases' lifecycle --
+# removed from Terraform state via `terraform state rm` on 2026-09-12 after
+# verifying every Application was already Synced/Healthy (never a `helm
+# uninstall`; the running release was simply handed off). Re-adding a
+# `helm_release.service` resource here would fight ArgoCD for ownership of
+# the exact same release name+namespace. `null_resource.build_and_load`
+# above still builds and side-loads each service's image -- that part of
+# the supply chain is unrelated to which controller applies the chart.
+# ---------------------------------------------------------------------------
 
-  depends_on = [
-    kubernetes_namespace.apps,
-    helm_release.postgresql,
-    helm_release.kong,
-    null_resource.build_and_load,
-    # The frontend image has to be in the kind node's containerd store before
-    # this release renders a pod referencing it, or the frontend pod lands in
-    # ImagePullBackOff (pullPolicy is IfNotPresent, and nothing publishes
-    # these images to a registry).
-    null_resource.build_and_load_frontend,
-  ]
-
-  name      = each.key
-  chart     = each.value.chart_path
-  namespace = var.apps_namespace
-
-  timeout = 600
-  wait    = true
-
-  values = [
-    # Static, human-editable environment config.
-    file("${path.module}/../helm-values/${each.key}.yaml"),
-
-    # Computed config. Appended last so it takes precedence.
-    yamlencode(merge(
+# ---------------------------------------------------------------------------
+# The full computed Helm values per service — extracted from helm_release.
+# service's `values` argument (unchanged content, pure refactor) so both the
+# Terraform-owned helm_release above AND the ArgoCD Application resources in
+# argocd-apps.tf read from exactly one computation. This is what makes "add a
+# service to local.services, get an ArgoCD Application with full parity" true
+# without re-implementing any of the 9 conditional blocks below in a second
+# place (e.g. an ApplicationSet Go-template).
+#
+# NOTE: `database` changed from a plaintext `url` to `existingSecret`
+# (Phase 3 of the ArgoCD rollout) -- kubernetes_secret.service_db in
+# postgres.tf creates "<service>-db" directly, so an Application CR's
+# Git/cluster-visible values never carry a plaintext DSN.
+# ---------------------------------------------------------------------------
+locals {
+  service_helm_values = {
+    for name, svc in local.services :
+    name => merge(
       {
         image = {
-          repository = "warehouse/${each.key}"
-          tag        = var.image_tag
+          repository = "warehouse/${name}"
+          tag        = local.service_image_tags[name]
           # The image only ever exists in the kind nodes' containerd store, put
           # there by `kind load docker-image`. IfNotPresent stops the kubelet
           # trying to pull it from Docker Hub and ImagePullBackOff-ing.
@@ -97,12 +112,14 @@ resource "helm_release" "service" {
         service = {
           type       = "ClusterIP"
           port       = 80
-          targetPort = each.value.port
+          targetPort = svc.port
         }
 
-        # The chart turns this into a Secret and mounts it as DATABASE_URL.
+        # Pre-created directly by Terraform (postgres.tf kubernetes_secret.
+        # service_db) instead of a plaintext url the chart would otherwise
+        # turn into its own Secret -- see this local's header comment.
         database = {
-          url = local.database_urls[each.key]
+          existingSecret = "${name}-db"
         }
 
         # Kong route. `host: "" ` makes the rule host-agnostic, so it matches
@@ -117,7 +134,7 @@ resource "helm_release" "service" {
         # disabled-but-present, which would otherwise still create a Kong
         # route object nothing removes.
         ingress = {
-          enabled   = !contains(local.gateway_api_pilot_services, each.key)
+          enabled   = !contains(local.gateway_api_pilot_services, name)
           className = "kong"
           annotations = {
             "konghq.com/strip-path" = "true"
@@ -125,7 +142,7 @@ resource "helm_release" "service" {
           hosts = [{
             host = ""
             paths = [{
-              path     = each.value.path
+              path     = svc.path
               pathType = "Prefix"
             }]
           }]
@@ -140,12 +157,12 @@ resource "helm_release" "service" {
       # values.yaml already documents reportsUrl falling back to
       # projectorUrl when left empty, so this is exactly that documented
       # local/dev baseline, not a workaround.
-      contains(local.analytics_services, each.key) ? {
+      contains(local.analytics_services, name) ? {
         analytics = {
           enabled = true
           database = {
-            projectorUrl = local.analytics_database_urls[each.key]
-            reportsUrl   = local.analytics_database_urls[each.key]
+            projectorUrl = local.analytics_database_urls[name]
+            reportsUrl   = local.analytics_database_urls[name]
           }
         }
       } : {},
@@ -178,7 +195,7 @@ resource "helm_release" "service" {
       # present between the true/false cases failed
       # `terraform validate` with "Inconsistent conditional result
       # types" for exactly that reason.
-      contains(local.path_catalogue_services, each.key) ? {
+      contains(local.path_catalogue_services, name) ? {
         pathCatalogue = {
           enabled = !var.deploy_process_path_kafka_source
           content = var.deploy_process_path_kafka_source ? "" : local.path_catalogue_content
@@ -191,10 +208,10 @@ resource "helm_release" "service" {
             name  = "PATH_CATALOGUE_SOURCE"
             value = "kafka"
           },
-        ] : [], lookup(local.sync_edge_env, each.key, []))
+        ] : [], lookup(local.sync_edge_env, name, []))
         } : {
         pathCatalogue = { enabled = false, content = "" }
-        extraEnv      = lookup(local.sync_edge_env, each.key, [])
+        extraEnv      = lookup(local.sync_edge_env, name, [])
       },
       # process-path-management's own event publisher: the chart defaults
       # config.eventPublisher to "log" (never touches Kafka) so a plain
@@ -206,7 +223,7 @@ resource "helm_release" "service" {
       # consumers above, so they can never end up half-wired (a publisher
       # with no live consumer, or a consumer expecting Kafka data that
       # never arrives).
-      each.key == "process-path-management" && var.deploy_process_path_kafka_source ? {
+      name == "process-path-management" && var.deploy_process_path_kafka_source ? {
         config = {
           eventPublisher = "kafka"
         }
@@ -218,7 +235,7 @@ resource "helm_release" "service" {
       # (2026-09-09): MCP servers are unauthenticated now, so the chart's
       # mcp.enabled flag alone controls whether the MCP Deployment exists --
       # no keys needed.
-      contains(local.mcp_services, each.key) ? {
+      contains(local.mcp_services, name) ? {
         mcp = {
           enabled = var.deploy_mcp_servers
         }
@@ -240,7 +257,7 @@ resource "helm_release" "service" {
       # on every stow. NOTE this only makes the CONSUMER stop depending on
       # facility-layout at runtime -- see variables.tf for the replay
       # caveat about events that predate the publisher flip.
-      each.key == "facility-layout" && var.deploy_facility_events_integration ? {
+      name == "facility-layout" && var.deploy_facility_events_integration ? {
         config = {
           eventPublisher = "kafka"
         }
@@ -255,7 +272,7 @@ resource "helm_release" "service" {
       # branches of this ternary declare the SAME key set -- see the
       # process-path block's comment for the "Inconsistent conditional
       # result types" failure that rule exists to avoid.
-      each.key == "inventory-storage" ? (var.deploy_facility_events_integration ? {
+      name == "inventory-storage" ? (var.deploy_facility_events_integration ? {
         extraEnv = [
           {
             name  = "LOCATION_LOOKUP_MODE"
@@ -277,7 +294,7 @@ resource "helm_release" "service" {
       # unconditionally (it already publishes integration/analytics
       # events), so the chart always renders KAFKA_BROKERS regardless of
       # this flag.
-      each.key == "order-management" ? (var.deploy_order_management_path_catalogue_kafka ? {
+      name == "order-management" ? (var.deploy_order_management_path_catalogue_kafka ? {
         extraEnv = [
           {
             name  = "PATH_CATALOGUE_SOURCE"
@@ -293,16 +310,16 @@ resource "helm_release" "service" {
       # belongs to the Nginx web gateway, and routing it through Kong is
       # exactly what ADR-0005 forbids. The Service stays ClusterIP so the
       # gateway remains the single host-facing frontend endpoint.
-      contains(keys(local.frontend_remotes), each.key) ? {
+      contains(keys(local.frontend_remotes), name) ? {
         frontend = {
           enabled = true
           image = {
-            repository = "warehouse/${each.key}-frontend"
+            repository = "warehouse/${name}-frontend"
             # Content-addressed, NOT the fixed "local" tag this file uses for
             # the Go image above. See frontends.tf's comment: a fixed tag
             # leaves the pod template identical after a rebuild, so the old
             # bundle keeps serving until something else changes the spec.
-            tag        = "local-${local.frontend_source_hash[each.key]}"
+            tag        = "local-${local.frontend_source_hash[name]}"
             pullPolicy = "IfNotPresent"
           }
         }
@@ -316,7 +333,7 @@ resource "helm_release" "service" {
       # the shared Gateway's one listener name (gateway-api.tf); Kong's
       # KIC only reconciles a parentRef whose sectionName resolves to a
       # real listener on that Gateway.
-      contains(local.gateway_api_pilot_services, each.key) ? {
+      contains(local.gateway_api_pilot_services, name) ? {
         gatewayApi = {
           enabled = true
           parentRefs = [{
@@ -325,14 +342,50 @@ resource "helm_release" "service" {
             sectionName = "http"
           }]
           hosts = [{
-            path     = each.value.path
+            path     = svc.path
             pathType = "PathPrefix"
           }]
           stripPath = true
         }
       } : {}
-    )),
-  ]
+    )
+  }
+
+  # ---------------------------------------------------------------------
+  # Full per-service values, static file + computed layer PRE-MERGED into
+  # one object. helm_release.service (above) doesn't need this -- Helm's
+  # own engine deep-merges the `values = [file(...), yamlencode(...)]`
+  # list at install/upgrade time. ArgoCD's Application `helm.valuesObject`
+  # (argocd-apps.tf) accepts only ONE values object per source, so this is
+  # the one place that merge has to happen ahead of time, in Terraform.
+  #
+  # A plain top-level `merge()` (computed wins) is correct for every key
+  # EXCEPT the two that appear in BOTH layers with nested sub-keys neither
+  # side fully owns: `config` (static sets httpAddr/eventPublisher; the
+  # computed layer conditionally ALSO sets eventPublisher for
+  # process-path-management/facility-layout's Kafka-source flags) and
+  # `analytics` (static sets `enabled: true`; the computed layer adds
+  # `database.projectorUrl/reportsUrl` alongside it). Those two get an
+  # explicit nested merge so neither layer's keys are silently dropped --
+  # verified against every chart's helm-values file: no other top-level
+  # key is set by both layers (see the ArgoCD rollout plan's Phase 4 audit).
+  # ---------------------------------------------------------------------
+  static_helm_values = {
+    for name, svc in local.services :
+    name => yamldecode(file("${path.module}/../helm-values/${name}.yaml"))
+  }
+
+  service_full_values = {
+    for name, svc in local.services :
+    name => merge(
+      local.static_helm_values[name],
+      local.service_helm_values[name],
+      {
+        config    = merge(lookup(local.static_helm_values[name], "config", {}), lookup(local.service_helm_values[name], "config", {}))
+        analytics = merge(lookup(local.static_helm_values[name], "analytics", {}), lookup(local.service_helm_values[name], "analytics", {}))
+      }
+    )
+  }
 }
 
 # ---------------------------------------------------------------------------

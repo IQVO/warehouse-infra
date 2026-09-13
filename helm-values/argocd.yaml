@@ -1,0 +1,47 @@
+# Local single-node kind cluster values for the argo/argo-cd chart.
+#
+# Two deliberate departures from chart defaults, both decided explicitly
+# with the user rather than left as chart defaults (see
+# docs/plans or the argocd-gitops-rollout plan for the full rationale):
+#
+# 1. Auth is disabled (configs.params."server.disable.auth": true). Every
+#    other REST/MCP endpoint in this fleet is already unauthenticated
+#    (fleet-wide auth was rolled out then fully reverted 2026-09-11); the
+#    user explicitly chose to keep ArgoCD consistent with that posture
+#    rather than carve out an exception for the deployment control plane.
+# 2. No Ingress/Route of any kind. ArgoCD is deliberately NOT exposed
+#    through either of the fleet's two host-facing edges (Nginx :80 for the
+#    product UI, Kong :8000 for product APIs) -- both are reserved for
+#    product traffic per docs/exposure/localhost-edge-topology.md. Local
+#    admin access is via `kubectl port-forward svc/argocd-server -n argocd
+#    8080:443` only.
+#
+# Everything below this is single-replica because this is a laptop kind
+# cluster, not an HA concern.
+
+redis-ha:
+  enabled: false
+
+controller:
+  replicas: 1
+
+server:
+  replicas: 1
+  service:
+    type: ClusterIP
+  # Kept on TLS (server.insecure stays false) -- port-forwarding to a TLS
+  # listener works fine locally and disabling TLS entirely is unrelated to
+  # the auth decision above.
+  ingress:
+    enabled: false
+
+repoServer:
+  replicas: 1
+
+applicationSet:
+  enabled: true
+  replicas: 1
+
+configs:
+  params:
+    server.disable.auth: true
