@@ -1,0 +1,147 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "title": "Warehouse \u2014 Logs overview",
+  "uid": "warehouse-logs-overview",
+  "tags": [
+    "warehouse",
+    "logs",
+    "loki"
+  ],
+  "timezone": "browser",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "type": "row",
+      "title": "Fleet-wide error triage",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "logs",
+      "title": "Errors and warnings across every bounded context",
+      "description": "level=~\"ERROR|WARN\" across all 8 bounded-context apps in one stream, newest first -- the fastest way to answer \"is anything actively failing right now\" without opening 8 separate dashboards. Use the `app` label (shown per line) to identify which context, then switch to that context's own dashboard for the metrics/traffic detail.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{app=~\".+\", app!~\"alloy|argocd-.*|grafana|istiod|kafka|kiali|kong|loki|opentelemetry-collector|postgresql|prometheus|warehouse-console|warehouse-ops-agent|web-gateway\", container!~\"istio-proxy|istio-init\", level=~\"ERROR|WARN\"}",
+          "legendFormat": "{{app}} / {{pod}}"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "type": "row",
+      "title": "Log volume",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Total log lines per second, by context",
+      "description": "count_over_time summed by app -- a context whose line rate suddenly drops to zero stopped logging (a crash loop or a stuck process), and one that spikes is either under real load or looping on a repeated error.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (app) (count_over_time({app=~\".+\", app!~\"alloy|argocd-.*|grafana|istiod|kafka|kiali|kong|loki|opentelemetry-collector|postgresql|prometheus|warehouse-console|warehouse-ops-agent|web-gateway\", container!~\"istio-proxy|istio-init\"}[$__interval]))",
+          "legendFormat": "{{app}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Error+warning lines per second, by context",
+      "description": "Same breakdown restricted to level=~\"ERROR|WARN\" -- the per-context error RATE, as a log-volume proxy independent of whether that error ever surfaced as an HTTP 5xx (a Kafka consumer failure or a degraded fallback path logs a WARN without ever touching the HTTP RED metrics on the per-context dashboards).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (app) (count_over_time({app=~\".+\", app!~\"alloy|argocd-.*|grafana|istiod|kafka|kiali|kong|loki|opentelemetry-collector|postgresql|prometheus|warehouse-console|warehouse-ops-agent|web-gateway\", container!~\"istio-proxy|istio-init\", level=~\"ERROR|WARN\"}[$__interval]))",
+          "legendFormat": "{{app}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

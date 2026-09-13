@@ -395,6 +395,122 @@
           "legendFormat": "{{service_name}} {{go_memory_type}}"
         }
       ]
+    },
+    {
+      "type": "row",
+      "title": "Logs (this context's pods, application containers only)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "logs",
+      "title": "Live log stream",
+      "description": "Raw JSON log lines from every Fulfillment Execution pod (OLTP + frontend + mcp + projector + reports), excluding the istio-proxy/istio-init sidecar containers. Every fleet service writes structured JSON via log/slog with the active trace_id/span_id already embedded (telemetry.WithTraceContext) -- click a line's \"trace_id\" field to pivot into the matching Jaeger trace via the Loki datasource's derived-fields link (observability.tf).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 16,
+        "x": 0,
+        "y": 37
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{app=\"fulfillment-execution\", container!~\"istio-proxy|istio-init\"}",
+          "legendFormat": "{{pod}} / {{container}}"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Log volume by level",
+      "description": "Lines per second, split by the `level` label Alloy lifts out of each JSON body's `level` field (logging.tf's stage.json/stage.labels) -- a real Loki label, not a per-line regex, so this is cheap even at high volume. A WARN/ERROR line here with no corresponding change on the HTTP RED error-rate panel above is worth investigating: it means something is going wrong that never surfaces as a failed request (a background consumer, a retried publish, a degraded fallback).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 37
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (level) (count_over_time({app=\"fulfillment-execution\", container!~\"istio-proxy|istio-init\"}[$__interval]))",
+          "legendFormat": "{{level}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Errors and warnings only",
+      "description": "Same stream as \"Live log stream\", filtered to level=~\"ERROR|WARN\" so a real problem does not scroll off the bottom of a busy INFO-heavy pod.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 46
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{app=\"fulfillment-execution\", container!~\"istio-proxy|istio-init\", level=~\"ERROR|WARN\"}",
+          "legendFormat": "{{pod}} / {{container}}"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
     }
   ]
 }

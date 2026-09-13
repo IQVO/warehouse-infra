@@ -40,10 +40,18 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(REPO_ROOT, "terraform", "dashboards", "contexts")
 
 PROM_DS = {"type": "prometheus", "uid": "prometheus"}
+LOKI_DS = {"type": "loki", "uid": "loki"}
 
 
 def target(expr, ref_id="A", legend=None):
     t = {"refId": ref_id, "datasource": PROM_DS, "expr": expr}
+    if legend:
+        t["legendFormat"] = legend
+    return t
+
+
+def loki_target(expr, ref_id="A", legend=None):
+    t = {"refId": ref_id, "datasource": LOKI_DS, "expr": expr}
     if legend:
         t["legendFormat"] = legend
     return t
@@ -59,6 +67,36 @@ def panel(x, y, w, h, title, description, targets, unit="short", ptype="timeseri
         "fieldConfig": {"defaults": {"unit": unit}, "overrides": []},
         "targets": targets,
     }
+
+
+def logs_panel(x, y, w, h, title, description, targets, ptype="logs", extra_options=None):
+    """A Loki-backed panel. ptype='logs' for a raw scrolling log view,
+    'timeseries' for a rate-of-log-lines-over-time chart (built on Loki's
+    range-query log-line counting, not a Prometheus metric)."""
+    p = {
+        "type": ptype,
+        "title": title,
+        "description": description,
+        "datasource": LOKI_DS,
+        "gridPos": {"h": h, "w": w, "x": x, "y": y},
+        "targets": targets,
+    }
+    if ptype == "logs":
+        p["options"] = {
+            "showTime": True,
+            "showLabels": True,
+            "showCommonLabels": False,
+            "wrapLogMessage": True,
+            "prettifyLogMessage": False,
+            "enableLogDetails": True,
+            "dedupStrategy": "none",
+            "sortOrder": "Descending",
+        }
+    else:
+        p["fieldConfig"] = {"defaults": {"unit": "short"}, "overrides": []}
+    if extra_options:
+        p["options"] = {**p.get("options", {}), **extra_options}
+    return p
 
 
 def row(y, title):
@@ -80,6 +118,14 @@ def row(y, title):
 # was built from. `kong_service_regex` matches the Kong Gateway API service
 # object name Terraform generates for that context's route
 # (httproute.warehouse-systems.<context>.0), see locals.tf `services` map.
+# `loki_app` is the Loki/Alloy `app` label value for this context's pods --
+# unlike `service_regex`, this one IS uniform across the fleet: Alloy's
+# pipeline (logging.tf) maps `app` straight from the
+# `app.kubernetes.io/name` pod label, and every one of this context's
+# workloads (OLTP, frontend, mcp, projector, reports) shares that exact
+# same label value (verified live: `label_values(app)` in Loki lists
+# "order-management" once, covering all 5 of its pods) -- so a plain
+# equality match is correct where the Prometheus side needs a regex.
 # `business_metrics` is a list of (promql_metric, attribute_label, human
 # description) triples -- attribute_label is the low-cardinality outcome/
 # type/reason dimension to legend by, or None for a single-outcome counter.
@@ -91,6 +137,7 @@ CONTEXTS = [
         "uid": "warehouse-order-management",
         "service_regex": "order-management.*",
         "kong_service_regex": "httproute\\.warehouse-systems\\.order-management\\..*",
+        "loki_app": "order-management",
         "business_metrics": [
             (
                 "order_orders_received_total",
@@ -105,6 +152,7 @@ CONTEXTS = [
         "uid": "warehouse-inventory-storage",
         "service_regex": "inventory-(storage|projector|reports).*",
         "kong_service_regex": "httproute\\.warehouse-systems\\.inventory-storage\\..*",
+        "loki_app": "inventory-storage",
         "business_metrics": [
             (
                 "inventory_reservations_total",
@@ -119,6 +167,7 @@ CONTEXTS = [
         "uid": "warehouse-wes-work-planning",
         "service_regex": "wes-(work-planning|projector|reports).*",
         "kong_service_regex": "httproute\\.warehouse-systems\\.wes-work-planning\\..*",
+        "loki_app": "wes-work-planning",
         "business_metrics": [
             (
                 "wes_work_units_released_total",
@@ -133,6 +182,7 @@ CONTEXTS = [
         "uid": "warehouse-fulfillment-execution",
         "service_regex": "fulfillment-(execution|projector|reports).*",
         "kong_service_regex": "httproute\\.warehouse-systems\\.fulfillment-execution\\..*",
+        "loki_app": "fulfillment-execution",
         "business_metrics": [
             (
                 "fulfillment_tasks_claimed_total",
@@ -152,6 +202,7 @@ CONTEXTS = [
         "uid": "warehouse-workforce-management",
         "service_regex": "workforce-(management|projector|reports).*",
         "kong_service_regex": "httproute\\.warehouse-systems\\.workforce-management\\..*",
+        "loki_app": "workforce-management",
         "business_metrics": [
             (
                 "workforce_labor_assignments_total",
@@ -166,6 +217,7 @@ CONTEXTS = [
         "uid": "warehouse-facility-layout",
         "service_regex": "facility-layout.*",
         "kong_service_regex": "httproute\\.warehouse-systems\\.facility-layout\\..*",
+        "loki_app": "facility-layout",
         "business_metrics": [
             (
                 "facility_location_slot_registrations_total",
@@ -180,6 +232,7 @@ CONTEXTS = [
         "uid": "warehouse-labor-performance",
         "service_regex": "labor-performance.*",
         "kong_service_regex": "httproute\\.warehouse-systems\\.labor-performance\\..*",
+        "loki_app": "labor-performance",
         "business_metrics": [
             (
                 "labor_performance_standards_defined_total",
@@ -194,6 +247,7 @@ CONTEXTS = [
         "uid": "warehouse-process-path-management",
         "service_regex": "process-path-management.*",
         "kong_service_regex": "httproute\\.warehouse-systems\\.process-path-management\\..*",
+        "loki_app": "process-path-management",
         "business_metrics": [
             (
                 "process_path_management_paths_defined_total",
@@ -208,6 +262,12 @@ CONTEXTS = [
 def build_dashboard(ctx):
     svc_re = ctx["service_regex"]
     kong_re = ctx["kong_service_regex"]
+    loki_app = ctx["loki_app"]
+    # Excludes istio-proxy/istio-init noise -- every pod in this fleet has a
+    # native sidecar (see kubernetes-deployment.md's Istio note) whose own
+    # Envoy access logs would otherwise dominate a raw log panel that is
+    # meant to show THIS context's application output.
+    loki_selector = f'{{app="{loki_app}", container!~"istio-proxy|istio-init"}}'
     panels = []
     y = 0
 
@@ -348,6 +408,45 @@ def build_dashboard(ctx):
             unit="bytes",
         )
     )
+    y += 8
+
+    # --- Row: Logs (Loki, via Alloy tailing pod stdout) --------------------------
+    panels.append(row(y, "Logs (this context's pods, application containers only)"))
+    y += 1
+    panels.append(
+        logs_panel(
+            0, y, 16, 9,
+            "Live log stream",
+            f'Raw JSON log lines from every {ctx["title"]} pod (OLTP + frontend + mcp + projector + reports), excluding the istio-proxy/istio-init sidecar containers. Every fleet service writes structured JSON via log/slog with the active trace_id/span_id already embedded (telemetry.WithTraceContext) -- click a line\'s "trace_id" field to pivot into the matching Jaeger trace via the Loki datasource\'s derived-fields link (observability.tf).',
+            [loki_target(f'{loki_selector}', legend="{{pod}} / {{container}}")],
+            ptype="logs",
+        )
+    )
+    panels.append(
+        logs_panel(
+            16, y, 8, 9,
+            "Log volume by level",
+            "Lines per second, split by the `level` label Alloy lifts out of each JSON body's `level` field (logging.tf's stage.json/stage.labels) -- a real Loki label, not a per-line regex, so this is cheap even at high volume. A WARN/ERROR line here with no corresponding change on the HTTP RED error-rate panel above is worth investigating: it means something is going wrong that never surfaces as a failed request (a background consumer, a retried publish, a degraded fallback).",
+            [loki_target(
+                f'sum by (level) (count_over_time({loki_selector}[$__interval]))',
+                legend="{{level}}",
+            )],
+            ptype="timeseries",
+        )
+    )
+    panels.append(
+        logs_panel(
+            16, y + 9, 8, 6,
+            "Errors and warnings only",
+            'Same stream as "Live log stream", filtered to level=~"ERROR|WARN" so a real problem does not scroll off the bottom of a busy INFO-heavy pod.',
+            [loki_target(
+                f'{{app="{loki_app}", container!~"istio-proxy|istio-init", level=~"ERROR|WARN"}}',
+                legend="{{pod}} / {{container}}",
+            )],
+            ptype="logs",
+        )
+    )
+    y += 15
 
     return {
         "annotations": {"list": []},
@@ -484,6 +583,94 @@ def build_gateway_overview():
     }
 
 
+def build_logs_overview():
+    """Fleet-wide logs dashboard: cross-context error/warning triage and a
+    per-app log-volume breakdown, backed entirely by Loki. Complements
+    kong-gateway-overview.json (traffic/latency) and go-runtime.json
+    (process metrics) with the third observability pillar -- this is the
+    dashboard for "something is wrong, which context and which pod" before
+    drilling into that context's own dashboard for the metrics detail."""
+    # Every fleet app label except the platform/infra pods this dashboard
+    # is not about (Kong, Istio, ArgoCD, Kafka, Postgres, the observability
+    # stack's own components, the console/ops-agent, ...). Kept as an
+    # explicit exclusion list, not an inclusion allowlist, so a NEW bounded
+    # context automatically appears here the moment its chart is deployed --
+    # see kong-gateway-overview.json's per-context panels for the mirrored
+    # inclusion-list approach where that tradeoff runs the other way.
+    non_context_apps = "|".join([
+        "alloy", "argocd-.*", "grafana", "istiod", "kafka", "kiali", "kong",
+        "loki", "opentelemetry-collector", "postgresql", "prometheus",
+        "warehouse-console", "warehouse-ops-agent", "web-gateway",
+    ])
+    # Loki requires at least one POSITIVE (non-negated) matcher in a stream
+    # selector -- a selector built purely from `!~` exclusions (app!~"...",
+    # container!~"...") is rejected outright with "queries require at least
+    # one regexp or equality matcher that does not have an empty-compatible
+    # value" (verified against the live Loki instance, not assumed from
+    # docs). `app=~".+"` supplies that required positive matcher without
+    # narrowing the match at all.
+    app_selector = f'{{app=~".+", app!~"{non_context_apps}", container!~"istio-proxy|istio-init"}}'
+
+    panels = []
+    y = 0
+    panels.append(row(y, "Fleet-wide error triage"))
+    y += 1
+    panels.append(
+        logs_panel(
+            0, y, 24, 10,
+            "Errors and warnings across every bounded context",
+            'level=~"ERROR|WARN" across all 8 bounded-context apps in one stream, newest first -- the fastest way to answer "is anything actively failing right now" without opening 8 separate dashboards. Use the `app` label (shown per line) to identify which context, then switch to that context\'s own dashboard for the metrics/traffic detail.',
+            [loki_target(
+                f'{{app=~".+", app!~"{non_context_apps}", container!~"istio-proxy|istio-init", level=~"ERROR|WARN"}}',
+                legend="{{app}} / {{pod}}",
+            )],
+            ptype="logs",
+        )
+    )
+    y += 10
+
+    panels.append(row(y, "Log volume"))
+    y += 1
+    panels.append(
+        logs_panel(
+            0, y, 12, 9,
+            "Total log lines per second, by context",
+            "count_over_time summed by app -- a context whose line rate suddenly drops to zero stopped logging (a crash loop or a stuck process), and one that spikes is either under real load or looping on a repeated error.",
+            [loki_target(
+                f'sum by (app) (count_over_time({app_selector}[$__interval]))',
+                legend="{{app}}",
+            )],
+            ptype="timeseries",
+        )
+    )
+    panels.append(
+        logs_panel(
+            12, y, 12, 9,
+            "Error+warning lines per second, by context",
+            "Same breakdown restricted to level=~\"ERROR|WARN\" -- the per-context error RATE, as a log-volume proxy independent of whether that error ever surfaced as an HTTP 5xx (a Kafka consumer failure or a degraded fallback path logs a WARN without ever touching the HTTP RED metrics on the per-context dashboards).",
+            [loki_target(
+                f'sum by (app) (count_over_time({{app=~".+", app!~"{non_context_apps}", container!~"istio-proxy|istio-init", level=~"ERROR|WARN"}}[$__interval]))',
+                legend="{{app}}",
+            )],
+            ptype="timeseries",
+        )
+    )
+
+    return {
+        "annotations": {"list": []},
+        "editable": True,
+        "graphTooltip": 1,
+        "title": "Warehouse — Logs overview",
+        "uid": "warehouse-logs-overview",
+        "tags": ["warehouse", "logs", "loki"],
+        "timezone": "browser",
+        "time": {"from": "now-30m", "to": "now"},
+        "refresh": "30s",
+        "schemaVersion": 39,
+        "panels": panels,
+    }
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     for ctx in CONTEXTS:
@@ -500,6 +687,12 @@ def main():
         json.dump(build_gateway_overview(), f, indent=2, sort_keys=False)
         f.write("\n")
     print(f"wrote {gateway_path}")
+
+    logs_path = os.path.join(gateway_dir, "logs-overview.json")
+    with open(logs_path, "w") as f:
+        json.dump(build_logs_overview(), f, indent=2, sort_keys=False)
+        f.write("\n")
+    print(f"wrote {logs_path}")
 
 
 if __name__ == "__main__":
