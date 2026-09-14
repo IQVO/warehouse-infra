@@ -4,7 +4,7 @@
 set -uo pipefail
 
 INFRA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "${INFRA_DIR}/terraform"
+cd "${INFRA_DIR}/terraform" || exit 1
 
 BASE="$(terraform output -raw kong_proxy_url)"
 NAMESPACE="$(terraform output -raw apps_namespace 2>/dev/null || echo warehouse-systems)"
