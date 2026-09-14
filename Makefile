@@ -1,12 +1,8 @@
 # Makefile — the local quality gate for warehouse-infra.
 #
-# This repo had zero CI/local sensors of any kind before this file —
-# terraform fmt/validate, helm lint, and shellcheck were only ever run by
-# hand. Every target here mirrors a check any change to this repo should
-# pass before merging; none of these run in GitHub Actions yet (this repo
-# has no .github/workflows/ci.yml — see the harness-engineering coverage
-# expansion plan for that follow-up), so `make check` is currently the
-# ONLY gate. Run it before every commit.
+# Every target here mirrors a job in .github/workflows/ci.yml — terraform
+# fmt/validate, helm lint, shellcheck, and the chart-selector conformance
+# check are all CI-enforced, not just documented convention.
 
 TF_DIR := terraform
 
@@ -27,7 +23,7 @@ CHARTS := \
 	../warehouse-ops-agent/charts/warehouse-ops-agent \
 	../warehouse-console/charts/warehouse-console
 
-.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck check check-all
+.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check check check-all
 
 help:
 	@echo "warehouse-infra — local quality gate (no CI workflow yet; this IS the gate)"
@@ -38,8 +34,11 @@ help:
 	@echo "  helm-lint       helm lint on every chart in \$$(CHARTS) — workforce-management"
 	@echo "                  needs a dummy database.url, wired in below"
 	@echo "  shellcheck      shellcheck --severity=warning on scripts/*.sh"
+	@echo "  chart-selector-check  render every chart with all components enabled,"
+	@echo "                  assert every Service selects exactly one Deployment"
+	@echo "                  (scripts/check-chart-selectors.py; needs PyYAML)"
 	@echo ""
-	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck"
+	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check"
 	@echo "  check-all       alias for check — no deeper local gate exists yet"
 	@echo "                  (see scripts/test-exposure-policy.sh and smoke-test.sh for"
 	@echo "                  cluster-dependent checks that need a live kind cluster —"
@@ -73,8 +72,20 @@ shellcheck:
 	fi
 	shellcheck --severity=warning scripts/*.sh
 
+chart-selector-check:
+	@if ! command -v helm >/dev/null 2>&1; then \
+		echo "helm is not installed."; \
+		exit 1; \
+	fi
+	@python3 -c "import yaml" 2>/dev/null || { \
+		echo "PyYAML is not installed."; \
+		echo "install it with: pip3 install pyyaml (or: python3 -m pip install --user pyyaml)"; \
+		exit 1; \
+	}
+	cd $(TF_DIR) && python3 ../scripts/check-chart-selectors.py
+
 # The fast self-correction loop: run this after every change, before committing.
-check: tf-fmt-check tf-validate helm-lint shellcheck
+check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check
 
 # No deeper local gate exists yet — see the help text above for the
 # cluster-dependent scripts that are NOT part of this target.

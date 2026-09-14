@@ -1,0 +1,259 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # ============================================================
+  # CLASSIFICATION: STATIC VALIDATION (Terraform)
+  # ============================================================
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: warehouse-infra
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/order-management
+          ref: develop
+          path: order-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/inventory-storage
+          ref: develop
+          path: inventory-storage
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/wes-work-planning
+          ref: develop
+          path: wes-work-planning
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/fulfillment-execution
+          ref: develop
+          path: fulfillment-execution
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/workforce-management
+          ref: develop
+          path: workforce-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/facility-layout
+          ref: develop
+          path: facility-layout
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/labor-performance
+          ref: develop
+          path: labor-performance
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/process-path-management
+          ref: develop
+          path: process-path-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/warehouse-ops-agent
+          ref: develop
+          path: warehouse-ops-agent
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/warehouse-console
+          ref: develop
+          path: warehouse-console
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/warehouse-ui-kit
+          ref: develop
+          path: warehouse-ui-kit
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_wrapper: false
+      - name: terraform fmt -check
+        working-directory: warehouse-infra
+        run: make tf-fmt-check
+      - name: terraform validate
+        working-directory: warehouse-infra
+        run: make tf-validate
+
+  # ============================================================
+  # CLASSIFICATION: STATIC VALIDATION (shell scripts)
+  # ============================================================
+  shellcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: shellcheck scripts/*.sh
+        # ubuntu-latest runners ship shellcheck preinstalled — no action
+        # needed, matching the fleet's minimal-third-party-action convention.
+        run: make shellcheck
+
+  # ============================================================
+  # CLASSIFICATION: PACKAGING VALIDATION (Helm charts)
+  # Every chart this repo deploys lives in a SIBLING repo, so this job
+  # checks out all ten (nine service repos + warehouse-console) next to
+  # this one, exactly matching the local dev layout the Makefile's CHARTS
+  # variable and terraform/locals.tf's chart_path values already assume.
+  # develop is checked out for each sibling (not main) to match what a
+  # contributor testing against their own in-progress fleet changes would
+  # see; this job re-runs on push to develop/main too so a sibling's own
+  # merge doesn't silently break this repo's rendering unnoticed.
+  # ============================================================
+  helm-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: warehouse-infra
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/order-management
+          ref: develop
+          path: order-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/inventory-storage
+          ref: develop
+          path: inventory-storage
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/wes-work-planning
+          ref: develop
+          path: wes-work-planning
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/fulfillment-execution
+          ref: develop
+          path: fulfillment-execution
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/workforce-management
+          ref: develop
+          path: workforce-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/facility-layout
+          ref: develop
+          path: facility-layout
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/labor-performance
+          ref: develop
+          path: labor-performance
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/process-path-management
+          ref: develop
+          path: process-path-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/warehouse-ops-agent
+          ref: develop
+          path: warehouse-ops-agent
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/warehouse-console
+          ref: develop
+          path: warehouse-console
+      - uses: azure/setup-helm@59b1c81c6280f5abebb1fb1bc585696daa7dfb42 # v5
+        with:
+          version: v3.16.4
+      - name: helm lint every chart
+        working-directory: warehouse-infra
+        run: make helm-lint
+
+  # ============================================================
+  # CLASSIFICATION: ARCHITECTURE FITNESS (chart selector conformance)
+  # Guards against the documented "Service selects N Deployments" bug
+  # class: renders every chart with every optional component enabled and
+  # asserts each Service selects exactly one Deployment. See
+  # scripts/check-chart-selectors.py's own docstring for the full
+  # incident history this guards against.
+  # ============================================================
+  chart-selector-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: warehouse-infra
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/order-management
+          ref: develop
+          path: order-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/inventory-storage
+          ref: develop
+          path: inventory-storage
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/wes-work-planning
+          ref: develop
+          path: wes-work-planning
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/fulfillment-execution
+          ref: develop
+          path: fulfillment-execution
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/workforce-management
+          ref: develop
+          path: workforce-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/facility-layout
+          ref: develop
+          path: facility-layout
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/labor-performance
+          ref: develop
+          path: labor-performance
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/process-path-management
+          ref: develop
+          path: process-path-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/warehouse-ops-agent
+          ref: develop
+          path: warehouse-ops-agent
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/warehouse-console
+          ref: develop
+          path: warehouse-console
+      - uses: azure/setup-helm@59b1c81c6280f5abebb1fb1bc585696daa7dfb42 # v5
+        with:
+          version: v3.16.4
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - name: chart selector conformance
+        working-directory: warehouse-infra
+        run: make chart-selector-check
