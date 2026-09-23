@@ -76,6 +76,11 @@ jobs:
           path: warehouse-ops-agent
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: claudioed/network-fulfillment
+          ref: develop
+          path: network-fulfillment
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: claudioed/warehouse-console
           ref: develop
           path: warehouse-console
@@ -172,6 +177,11 @@ jobs:
           path: warehouse-ops-agent
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: claudioed/network-fulfillment
+          ref: develop
+          path: network-fulfillment
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: claudioed/warehouse-console
           ref: develop
           path: warehouse-console
@@ -242,6 +252,11 @@ jobs:
           repository: claudioed/warehouse-ops-agent
           ref: develop
           path: warehouse-ops-agent
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/network-fulfillment
+          ref: develop
+          path: network-fulfillment
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: claudioed/warehouse-console
