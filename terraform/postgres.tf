@@ -142,10 +142,23 @@ resource "helm_release" "postgresql" {
           "00-init-databases.sql" = templatefile(
             "${path.module}/templates/init-databases.sql.tftpl",
             {
-              services = {
-                for name, svc in local.services :
-                name => merge(svc, { password = local.service_passwords[name] })
-              }
+              # network-fulfillment is not in local.services (see
+              # network-fulfillment.tf's header) but owns an OLTP database on
+              # the same least-privilege terms, so it is merged in here rather
+              # than given a second loop in the template.
+              services = merge(
+                {
+                  for name, svc in local.services :
+                  name => merge(svc, { password = local.service_passwords[name] })
+                },
+                {
+                  "network-fulfillment" = {
+                    db       = local.network_fulfillment_db_name
+                    user     = local.network_fulfillment_db_user
+                    password = random_password.network_fulfillment_db.result
+                  }
+                },
+              )
               analytics_services = {
                 for name in local.analytics_services :
                 name => merge(local.analytics_db_info[name], { password = local.analytics_service_passwords[name] })

@@ -1,11 +1,16 @@
 # ---------------------------------------------------------------------------
 # network-fulfillment — the fleet's Anti-Corruption Layer to an external
-# retail network (Amazon Vendor Direct Fulfillment). Like warehouse-ops-agent
-# and unlike the eight database-backed contexts, it is NOT in `local.services`:
-# it has NO database and NO Kafka connection, so the whole per-service
-# Postgres/secret/analytics apparatus in services.tf and locals.tf would have
-# nothing to act on. Same division of responsibility as ops-agent.tf: the
-# chart lives in its own repo, this file is the environment overlay.
+# retail network (Amazon Vendor Direct Fulfillment). The chart lives in its
+# own repo; this file is the environment overlay.
+#
+# It now HAS a database (its NetworkOrder aggregate carries the 24h
+# acknowledgement deadlines the sweep enforces, and an in-memory repo forgets
+# them on the restart every pod here takes at rollout). It is still NOT in
+# `local.services`, deliberately: membership there also implies the analytics
+# projector/reports apparatus, the Kafka wiring and the per-service chart
+# shape none of which exist here, and moving it in would recreate the
+# resources this file already owns. So the database is wired explicitly
+# below, mirroring services.tf's pattern rather than inheriting it.
 #
 # THE IMPORTANT PART OF THIS FILE IS WHAT IT DOES NOT SET.
 #
@@ -89,6 +94,15 @@ locals {
         sweepInterval = "5m"
       }
 
+      # The binary REFUSES to boot if this is set and Postgres is
+      # unreachable, rather than falling back to the in-memory repo. That
+      # is the point: a silent fallback would look healthy while dropping
+      # every acknowledgement deadline this context owes the network.
+      database = {
+        existingSecret    = var.deploy_services ? "network-fulfillment-db" : ""
+        existingSecretKey = "DATABASE_URL"
+      }
+
       # Kong route. NO Ingress at all once Gateway API is on (see the
       # gatewayApi block below) -- disabled-but-present would otherwise
       # still create a Kong route object nothing removes.
@@ -127,6 +141,53 @@ locals {
       }
     } : {}
   )
+}
+
+# ---------------------------------------------------------------------------
+# OLTP database. Mirrors postgres.tf's per-service pattern (generated
+# password, never committed; Secret consumed by the chart's
+# database.existingSecret) without joining local.services -- see this file's
+# header for why.
+#
+# NOTE FOR AN ALREADY-RUNNING CLUSTER: Bitnami executes
+# primary.initdb.scripts exactly ONCE, against an empty data directory. On a
+# cluster whose Postgres already has data, adding this role/database here
+# renders the SQL but never runs it, and the pod then CrashLoopBackOffs with
+# `password authentication failed`. Create them by hand against the live
+# primary, mirroring templates/init-databases.sql.tftpl's loop body, using
+# the password from `terraform output -raw network_fulfillment_db_password`.
+# ---------------------------------------------------------------------------
+resource "random_password" "network_fulfillment_db" {
+  length  = 24
+  special = false # URL-safe: no chars needing percent-encoding in the DSN
+}
+
+locals {
+  network_fulfillment_db_user = "network_fulfillment"
+  network_fulfillment_db_name = "network_fulfillment"
+
+  network_fulfillment_database_url = "postgres://${local.network_fulfillment_db_user}:${random_password.network_fulfillment_db.result}@${local.postgres_host}:${local.postgres_port}/${local.network_fulfillment_db_name}?sslmode=disable"
+}
+
+resource "kubernetes_secret" "network_fulfillment_db" {
+  count = var.deploy_services ? 1 : 0
+
+  metadata {
+    name      = "network-fulfillment-db"
+    namespace = var.apps_namespace
+  }
+
+  data = {
+    DATABASE_URL = local.network_fulfillment_database_url
+  }
+
+  depends_on = [kubernetes_namespace.apps]
+}
+
+output "network_fulfillment_db_password" {
+  description = "Generated password for the network-fulfillment OLTP role (needed to create the role by hand on an already-initialized Postgres)."
+  value       = random_password.network_fulfillment_db.result
+  sensitive   = true
 }
 
 output "network_fulfillment_route" {
