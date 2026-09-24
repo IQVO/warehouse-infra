@@ -92,6 +92,51 @@ locals {
         # enforces, or an expired hold sits on inventory reservations
         # until the next pass rather than at its deadline.
         sweepInterval = "5m"
+
+        # How often the network is polled. Inbound is a poll and nothing
+        # else (ADR 0001 section 5), so this is the ONLY thing that brings
+        # demand into this context. Deliberately far below the 24h
+        # acknowledgement window: a slow or stopped poller spends a
+        # deadline the network set, not one we chose.
+        pollInterval = "1m"
+      }
+
+      # The Anti-Corruption Layer's dictionary, and NOT optional in any
+      # environment that expects to receive anything: with an empty
+      # dictionary every order is rejected as untranslatable, and the
+      # symptom is invisible because refusing unknown products is also
+      # correct behaviour. The binary logs a warning at startup when this
+      # is absent.
+      #
+      # These SKUs match the ones e2e-tests and the process-path catalogue
+      # already use in this cluster, so demand seeded below can actually be
+      # planned by order-management rather than failing on an unknown SKU.
+      productTranslation = {
+        mappings = [
+          { networkProductId = "ASIN-LOCAL-1", sku = "sku-1" },
+          { networkProductId = "ASIN-LOCAL-2", sku = "sku-2" },
+        ]
+      }
+
+      # Demand for the STUB gateway. This is what makes the inbound leg
+      # observable in a credential-free cluster: without it the poller runs
+      # correctly forever against a network that has nothing to give it,
+      # which is indistinguishable from a poller that is broken.
+      #
+      # Relative deadlines on purpose — a fixed instant goes stale and every
+      # order becomes instantly infeasible, which reads like a promise bug
+      # rather than an expired fixture.
+      stubDemand = {
+        demands = [
+          {
+            networkRef     = "po-local-1"
+            siteId         = "site-1"
+            requiredShipBy = "+36h"
+            lines = [
+              { networkLineRef = "1", networkProductId = "ASIN-LOCAL-1", quantity = 1 },
+            ]
+          },
+        ]
       }
 
       # The binary REFUSES to boot if this is set and Postgres is
