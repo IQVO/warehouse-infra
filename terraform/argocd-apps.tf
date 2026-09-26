@@ -101,6 +101,7 @@ resource "kubectl_manifest" "ops_agent_application" {
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret.ops_agent_anthropic,
   ]
 }
 

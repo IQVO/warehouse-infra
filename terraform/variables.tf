@@ -292,6 +292,32 @@ variable "postgres_admin_password" {
   sensitive   = true
 }
 
+variable "anthropic_api_key" {
+  description = <<-EOT
+    Real Anthropic API key for warehouse-ops-agent's ADR-0004 model-backed
+    Reasoner (ANTHROPIC_API_KEY). NEVER given a real default here -- the
+    empty default is intentional so `terraform validate`/`plan` succeed with
+    no secret present. Supply the real value out-of-band, never by editing
+    this file or any other tracked file:
+
+      export TF_VAR_anthropic_api_key="sk-ant-..."   # before `terraform apply`
+
+    or copy `terraform/terraform.tfvars.example` to a gitignored
+    `terraform/terraform.tfvars` (see `.gitignore`'s `terraform/*.tfvars`)
+    and fill in the real value there.
+
+    warehouse-ops-agent's own composition root (cmd/agent/reasoner.go,
+    ADR-0004) already fails loudly at pod startup with
+    `LLM_MODE=shadow requires ANTHROPIC_API_KEY` whenever LLM_MODE is not
+    "off" and this key is empty -- see the `check` block in ops-agent.tf,
+    which surfaces the same condition as a loud `terraform plan`/`apply`
+    warning instead of leaving it to be discovered only via a CrashLoopBackOff.
+  EOT
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "postgres_persistence_enabled" {
   description = <<-EOT
     Whether the PostgreSQL primary gets a PersistentVolumeClaim.

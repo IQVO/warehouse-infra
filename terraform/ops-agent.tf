@@ -30,6 +30,69 @@ locals {
   )))
 }
 
+# ---------------------------------------------------------------------------
+# ANTHROPIC_API_KEY — Terraform-managed Kubernetes Secret, generated-value
+# posture identical to postgres.tf's kubernetes_secret.service_db /
+# network-fulfillment.tf's kubernetes_secret.network_fulfillment_db: created
+# directly by Terraform (never a plaintext value inside the ArgoCD
+# Application CR's `helm.valuesObject`, which is visible via `kubectl get
+# application -o yaml`/the ArgoCD UI), consumed by the chart via
+# `credentials.existingSecret` rather than `credentials.anthropicApiKey`.
+#
+# UNLIKE service_db/network_fulfillment_db, this is NOT a `random_password` --
+# there is no Terraform-generatable Anthropic API key. `var.anthropic_api_key`
+# defaults to "" and MUST be supplied by the operator out-of-band (see that
+# variable's description in variables.tf and terraform.tfvars.example). This
+# resource still creates the Secret even when the value is empty, so `plan`/
+# `apply` never fail on a missing key -- see the `check` block below for how
+# that condition surfaces instead, and warehouse-ops-agent's own ADR-0004
+# composition root (cmd/agent/reasoner.go) for the real, cluster-side
+# fail-loud behavior: `LLM_MODE=shadow requires ANTHROPIC_API_KEY` at pod
+# startup, never a silent no-op.
+# ---------------------------------------------------------------------------
+resource "kubernetes_secret" "ops_agent_anthropic" {
+  count = var.deploy_services ? 1 : 0
+
+  metadata {
+    name      = "warehouse-ops-agent-anthropic"
+    namespace = var.apps_namespace
+  }
+
+  data = {
+    ANTHROPIC_API_KEY = var.anthropic_api_key
+  }
+
+  depends_on = [kubernetes_namespace.apps]
+}
+
+# ---------------------------------------------------------------------------
+# Plan/apply-time visibility for the "LLM_MODE=shadow with no real key"
+# misconfiguration. This is a WARNING only (check-block asserts never fail
+# validate/plan/apply) -- the actual enforcement is cluster-side, in
+# warehouse-ops-agent's own composition root (confirmed in
+# cmd/agent/reasoner.go: a non-off LLM_MODE with an empty ANTHROPIC_API_KEY
+# is a hard startup error, so a misconfigured cluster fails LOUD via
+# CrashLoopBackOff rather than quietly running the deterministic-only path
+# under a name that claims otherwise). This check exists purely so an
+# operator seeing `terraform plan` output does not have to wait for that
+# crash loop to learn the same fact.
+# ---------------------------------------------------------------------------
+check "anthropic_api_key_required_for_llm_mode" {
+  assert {
+    condition     = local.ops_agent_helm_values.llm.mode == "off" || var.anthropic_api_key != ""
+    error_message = <<-EOT
+      warehouse-ops-agent's LLM_MODE is "${local.ops_agent_helm_values.llm.mode}"
+      (not "off") but var.anthropic_api_key is empty. The chart will still
+      apply, but the ops-agent pod will CrashLoopBackOff at startup with
+      "LLM_MODE=${local.ops_agent_helm_values.llm.mode} requires ANTHROPIC_API_KEY"
+      (ADR-0004, cmd/agent/reasoner.go) until a real key is supplied, e.g.:
+        export TF_VAR_anthropic_api_key="sk-ant-..."
+      before the next `terraform apply`. Never set a real key in this repo's
+      tracked files.
+    EOT
+  }
+}
+
 resource "null_resource" "build_and_load_ops_agent" {
   count = var.deploy_services ? 1 : 0
 
@@ -121,6 +184,25 @@ locals {
         workforceManagement  = "http://workforce-management-reports.${var.apps_namespace}.svc.cluster.local:80"
         facilityLayout       = "http://facility-layout-reports.${var.apps_namespace}.svc.cluster.local:80"
         laborPerformance     = "http://labor-performance-reports.${var.apps_namespace}.svc.cluster.local:80"
+      }
+
+      # ADR-0004 model-backed Reasoner. Real, in-cluster wiring per the
+      # user's 2026-09-26 decision: shadow mode runs the LLM reasoner
+      # alongside the deterministic policy without ever acting on the
+      # model's output alone (see cmd/agent/reasoner.go/FlowBalanceAdvisory).
+      # `credentials.existingSecret` points at the Terraform-managed
+      # Secret above by its fixed, deterministic name (not a resource
+      # attribute reference: kubernetes_secret.ops_agent_anthropic is
+      # count-gated on var.deploy_services, and this local is evaluated
+      # regardless of that flag) -- never `credentials.anthropicApiKey`
+      # plaintext, which would land inside the ArgoCD Application CR's
+      # `helm.valuesObject` (see this file's kubernetes_secret.
+      # ops_agent_anthropic header comment for why that matters).
+      credentials = {
+        existingSecret = "warehouse-ops-agent-anthropic"
+      }
+      llm = {
+        mode = "shadow"
       }
 
       # Kong route. NO Ingress at all once Gateway API is on (see the

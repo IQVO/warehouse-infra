@@ -393,6 +393,39 @@ only.**
 
 ---
 
+## Secrets you must supply yourself: ANTHROPIC_API_KEY
+
+warehouse-ops-agent's ADR-0004 model-backed Reasoner is wired real in this
+cluster (`LLM_MODE=shadow` — it calls the real Anthropic API alongside the
+deterministic policy, logs agreement, but never acts on the model's output
+alone). Terraform creates the Kubernetes Secret
+(`kubernetes_secret.ops_agent_anthropic` in `terraform/ops-agent.tf`) but
+**never generates or hardcodes the API key itself** — `var.anthropic_api_key`
+defaults to `""`.
+
+Supply the real value one of two ways, **never** by editing a tracked file:
+
+```bash
+export TF_VAR_anthropic_api_key="sk-ant-..."
+terraform apply
+```
+
+or copy `terraform/terraform.tfvars.example` to a gitignored
+`terraform/terraform.tfvars` (already covered by `.gitignore`'s
+`terraform/*.tfvars`) and fill in the real value there.
+
+Leaving the key empty is fine for `terraform validate`/`plan` (the default
+`""` is deliberately valid input, checked by CI). It is **not** fine for a
+real `apply` with `LLM_MODE=shadow`: warehouse-ops-agent's own composition
+root (`cmd/agent/reasoner.go`, ADR-0004) fails loudly at pod startup —
+`LLM_MODE=shadow requires ANTHROPIC_API_KEY` — rather than silently running
+without the model it was told to use. A `check` block in
+`terraform/ops-agent.tf` surfaces the same condition as a `terraform
+plan`/`apply` warning so you don't have to wait for the crash loop to learn
+it.
+
+---
+
 ## Where the manifests live
 
 **Decision: each service repo owns its own Helm chart; `warehouse-infra` owns

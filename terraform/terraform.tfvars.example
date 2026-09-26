@@ -1,0 +1,19 @@
+# Copy this file to terraform.tfvars (gitignored — see ../.gitignore's
+# `terraform/*.tfvars`) and fill in real values, OR export them as
+# TF_VAR_<name> environment variables before running terraform. NEVER commit
+# a filled-in terraform.tfvars, and never put a real secret value into any
+# *.tf file.
+
+# Real Anthropic API key for warehouse-ops-agent's ADR-0004 model-backed
+# Reasoner (wired to LLM_MODE=shadow — see terraform/ops-agent.tf). Leaving
+# this empty is fine for `terraform validate`/`plan`; the ops-agent pod will
+# CrashLoopBackOff at startup if you `apply` with LLM_MODE=shadow and no key
+# (ADR-0004 fails loudly by design — see cmd/agent/reasoner.go in
+# warehouse-ops-agent). Get a real key from https://console.anthropic.com/
+# and supply it ONE of these two ways — never edit this committed file with
+# a real value:
+#
+#   export TF_VAR_anthropic_api_key="sk-ant-..."
+#
+# or uncomment the line below in your own gitignored terraform.tfvars copy:
+# anthropic_api_key = "sk-ant-..."
