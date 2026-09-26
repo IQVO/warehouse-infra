@@ -132,6 +132,13 @@ resource "helm_release" "postgresql" {
     primary = {
       persistence = {
         enabled = var.postgres_persistence_enabled
+        # The chart's own default is 8Gi, sized for a real deployment. 3Gi is
+        # plenty for four small logical databases on a laptop kind cluster
+        # (each holds a handful of MB of demo/e2e data) and keeps the PVC
+        # request small on a host that likely has other kind clusters and
+        # Docker volumes competing for disk. Bump this if you seed
+        # significantly more data than the README's examples produce.
+        size = "3Gi"
       }
 
       initdb = {

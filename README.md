@@ -373,13 +373,18 @@ kubectl -n warehouse-data exec -it postgres-postgresql-0 -- \
   env PGPASSWORD=postgres psql -U postgres -c '\l'
 ```
 
-**Storage is ephemeral by design.** `postgres_persistence_enabled` defaults to
-`false`. initdb scripts only run against an empty data directory, so a
-PersistentVolumeClaim would cause a restarted pod to silently skip database
-creation. An emptyDir keeps `terraform apply` reproducible from any state,
-which is what a laptop cluster wants. Set
-`-var postgres_persistence_enabled=true` if you need data to survive a pod
-restart, and accept that you then own the migration story.
+**Storage now persists across pod restarts by default.**
+`postgres_persistence_enabled` defaults to `true` (as of 2026-09-26 — data
+durability was decided to matter more here than the old
+reproducible-from-any-state disposability). One real consequence: initdb
+scripts only run against an EMPTY data directory, so once a PVC exists, a
+NEW logical database added to `local.services`/`local.analytics_services`
+will NOT be created automatically on a pod restart — you have to run the
+manual `CREATE ROLE`/`CREATE DATABASE` steps documented for that case (see
+this repo's operational notes / the fleet skill's "initdb never re-runs"
+pitfall). Set `-var postgres_persistence_enabled=false` to go back to the
+old ephemeral emptyDir behavior, e.g. for a disposable CI/throwaway
+cluster.
 
 Credentials are deterministic dev values (`postgres` / `<db name>`), not
 `random_password`, so the commands in this README are copy-pasteable and a
@@ -525,6 +530,31 @@ sync only fires on an actual diff, and a tag that never changes on rebuild
 gives it nothing to detect. This also happens to fix the older
 "rebuilt image alone does not roll a running Deployment" pitfall documented
 below, as a side effect.
+
+---
+
+## metrics-server (HPA support)
+
+`var.deploy_metrics_server` (default `true`) installs the
+kubernetes-sigs/metrics-server chart into `kube-system`. Every service
+chart in this fleet already ships an `autoscaling/v2` HPA targeting
+CPU/memory utilization; without a `metrics.k8s.io` API server in the
+cluster those HPAs sit at `<unknown>` forever
+(`kubectl describe hpa <name>` reports `FailedGetResourceMetrics`). This
+resource is what makes them work.
+
+It sets `--kubelet-insecure-tls` in the chart's `args` — a genuine
+kind-specific need, not a general shortcut: kind's kubelet serving certs
+are self-signed per-node at cluster boot and aren't trusted by
+metrics-server by default, so without the flag every node scrape fails
+with `x509: certificate signed by unknown authority`. See
+`terraform/metrics-server.tf`'s header comment for the full rationale.
+Verify it after an apply with:
+
+```bash
+kubectl top nodes
+kubectl get hpa -n warehouse-systems
+```
 
 ---
 

@@ -49,6 +49,11 @@ resource "helm_release" "kafka" {
       replicaCount = 1
       persistence = {
         enabled = var.kafka_persistence_enabled
+        # Chart default is 8Gi; this single-broker/no-replication topology
+        # only ever holds a handful of demo/e2e topics with short retention,
+        # so 3Gi (same rationale/size as postgres.tf's PVC) is plenty for a
+        # laptop kind cluster and avoids reserving 8Gi of host disk per PVC.
+        size = "3Gi"
       }
       resources = {
         requests = { cpu = "250m", memory = "512Mi" }
