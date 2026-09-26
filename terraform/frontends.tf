@@ -36,6 +36,16 @@ locals {
     "facility-layout"         = { remote_name = "facility_mfe" }
     "labor-performance"       = { remote_name = "labor_mfe" }
     "process-path-management" = { remote_name = "process_path_mfe" }
+    # network-fulfillment isn't in local.services (network-fulfillment.tf's
+    # header), but its own web/ directory is at the exact same relative
+    # path every sibling remote uses (confirmed via `git ls-tree` on PR#16's
+    # branch: web/src, web/package.json, web/vite.config.ts, web/index.html,
+    # web/Dockerfile, web/nginx.conf all present at network-fulfillment/web/),
+    # so local.frontend_source_hash's fileset() calls below resolve with
+    # zero further change. remote_name/port confirmed from PR#16's actual
+    # web/vite.config.ts: federation name "netfulfil_mfe", dev/preview
+    # server port 5188.
+    "network-fulfillment" = { remote_name = "netfulfil_mfe" }
   } : {}
 
   # Content-addressed image tags, NOT the fixed "local" tag the Go services

@@ -35,6 +35,14 @@ locals {
     "order-management",
     "labor-performance",
     "process-path-management",
+    # Added for network-fulfillment's own MCP server (network-fulfillment.tf's
+    # `mcp` block on `network_fulfillment_helm_values`, PR#16/#18 upstream).
+    # network-fulfillment is NOT in local.services (see network-fulfillment.tf's
+    # header), but this for-comprehension below only needs the name string --
+    # it never indexes into local.services -- so membership here is safe and
+    # gives it an entry in `local.mcp_endpoint` for potential future
+    # ops-agent consumption, exactly like the other eight.
+    "network-fulfillment",
   ])
 
   mcp_endpoint = {

@@ -389,6 +389,134 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
+# Reports routing (warehouse-console#43 gap closure): a SECOND Kong
+# Ingress/HTTPRoute per analytics-enabled context, pointing at that
+# context's own `<context>-reports` Service (its chart's
+# analytics.reports.service.port -- confirmed 80 across every one of these
+# eight charts' values.yaml, not assumed). Every one of these eight
+# contexts already gets a main-API route above at `svc.path`
+# (`${var.api_path_prefix}/<context>`); this is the analytics counterpart
+# at `${var.api_path_prefix}/<context>/reports`, stripped down to
+# `/reports` -- one path segment longer than the main route's strip --
+# because every reports binary's own router (each repo's
+# reports_handler.go NewReportsRouter, verified across all eight) registers
+# `GET /reports/<report-name>`, not a bare `/<report-name>`.
+#
+# Mechanism picked PER CONTEXT via `contains(local.gateway_api_pilot_services,
+# name)`, the exact same membership check the main-API route above already
+# uses -- not a blanket assumption that all 9 contexts route the same way.
+# Today that resolves the same way for all eight (gateway_api_pilot_services
+# is var.deploy_gateway_api ? every local.services key : none), but a
+# future context added to local.services with a different migration state
+# would still be handled correctly here without a code change.
+#
+# Rendered directly in Terraform (a second raw Ingress/HTTPRoute object),
+# NOT as a new chart template -- this repo's own stated philosophy
+# (services.tf's header: "warehouse-infra contributes only the
+# environment") is exactly why the routing decision belongs here rather
+# than fanning out an 8-repo chart-template change for it.
+# ---------------------------------------------------------------------------
+resource "kubernetes_ingress_v1" "service_reports" {
+  for_each = var.deploy_services ? {
+    for name in local.analytics_services :
+    name => name if !contains(local.gateway_api_pilot_services, name)
+  } : {}
+
+  metadata {
+    name      = "${each.key}-reports"
+    namespace = var.apps_namespace
+    annotations = {
+      "konghq.com/strip-path"       = "true"
+      "kubernetes.io/ingress.class" = "kong"
+    }
+  }
+
+  spec {
+    ingress_class_name = "kong"
+
+    rule {
+      http {
+        path {
+          path      = "${local.services[each.key].path}/reports"
+          path_type = "Prefix"
+          backend {
+            service {
+              # By convention: every one of these charts' reportsFullname
+              # helper renders "<release>-reports"; the release name is the
+              # context name (argocd-apps.tf's kubectl_manifest.application
+              # metadata.name = each.key), the same convention the main-API
+              # route's backend name relies on.
+              name = "${each.key}-reports"
+              port {
+                number = 80
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_namespace.apps]
+}
+
+resource "null_resource" "service_reports_httproute" {
+  for_each = var.deploy_services ? {
+    for name in local.analytics_services :
+    name => name if contains(local.gateway_api_pilot_services, name)
+  } : {}
+
+  depends_on = [null_resource.gateway]
+
+  triggers = {
+    cluster_id     = kind_cluster.warehouse.id
+    kubeconfig     = local.kubeconfig_path
+    name           = "${each.key}-reports"
+    namespace      = var.apps_namespace
+    gateway_name   = local.gateway_name
+    kong_namespace = var.kong_namespace
+    path           = "${local.services[each.key].path}/reports"
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      cat <<'MANIFEST' | kubectl --kubeconfig '${local.kubeconfig_path}' apply -f -
+      apiVersion: gateway.networking.k8s.io/v1
+      kind: HTTPRoute
+      metadata:
+        name: ${each.key}-reports
+        namespace: ${var.apps_namespace}
+      spec:
+        parentRefs:
+          - name: ${local.gateway_name}
+            namespace: ${var.kong_namespace}
+            sectionName: http
+        rules:
+          - matches:
+              - path:
+                  type: PathPrefix
+                  value: ${local.services[each.key].path}/reports
+            filters:
+              - type: URLRewrite
+                urlRewrite:
+                  path:
+                    type: ReplacePrefixMatch
+                    replacePrefixMatch: /reports
+            backendRefs:
+              - name: ${each.key}-reports
+                port: 80
+      MANIFEST
+    EOT
+  }
+
+  # See gateway_api_crds' destroy provisioner comment in gateway-api.tf.
+  provisioner "local-exec" {
+    when    = destroy
+    command = "kubectl --kubeconfig '${self.triggers.kubeconfig}' delete httproute '${self.triggers.name}' -n '${self.triggers.namespace}' --ignore-not-found=true || true"
+  }
+}
+
+# ---------------------------------------------------------------------------
 # Deliberately NO dependency on the observability stack.
 #
 # helm_release.service above depends on the namespace, Postgres, Kong and the
