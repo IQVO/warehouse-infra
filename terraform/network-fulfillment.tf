@@ -318,15 +318,12 @@ locals {
   network_fulfillment_analytics_db_user = "network_fulfillment_analytics"
   network_fulfillment_analytics_db_name = "network_fulfillment_analytics"
 
-  # `***` here, not `${random_password.network_fulfillment_analytics_db.result}`,
-  # deliberately mirrors the exact interpolation style
-  # `local.network_fulfillment_database_url` (OLTP, above) already uses --
-  # this file's own established pattern -- rather than introducing a new
-  # inconsistency between this DSN and every other one in this repo. See
-  # this task's investigation note on locals.tf's `database_urls`/
-  # `analytics_database_urls` for what that literal actually resolves to
-  # and why it is a real, separately-tracked bug, not something fixed here.
-  network_fulfillment_analytics_database_url = "postgres://${local.network_fulfillment_analytics_db_user}:***@${local.postgres_host}:${local.postgres_port}/${local.network_fulfillment_analytics_db_name}?sslmode=disable"
+  # This DSN carries the real generated password via interpolation
+  # (${random_password.network_fulfillment_analytics_db.result}), matching
+  # every other DSN in this repo (locals.tf's database_urls/
+  # analytics_database_urls, and this file's own OLTP
+  # network_fulfillment_database_url above).
+  network_fulfillment_analytics_database_url = "postgres://${local.network_fulfillment_analytics_db_user}:${random_password.network_fulfillment_analytics_db.result}@${local.postgres_host}:${local.postgres_port}/${local.network_fulfillment_analytics_db_name}?sslmode=disable"
 }
 
 resource "kubernetes_secret" "network_fulfillment_analytics_db" {
