@@ -15,19 +15,15 @@
 # fleet-wide (2026-09-09) -- the upstream chart's own credentials.* ReadKey
 # fields and Secret/env wiring were dropped in the same PR, so this
 # Terraform side keeps only the endpoints; no keys are needed to call them.
+#
+# DECIDED 2026-09-26: no local build. This repo's `docker-publish` CI job
+# publishes to GHCR (ghcr.io/claudioed/warehouse-ops-agent), including a
+# `:latest` tag on every merge to main -- pulled straight from there now,
+# same as services.tf.
 # ---------------------------------------------------------------------------
 
 locals {
   ops_agent_chart_path = "${path.module}/../../warehouse-ops-agent/charts/warehouse-ops-agent"
-
-  ops_agent_source_hash = sha256(join("", concat(
-    [for f in sort(fileset("${path.module}/../../warehouse-ops-agent", "**/*.go")) : filesha256("${path.module}/../../warehouse-ops-agent/${f}")],
-    [
-      filesha256("${path.module}/../../warehouse-ops-agent/Dockerfile"),
-      filesha256("${path.module}/../../warehouse-ops-agent/go.mod"),
-      filesha256("${path.module}/../../warehouse-ops-agent/go.sum"),
-    ],
-  )))
 }
 
 # ---------------------------------------------------------------------------
@@ -93,22 +89,6 @@ check "anthropic_api_key_required_for_llm_mode" {
   }
 }
 
-resource "null_resource" "build_and_load_ops_agent" {
-  count = var.deploy_services ? 1 : 0
-
-  depends_on = [kind_cluster.warehouse]
-
-  triggers = {
-    source_hash = local.ops_agent_source_hash
-    image       = "warehouse/warehouse-ops-agent:${local.ops_agent_image_tag}"
-    cluster     = var.cluster_name
-  }
-
-  provisioner "local-exec" {
-    command = "${path.module}/../scripts/build-and-load.sh 'warehouse-ops-agent' '${local.ops_agent_image_tag}' '${var.cluster_name}'"
-  }
-}
-
 # ---------------------------------------------------------------------------
 # Full computed Helm values for warehouse-ops-agent, extracted from the
 # (now-removed) helm_release.ops_agent's `values` argument -- unchanged
@@ -117,17 +97,18 @@ resource "null_resource" "build_and_load_ops_agent" {
 # local.service_full_values pattern for the 8 database-backed services.
 # ---------------------------------------------------------------------------
 locals {
-  # Content-derived, same rationale as services.tf's local.service_image_tags:
-  # ArgoCD's sync only fires on an actual diff, so a fixed tag gives it
-  # nothing to detect on a rebuild.
-  ops_agent_image_tag = "local-${substr(local.ops_agent_source_hash, 0, 12)}"
+  # `:latest` -- this repo's docker-publish CI job pushes it on every merge
+  # to main. See this file's header re: no local build.
+  ops_agent_image_tag = "latest"
 
   ops_agent_helm_values = merge(
     {
       image = {
-        repository = "warehouse/warehouse-ops-agent"
+        repository = "ghcr.io/claudioed/warehouse-ops-agent"
         tag        = local.ops_agent_image_tag
-        pullPolicy = "IfNotPresent"
+        # Always, not IfNotPresent: :latest only tracks the newest published
+        # image if the kubelet re-pulls it every time.
+        pullPolicy = "Always"
       }
 
       service = {
