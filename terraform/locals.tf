@@ -91,16 +91,27 @@ locals {
   }
 
   # sslmode=disable: the Postgres release runs without TLS inside the cluster.
-  # Traffic between service pods and Postgres is not meshed either (Postgres
-  # lives in an un-injected namespace), which is fine for a laptop.
+  # Traffic between service pods and Postgres (or, since pgbouncer.tf, PgBouncer)
+  # is not meshed either (both live in an un-injected namespace), which is fine
+  # for a laptop.
   #
   # This map holds the REAL connection string each service receives (services.tf
   # feeds it into the chart's DATABASE_URL Secret), so it must carry the same
   # generated password the initdb script set on the role. It is exposed only
   # through the `database_urls` output, which is marked sensitive.
+  #
+  # Routed through PgBouncer (pgbouncer.tf), not directly at Postgres, since
+  # the PgBouncer connection-pooling rollout (see
+  # docs/scalability/pgbouncer-connection-pooling.md): the DSN shape, dbname,
+  # user and password are all UNCHANGED from before that rollout -- only the
+  # host:port moved from Postgres's own Service to PgBouncer's, which is
+  # exactly the point (transparent to every service's pgxpool, same DSN
+  # shape, no service-side code change). Analytics DSNs
+  # (analytics_database_urls below) are deliberately NOT routed through
+  # PgBouncer -- see the design doc's "why analytics stays direct" section.
   database_urls = {
     for name, svc in local.services :
-    name => "postgres://${svc.user}:${local.service_passwords[name]}@${local.postgres_host}:${local.postgres_port}/${svc.db}?sslmode=disable"
+    name => "postgres://${svc.user}:${local.service_passwords[name]}@${local.pgbouncer_host}:${local.pgbouncer_port}/${svc.db}?sslmode=disable"
   }
 
   # ---------------------------------------------------------------------

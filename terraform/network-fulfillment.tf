@@ -262,7 +262,14 @@ locals {
   network_fulfillment_db_user = "network_fulfillment"
   network_fulfillment_db_name = "network_fulfillment"
 
-  network_fulfillment_database_url = "postgres://${local.network_fulfillment_db_user}:${random_password.network_fulfillment_db.result}@${local.postgres_host}:${local.postgres_port}/${local.network_fulfillment_db_name}?sslmode=disable"
+  # Routed through PgBouncer (pgbouncer.tf) since the connection-pooling
+  # rollout (see docs/scalability/pgbouncer-connection-pooling.md):
+  # network-fulfillment shares the same Postgres instance as every service
+  # in local.services and is included in pgbouncer.tf's
+  # pgbouncer_oltp_services map, so its OLTP DSN moves to PgBouncer's
+  # host:port exactly like theirs -- same dbname/user/password, only the
+  # host:port changed.
+  network_fulfillment_database_url = "postgres://${local.network_fulfillment_db_user}:${random_password.network_fulfillment_db.result}@${local.pgbouncer_host}:${local.pgbouncer_port}/${local.network_fulfillment_db_name}?sslmode=disable"
 }
 
 resource "kubernetes_secret" "network_fulfillment_db" {

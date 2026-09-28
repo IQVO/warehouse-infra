@@ -264,6 +264,25 @@ variable "postgresql_image_tag" {
   default     = "17.5.0-debian-12-r3"
 }
 
+variable "pgbouncer_image_tag" {
+  description = <<-EOT
+    PgBouncer image tag under docker.io/bitnamilegacy (pgbouncer.tf).
+
+    No Helm chart is used for PgBouncer -- unlike postgresql/kafka above,
+    `oci://registry-1.docker.io/bitnamicharts/pgbouncer` returns 401
+    Unauthorized (verified directly: Bitnami's free OCI chart catalog does
+    not include pgbouncer). The `bitnamilegacy/pgbouncer` IMAGE itself is
+    still pullable, so pgbouncer.tf hand-rolls the Deployment/Service/Secret
+    directly in Terraform (the same pattern frontends.tf already uses for
+    the chart-less Nginx web gateway) and only the image comes from
+    bitnamilegacy. 1.24.1-debian-12-r10 is the newest tag published there as
+    of this pinning (verified with `docker manifest inspect
+    bitnamilegacy/pgbouncer:1.24.1-debian-12-r10`).
+  EOT
+  type        = string
+  default     = "1.24.1-debian-12-r10"
+}
+
 variable "istio_version" {
   description = "Istio chart version for istio/base and istio/istiod (must match each other)."
   type        = string

@@ -1,0 +1,83 @@
+; ---------------------------------------------------------------------------
+; Rendered by Terraform (pgbouncer.tf) from this template and mounted into
+; the PgBouncer pod at /bitnami/pgbouncer/conf/pgbouncer.ini (the Bitnami
+; image's MOUNTED_CONF_DIR). The entrypoint copies it verbatim into
+; /opt/bitnami/pgbouncer/conf/pgbouncer.ini and skips its own
+; auto-generation logic entirely once it sees an externally-mounted file --
+; every setting PgBouncer actually runs with comes from here, not from any
+; PGBOUNCER_* env var on the Deployment.
+;
+; One [databases] entry per service's OLTP database only -- analytics
+; databases are deliberately NOT listed here and stay routed directly at
+; Postgres (see docs/scalability/pgbouncer-connection-pooling.md for the
+; full reasoning). The alias on the left of each entry is intentionally
+; IDENTICAL to the real database name, so a service's existing DATABASE_URL
+; DSN shape (postgres://<user>:<pass>@<host>:<port>/<dbname>?sslmode=disable)
+; needs only its host:port changed -- the dbname, user and password stay
+; byte-identical.
+; ---------------------------------------------------------------------------
+
+[databases]
+%{ for name, svc in services ~}
+${svc.db} = host=${postgres_host} port=${postgres_port} dbname=${svc.db} pool_size=${oltp_pool_size}
+%{ endfor ~}
+
+[pgbouncer]
+listen_addr = 0.0.0.0
+listen_port = ${pgbouncer_port}
+auth_type = scram-sha-256
+auth_file = /opt/bitnami/pgbouncer/conf/userlist.txt
+
+; Transaction pooling: a server connection is handed to a client only for
+; the duration of one transaction, then returned to the pool immediately.
+; This is what lets a small, fixed number of real Postgres connections
+; (pool_size per database above) serve an arbitrary/growing number of
+; client-side connections (every service's own pgxpool, at whatever
+; MaxConns x replica count it is tuned to) -- see the ADR for the session-
+; level features this breaks and why none of this fleet's 10 services rely
+; on them.
+pool_mode = transaction
+
+; Real Postgres server connections are the scarce resource this whole
+; deployment exists to bound (max_connections=100, unmodified Bitnami
+; default, shared by every service -- see postgres.tf). Client-side
+; connections to PgBouncer itself are cheap (~2kB each), so this is set far
+; above the server-side ceiling on purpose: the number of pgxpool
+; connections across every service replica should never be the limiting
+; factor, only the per-database pool_size values above are.
+max_client_conn = 1000
+default_pool_size = ${oltp_pool_size}
+
+; No burst allowance above pool_size. A reserve pool would let a spike on
+; one database quietly borrow headroom this design deliberately keeps
+; unused -- see the ADR's connection-budget accounting for the exact
+; aggregate-vs-max_connections math this depends on staying a hard cap, not
+; a soft one.
+min_pool_size = 0
+reserve_pool_size = 0
+
+; lib/pq (github.com/lib/pq, used transitively by golang-migrate's postgres
+; driver for schema migrations -- NOT by pgx/pgxpool, which every service's
+; application code itself uses) sends `extra_float_digits` as a libpq
+; startup parameter. PgBouncer rejects any startup parameter it does not
+; recognize with "unsupported startup parameter", which broke every
+; service's own migration step against PgBouncer until this was added
+; (verified directly: order-management failed exactly this way on its
+; first post-PgBouncer rollout restart). This does not weaken anything --
+; it only tells PgBouncer to silently accept and forward this one
+; parameter rather than reject the connection over it.
+ignore_startup_parameters = extra_float_digits
+
+; Postgres' own default (pointless overhead in transaction-pooling mode
+; where every connection release already happens at a transaction
+; boundary), stated explicitly for auditability rather than left implicit.
+server_reset_query = DISCARD ALL
+
+; Every user/database pair above is allowed to run the admin console
+; (SHOW POOLS / SHOW SERVERS / SHOW STATS) against PgBouncer's built-in
+; `pgbouncer` pseudo-database -- this is what the Deployment's own
+; readiness/startup probes query, and what an operator uses to inspect
+; live pool state (`psql -h <pod> -p 6432 -U postgres pgbouncer -c "SHOW
+; POOLS"`).
+admin_users = ${admin_user}
+stats_users = ${admin_user}
