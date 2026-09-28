@@ -114,6 +114,38 @@ locals {
     name => "postgres://${svc.user}:${local.service_passwords[name]}@${local.pgbouncer_host}:${local.pgbouncer_port}/${svc.db}?sslmode=disable"
   }
 
+  # DIRECT (non-pooled, session-mode) Postgres DSN for the SAME 9 OLTP
+  # databases as database_urls above -- same dbname/user/password, only the
+  # host:port differs (Postgres's own Service, not PgBouncer's). Added to
+  # fix a fleet-wide production-blocking bug found during Phase 4 load-test
+  # validation (see docs/scalability/pgbouncer-connection-pooling.md's
+  # follow-up section and order-management's own ADR documenting this):
+  # every OLTP service's golang-migrate postgres driver takes a
+  # session-scoped `SELECT pg_advisory_lock($1)` to serialize concurrent
+  # migration runs at boot, and PgBouncer's `transaction`-pooling mode
+  # (pgbouncer.tf, deliberately left unchanged by this fix -- pool_mode
+  # stays "transaction" for all real app traffic) does not support
+  # session-scoped state: each statement within one logical client session
+  # can land on a DIFFERENT real backend connection, so the advisory lock
+  # never behaves as a real mutex and losing replicas crash-loop with
+  # `pq: unnamed prepared statement does not exist` / `pq: canceling
+  # statement due to statement timeout`. This is the exact same "migrations
+  # need a direct/session connection, app traffic goes through the pooler"
+  # split this repo already uses for analytics_database_urls below (which
+  # were never routed through PgBouncer at all, for the unrelated reason of
+  # low QPS -- this local is the OLTP-side counterpart, added specifically
+  # for the golang-migrate boot step, NOT a general-purpose bypass of
+  # PgBouncer for OLTP runtime traffic).
+  #
+  # Consumed by postgres.tf's kubernetes_secret.service_db as a SECOND key
+  # (MIGRATIONS_DATABASE_URL) alongside the existing DATABASE_URL key --
+  # DATABASE_URL itself is completely unchanged (still PgBouncer), so this
+  # is purely additive and does not alter runtime traffic behavior at all.
+  direct_database_urls = {
+    for name, svc in local.services :
+    name => "postgres://${svc.user}:${local.service_passwords[name]}@${local.postgres_host}:${local.postgres_port}/${svc.db}?sslmode=disable"
+  }
+
   # ---------------------------------------------------------------------
   # Analytics data-mesh (ADR-0010 in each service repo): the "report part"
   # (cmd/<svc>-projector, cmd/<svc>-reports) alongside the seven services

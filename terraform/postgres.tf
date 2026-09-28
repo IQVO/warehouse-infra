@@ -74,6 +74,16 @@ resource "kubernetes_secret" "service_db" {
 
   data = {
     DATABASE_URL = local.database_urls[each.key]
+    # Direct (non-pooled, session-mode) Postgres DSN, used ONLY by each
+    # service's golang-migrate startup step -- see locals.tf's
+    # direct_database_urls comment for the full "why" (session-scoped
+    # pg_advisory_lock vs PgBouncer transaction-pooling incompatibility).
+    # Purely additive: DATABASE_URL above is completely unchanged (still
+    # PgBouncer), so this does not alter runtime traffic behavior at all.
+    # A service that doesn't yet read this key (the other 8 of 9 OLTP
+    # services, pending their own follow-up PR) simply ignores it -- an
+    # unconsumed Secret key is harmless.
+    MIGRATIONS_DATABASE_URL = local.direct_database_urls[each.key]
   }
 
   depends_on = [kubernetes_namespace.apps]
