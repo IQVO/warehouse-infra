@@ -270,6 +270,14 @@ locals {
   # host:port exactly like theirs -- same dbname/user/password, only the
   # host:port changed.
   network_fulfillment_database_url = "postgres://${local.network_fulfillment_db_user}:${random_password.network_fulfillment_db.result}@${local.pgbouncer_host}:${local.pgbouncer_port}/${local.network_fulfillment_db_name}?sslmode=disable"
+
+  # Direct (non-pooled, session-mode) counterpart to
+  # network_fulfillment_database_url above, for the migration-runner-only
+  # fix described at length in locals.tf's direct_database_urls comment
+  # (session-scoped pg_advisory_lock vs PgBouncer transaction-pooling).
+  # Same dbname/user/password; only the host:port differs (Postgres's own
+  # Service, not PgBouncer's).
+  network_fulfillment_migrations_database_url = "postgres://${local.network_fulfillment_db_user}:${random_password.network_fulfillment_db.result}@${local.postgres_host}:${local.postgres_port}/${local.network_fulfillment_db_name}?sslmode=disable"
 }
 
 resource "kubernetes_secret" "network_fulfillment_db" {
@@ -281,7 +289,8 @@ resource "kubernetes_secret" "network_fulfillment_db" {
   }
 
   data = {
-    DATABASE_URL = local.network_fulfillment_database_url
+    DATABASE_URL            = local.network_fulfillment_database_url
+    MIGRATIONS_DATABASE_URL = local.network_fulfillment_migrations_database_url
   }
 
   depends_on = [kubernetes_namespace.apps]
