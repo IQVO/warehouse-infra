@@ -49,6 +49,11 @@ resource "helm_release" "kafka" {
       replicaCount = 1
       persistence = {
         enabled = var.kafka_persistence_enabled
+        # Chart default is 8Gi; this single-broker/no-replication topology
+        # only ever holds a handful of demo/e2e topics with short retention,
+        # so 3Gi (same rationale/size as postgres.tf's PVC) is plenty for a
+        # laptop kind cluster and avoids reserving 8Gi of host disk per PVC.
+        size = "3Gi"
       }
       resources = {
         requests = { cpu = "250m", memory = "512Mi" }
@@ -88,10 +93,28 @@ resource "helm_release" "kafka" {
     # only inbound data path is a Kafka consumer (e.g. labor-performance).
     # Force every replication factor to 1 to match the single-broker
     # topology this module actually deploys.
+    #
+    # num.partitions: every business topic is auto-created (each service's
+    # writer sets AllowAutoTopicCreation: true; this repo has no
+    # kafka_topic/Mongey-provider resource and no required_providers entry
+    # for one) so the broker's own num.partitions default is the ONLY
+    # source of truth for a freshly created topic's partition count.
+    # Kafka's own default is 1, which is what silently produced the
+    # "every topic has 1 partition" state this override now fixes going
+    # forward (scalability plan §3.2). The 17 topics that already existed
+    # were bumped live via `kafka-topics.sh --alter --partitions 8`
+    # instead of through Terraform: partition count can only be increased,
+    # never decreased, and Kafka has no "resize" apply path through this
+    # chart (bumping this value alone does not touch an existing topic,
+    # only ones auto-created after this change) — so there is nothing for
+    # `terraform apply` to reconcile here, and setting num.partitions to
+    # match keeps a future auto-created topic (or one recreated after a
+    # deliberate delete) from silently reverting to 1.
     overrideConfiguration = {
       "offsets.topic.replication.factor"         = "1"
       "transaction.state.log.replication.factor" = "1"
       "transaction.state.log.min.isr"            = "1"
+      "num.partitions"                           = "8"
     }
 
     # The EXTERNAL listener + its per-pod NodePort Service. This is what

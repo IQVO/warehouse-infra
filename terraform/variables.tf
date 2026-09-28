@@ -264,6 +264,25 @@ variable "postgresql_image_tag" {
   default     = "17.5.0-debian-12-r3"
 }
 
+variable "pgbouncer_image_tag" {
+  description = <<-EOT
+    PgBouncer image tag under docker.io/bitnamilegacy (pgbouncer.tf).
+
+    No Helm chart is used for PgBouncer -- unlike postgresql/kafka above,
+    `oci://registry-1.docker.io/bitnamicharts/pgbouncer` returns 401
+    Unauthorized (verified directly: Bitnami's free OCI chart catalog does
+    not include pgbouncer). The `bitnamilegacy/pgbouncer` IMAGE itself is
+    still pullable, so pgbouncer.tf hand-rolls the Deployment/Service/Secret
+    directly in Terraform (the same pattern frontends.tf already uses for
+    the chart-less Nginx web gateway) and only the image comes from
+    bitnamilegacy. 1.24.1-debian-12-r10 is the newest tag published there as
+    of this pinning (verified with `docker manifest inspect
+    bitnamilegacy/pgbouncer:1.24.1-debian-12-r10`).
+  EOT
+  type        = string
+  default     = "1.24.1-debian-12-r10"
+}
+
 variable "istio_version" {
   description = "Istio chart version for istio/base and istio/istiod (must match each other)."
   type        = string
@@ -292,23 +311,62 @@ variable "postgres_admin_password" {
   sensitive   = true
 }
 
+variable "anthropic_api_key" {
+  description = <<-EOT
+    Real Anthropic API key for warehouse-ops-agent's ADR-0004 model-backed
+    Reasoner (ANTHROPIC_API_KEY). NEVER given a real default here -- the
+    empty default is intentional so `terraform validate`/`plan` succeed with
+    no secret present. Supply the real value out-of-band, never by editing
+    this file or any other tracked file:
+
+      export TF_VAR_anthropic_api_key="sk-ant-..."   # before `terraform apply`
+
+    or copy `terraform/terraform.tfvars.example` to a gitignored
+    `terraform/terraform.tfvars` (see `.gitignore`'s `terraform/*.tfvars`)
+    and fill in the real value there.
+
+    warehouse-ops-agent's own composition root (cmd/agent/reasoner.go,
+    ADR-0004) already fails loudly at pod startup with
+    `LLM_MODE=shadow requires ANTHROPIC_API_KEY` whenever LLM_MODE is not
+    "off" and this key is empty -- see the `check` block in ops-agent.tf,
+    which surfaces the same condition as a loud `terraform plan`/`apply`
+    warning instead of leaving it to be discovered only via a CrashLoopBackOff.
+  EOT
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "postgres_persistence_enabled" {
   description = <<-EOT
     Whether the PostgreSQL primary gets a PersistentVolumeClaim.
 
-    Defaults to false (emptyDir). The four logical databases are created by
-    `primary.initdb.scripts`, and initdb scripts only run when the data
-    directory is empty — with persistence on, a pod restart would reuse the old
-    volume and silently skip them. Ephemeral storage keeps `terraform apply`
-    reproducible from any state, which is what a local cluster wants.
+    Defaults to true (PVC) as of 2026-09-26: the user decided data durability
+    across pod/node restarts is now preferred over the reproducible-from-any-
+    state disposability this flag used to default to. The tradeoff this flips
+    is real and still applies -- `primary.initdb.scripts` only runs when the
+    data directory is empty, so once a volume exists, a NEW logical database
+    added to `local.services`/`local.analytics_services` will NOT be created
+    by initdb on a pod restart; see the "Adding a service to analytics_services
+    ... initdb never re-runs" pitfall in this repo's operational notes and
+    apply the manual CREATE ROLE/DATABASE workaround it documents. Set
+    `-var postgres_persistence_enabled=false` to go back to the old
+    reproducible-emptyDir behavior (e.g. for a disposable CI/throwaway
+    cluster).
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
 
 # ---------------------------------------------------------------------------
 # Application images
 # ---------------------------------------------------------------------------
+
+variable "image_tag" {
+  description = "Tag applied to the four locally-built service images (warehouse/<service>:<tag>)."
+  type        = string
+  default     = "local"
+}
 
 variable "deploy_services" {
   description = "Set false to stand up only the platform (cluster, Postgres, Istio, Kong) without building/deploying the four services."
@@ -350,15 +408,21 @@ variable "kafka_persistence_enabled" {
   description = <<-EOT
     Whether the Kafka controller/broker gets a PersistentVolumeClaim.
 
-    Defaults to false (emptyDir), matching postgres_persistence_enabled's
-    reasoning: a laptop kind cluster is disposable, and every topic here is
-    either integration events (replayable from the OLTP source of truth) or
-    an analytics fan-out (rebuildable by a projector re-consuming from
-    FirstOffset) — nothing stored in Kafka itself is the sole copy of
-    anything.
+    Defaults to true (PVC) as of 2026-09-26, matching
+    postgres_persistence_enabled's flip: the user decided durability across
+    pod/node restarts is now the preferred default for this cluster. The old
+    reasoning for the false default is still worth recording, because it is
+    why this was safe to flip with no other changes needed: every topic here
+    is either integration events (replayable from the OLTP source of truth)
+    or an analytics fan-out (rebuildable by a projector re-consuming from
+    FirstOffset), so nothing stored in Kafka itself is the sole copy of
+    anything -- durability here is a convenience (avoid a full replay on
+    every restart), not a correctness requirement. Set
+    `-var kafka_persistence_enabled=false` for a disposable CI/throwaway
+    cluster.
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
 
 # ---------------------------------------------------------------------------
@@ -509,6 +573,39 @@ variable "grafana_admin_password" {
   type        = string
   default     = "admin"
   sensitive   = true
+}
+
+# ---------------------------------------------------------------------------
+# metrics-server — resource-metrics API (metrics.k8s.io) that every service
+# chart's HPA template needs. See metrics-server.tf for why kind specifically
+# needs --kubelet-insecure-tls.
+# ---------------------------------------------------------------------------
+
+variable "deploy_metrics_server" {
+  description = <<-EOT
+    Whether to install metrics-server (metrics-server.tf). Every service
+    chart in this fleet already ships an HPA template wired to CPU/memory
+    utilization, but with no metrics.k8s.io API server in the cluster those
+    HPAs sit permanently at `<unknown>`/`FailedGetResourceMetrics` and never
+    scale -- this is the component that makes them actually work. Defaults
+    to true, following this repo's deploy_* flag convention (added
+    2026-09-26 alongside turning persistence on by default).
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "metrics_server_chart_version" {
+  description = <<-EOT
+    kubernetes-sigs/metrics-server chart version, from the upstream repo
+    https://kubernetes-sigs.github.io/metrics-server/ (the project's own
+    chart repo, not a Bitnami OCI mirror -- chosen to mirror this fleet's
+    existing pattern of pulling platform charts straight from each
+    project's own canonical repo, e.g. istio.tf/kong.tf/observability.tf,
+    rather than a third-party packaging).
+  EOT
+  type        = string
+  default     = "3.14.0"
 }
 
 # ---------------------------------------------------------------------------

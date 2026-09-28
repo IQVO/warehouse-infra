@@ -47,42 +47,37 @@ symlinked alongside the worktree — see the pitfall below.
 
 ## Non-negotiables (read before touching Terraform or a chart)
 
-1. **No local image builds anywhere in the BACKEND deploy path (decided
-   2026-09-26).** Every backend service's image is pulled straight from
-   the registry its own repo's `docker-publish` CI job already publishes
-   to on merge to main — `order-management`, `warehouse-ops-agent` and
-   `network-fulfillment` from GHCR (`ghcr.io/claudioed/<repo>`), the other
-   six services from Docker Hub (`claudioed/<repo>`, no registry host).
-   `image.tag = "latest"` with `pullPolicy: Always` is how this tracks the
-   newest published image automatically — `IfNotPresent` would cache
-   whatever `:latest` first resolved to and never re-pull. There is no
-   `null_resource.build_and_load` / `scripts/build-and-load.sh` for
-   backend services any more; don't reintroduce one. This is scoped to
-   backends only — frontend MFE remotes and `warehouse-console` still
-   build and side-load locally (`scripts/build-and-load-frontend.sh`,
-   content-addressed `local-<hash>` tags) until a separate follow-up. If a
-   future change proposes building a backend image locally again, flag it
-   back to the user rather than assuming it's acceptable.
+1. **`terraform apply` does NOT pick up chart-template changes.**
+   `local.services`' `service_source_hash` covers each service's Go source
+   + migrations, NOT its `charts/<svc>/templates/*.yaml`. Editing a chart
+   template changes nothing Terraform can see — `apply` reports `0
+   changed` and the Helm release keeps its OLD render. Force it with
+   `terraform taint 'helm_release.service["<svc>"]'` then re-apply (destroy
+   +recreate, which is fine for this local cluster).
 
-2. **`terraform apply` does NOT pick up chart-template changes.** Editing
-   a `charts/<svc>/templates/*.yaml` file changes nothing Terraform can
-   see — since there is no `helm_release.service` resource here any more
-   either (ArgoCD owns the release, see `argocd-apps.tf`), the actual fix
-   is to let ArgoCD's own diff/sync pick up the chart change (it watches
-   the chart's Git ref directly), or force it with `argocd app sync
-   <svc> --force` / delete+let-ArgoCD-recreate.
+2. **Terraform builds images from the LOCAL sibling checkout, not
+   `origin/develop`.** Merging a PR on GitHub changes nothing `apply`
+   builds until `~/warehouse-systems/<repo>` itself is pulled to that
+   commit. Always `git -C ~/warehouse-systems/<repo> pull --ff-only origin
+   develop` before applying, and verify the new code is actually present
+   in the working tree before assuming a fresh apply will pick it up.
 
-3. **Frontend images are still content-addressed** (`local-<hash>`
-   spanning the remote AND `warehouse-ui-kit`) — that pattern is UNCHANGED
-   and still required for frontends specifically: a fixed tag would leave
-   a rebuilt frontend's pod spec byte-identical (Kubernetes sees no reason
-   to roll, and `IfNotPresent` stops the kubelet re-pulling). Never
-   "simplify" the frontend scheme back to a fixed tag. This is a DIFFERENT
-   mechanism from the backend `:latest`/`Always` scheme in item 1 above —
-   don't conflate the two or try to unify them without the user deciding
-   to extend the no-local-build rule to frontends too.
+3. **A rebuilt image alone does not roll a running Deployment.** Every
+   service chart pins `image.tag: "local"` with `pullPolicy: IfNotPresent`
+   — Kubernetes sees a byte-identical pod spec and does nothing, even
+   after Terraform rebuilds and reloads a new image into kind. After any
+   apply whose only change is a rebuilt image, manually `kubectl rollout
+   restart deployment/<name> -n warehouse-systems` for every affected
+   service, then confirm with `kubectl rollout status` — never trust
+   "apply succeeded" + "pod is Running" as proof the new code is live;
+   check the binary's mtime inside the container if in doubt.
 
-4. **Adding a service to `analytics_services` or `mcp_services` on a
+4. **Frontend images are content-addressed** (`local-<hash>` spanning the
+   remote AND `warehouse-ui-kit`). Never "simplify" them back to a fixed
+   `local` tag — that reintroduces the documented defect where a rebuilt
+   image never rolls.
+
+5. **Adding a service to `analytics_services` or `mcp_services` on a
    Postgres that already has data does nothing on its own.** Bitnami's
    Postgres chart only runs `primary.initdb.scripts` once, against an
    EMPTY data directory. A new entry renders correctly into
@@ -96,7 +91,7 @@ symlinked alongside the worktree — see the pitfall below.
    re-applying — doing the SQL fix before the rollback leaves the release
    stuck `pending-upgrade`.
 
-5. **`terraform validate`: keep BOTH branches of a ternary the same
+6. **`terraform validate`: keep BOTH branches of a ternary the same
    key-set**, even when one side's key is a structural no-op
    (`enabled = false`, `extraEnv = []`). An inconsistent key set between a
    ternary's true/false object results fails with "Inconsistent
@@ -104,21 +99,22 @@ symlinked alongside the worktree — see the pitfall below.
    with an inert value to the other branch, never to make the branches
    structurally different.
 
-6. **`services.tf`'s computed `extraEnv` OVERRIDES `helm-values/*.yaml`.**
-   The computed `service_helm_values`/`service_full_values` merge wins over
-   the static values file. Per-service env with no dedicated chart value
-   must go in `local.sync_edge_env` (terraform/locals.tf) — an `extraEnv`
-   list written directly into a `helm-values/<svc>.yaml` file is silently
-   dropped and `terraform plan` shows no change at all.
+7. **`services.tf`'s computed `extraEnv` OVERRIDES `helm-values/*.yaml`.**
+   `helm_release.service` merges the static values file with a computed
+   `yamlencode(merge(...))` layer that wins. Per-service env with no
+   dedicated chart value must go in `local.sync_edge_env`
+   (terraform/locals.tf) — an `extraEnv` list written directly into a
+   `helm-values/<svc>.yaml` file is silently dropped and `terraform plan`
+   shows no change at all.
 
-7. **Every `*_MODE` env var defaults to `permissive` (no network) if
+8. **Every `*_MODE` env var defaults to `permissive` (no network) if
    unset.** A new sync edge between two services needs its `MODE` +
    `BASE_URL` wired in `local.sync_edge_env` in the SAME PR that adds the
    integration, or it silently runs permissive in the cluster. Grep the
    pod's startup log for `mode":"http"` after apply to confirm the mode a
    binary actually chose.
 
-8. **Every chart's `selectorLabels` helper must scope by
+9. **Every chart's `selectorLabels` helper must scope by
    `app.kubernetes.io/component`, not just name+instance.** Those two
    labels are identical across a service's OLTP/MCP/projector/reports
    pods, so an OLTP `Service` without a component selector matches ALL of
@@ -131,15 +127,15 @@ symlinked alongside the worktree — see the pitfall below.
    deliberately breaking a selector and watching the script report `Service
    <ctx> selects N Deployments`.
 
-9. **`terraform destroy` leaves ~60 phantom resources in Terraform state.**
-   The API server dies before Helm releases are removed, the safety net
-   deletes the kind cluster, and every release stays in state pointing at
-   nothing — the next `apply` then fails trying to upgrade releases that
-   don't exist. Fix: back up `terraform.tfstate`, then `terraform state
-   list | while read r; do terraform state rm "$r"; done` before
-   re-applying. Confirm `kind get clusters` shows none first.
+10. **`terraform destroy` leaves ~60 phantom resources in Terraform state.**
+    The API server dies before Helm releases are removed, the safety net
+    deletes the kind cluster, and every release stays in state pointing at
+    nothing — the next `apply` then fails trying to upgrade releases that
+    don't exist. Fix: back up `terraform.tfstate`, then `terraform state
+    list | while read r; do terraform state rm "$r"; done` before
+    re-applying. Confirm `kind get clusters` shows none first.
 
-10. **Deleting a tracked file: use `git rm -r <path>`, never a bare `rm
+11. **Deleting a tracked file: use `git rm -r <path>`, never a bare `rm
     -rf`.** The terminal approval guard here permanently blocks destructive
     `rm -rf` on tracked paths; `git rm -r` stages the deletion cleanly and
     is never blocked.
@@ -164,11 +160,10 @@ when it is the policy working correctly.
 ## Worktree gotcha
 
 `terraform validate`/`plan` run from `.worktrees/<name>/` fails with
-`filesha256(...): no such file` because the frontend content-hash locals
-(`uikit_source_hash`, `frontend_source_hash`) assume sibling repos exist
-next to the checkout. Symlink every referenced sibling repo into the
-worktree (`ln -s ~/warehouse-systems/<repo> <repo>`), or run Terraform from
-the real checkout instead of a worktree.
+`filesha256(...): no such file` because `service_source_hash` paths assume
+sibling repos exist next to the checkout. Symlink every referenced sibling
+repo into the worktree (`ln -s ~/warehouse-systems/<repo> <repo>`), or run
+Terraform from the real checkout instead of a worktree.
 
 ## Key commands
 

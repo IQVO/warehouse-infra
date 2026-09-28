@@ -132,6 +132,13 @@ resource "helm_release" "postgresql" {
     primary = {
       persistence = {
         enabled = var.postgres_persistence_enabled
+        # The chart's own default is 8Gi, sized for a real deployment. 3Gi is
+        # plenty for four small logical databases on a laptop kind cluster
+        # (each holds a handful of MB of demo/e2e data) and keeps the PVC
+        # request small on a host that likely has other kind clusters and
+        # Docker volumes competing for disk. Bump this if you seed
+        # significantly more data than the README's examples produce.
+        size = "3Gi"
       }
 
       initdb = {
@@ -159,10 +166,30 @@ resource "helm_release" "postgresql" {
                   }
                 },
               )
-              analytics_services = {
-                for name in local.analytics_services :
-                name => merge(local.analytics_db_info[name], { password = local.analytics_service_passwords[name] })
-              }
+              analytics_services = merge(
+                {
+                  for name in local.analytics_services :
+                  name => merge(local.analytics_db_info[name], { password = local.analytics_service_passwords[name] })
+                },
+                {
+                  # network-fulfillment is not in local.analytics_services
+                  # (see network-fulfillment.tf's header -- it is not in
+                  # local.services at all, and analytics_db_info's
+                  # for-comprehension does local.services[name].db/.user,
+                  # which would KeyError for a name not in local.services)
+                  # but owns an analytics database on the same
+                  # least-privilege terms as the eight above, so it is
+                  # merged in here rather than given a second loop in the
+                  # template -- exactly the same pattern the `services` map
+                  # two blocks above already uses for this same context's
+                  # OLTP database.
+                  "network-fulfillment" = {
+                    db       = local.network_fulfillment_analytics_db_name
+                    user     = local.network_fulfillment_analytics_db_user
+                    password = random_password.network_fulfillment_analytics_db.result
+                  }
+                },
+              )
             }
           )
         }

@@ -515,11 +515,16 @@ into `local.service_full_values` (services.tf) before Task 5's original
 `config`/`analytics` need an explicit nested merge (both layers set
 different sub-keys under those two).
 
-**NOT YET DONE, pending explicit go-ahead:** fan-out to the remaining 7
-services and Task 7's `helm_release.service` state removal. Both are live-
-cluster, harder-to-reverse operations touching every running pod in
-`warehouse-systems` — proceeding per the user's standing convention of
-explicit sign-off before irreversible/high-blast-radius infra steps.
+**DONE (2026-09-12):** fan-out to the remaining 7 services and Task 7's
+`helm_release.service` state removal both shipped in
+`feat(infra): adopt ArgoCD for GitOps deployment of all 8 service charts (#25)`
+(commit `e138aee`). `terraform/argocd-apps.tf`'s `kubectl_manifest.application`
+now runs `for_each = var.deploy_services ? local.services : {}`, covering the
+full `local.services` set rather than just the "order-management" pilot, and
+`terraform/services.tf` (~line 72) carries a comment confirming
+`helm_release.service` was removed via `terraform state rm` on 2026-09-12
+after verifying every Application was already Synced/Healthy — never a `helm
+uninstall`; the running release was simply handed off to ArgoCD.
 
 ---
 
@@ -805,5 +810,11 @@ not an oversight.
 2. Is `local-<source-hash>` image tagging acceptable for now, or is a local
    registry + Image Updater wanted as part of this same rollout rather than
    a later phase?
-3. Confirm scope: services only for now (Phase 1–5, 7), or also do Phase 6
-   (ops-agent + console) in the same rollout rather than as a follow-up?
+3. **RESOLVED (2026-09-12):** scope was confirmed to include Phase 6.
+   `terraform/argocd-apps.tf` now has explicit `kubectl_manifest.ops_agent_application`
+   and `kubectl_manifest.console_application` resources alongside the
+   per-service `kubectl_manifest.application` for_each, shipped in
+   `feat(infra): extend ArgoCD GitOps to warehouse-ops-agent and warehouse-console (#26)`.
+   ops-agent and console are gated by their own `var.deploy_services` /
+   `var.deploy_frontends` flags respectively, so this is done, not just
+   planned.

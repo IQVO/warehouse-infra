@@ -118,6 +118,15 @@ output "observability_urls" {
   } : {}
 }
 
+# ---------------------------------------------------------------------------
+# Platform components
+# ---------------------------------------------------------------------------
+
+output "metrics_server_enabled" {
+  description = "Whether metrics-server (metrics.k8s.io, required for every service chart's HPA to report real utilization instead of <unknown>) is deployed. See metrics-server.tf."
+  value       = var.deploy_metrics_server
+}
+
 output "kiali_url" {
   description = "Fixed localhost URL for the Kiali service-mesh UI, reachable via kind's extraPortMappings (main.tf). Empty when deploy_kiali or deploy_observability is false."
   value       = var.deploy_kiali && var.deploy_observability ? "http://localhost:${var.kiali_host_port}" : ""

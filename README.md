@@ -373,18 +373,56 @@ kubectl -n warehouse-data exec -it postgres-postgresql-0 -- \
   env PGPASSWORD=postgres psql -U postgres -c '\l'
 ```
 
-**Storage is ephemeral by design.** `postgres_persistence_enabled` defaults to
-`false`. initdb scripts only run against an empty data directory, so a
-PersistentVolumeClaim would cause a restarted pod to silently skip database
-creation. An emptyDir keeps `terraform apply` reproducible from any state,
-which is what a laptop cluster wants. Set
-`-var postgres_persistence_enabled=true` if you need data to survive a pod
-restart, and accept that you then own the migration story.
+**Storage now persists across pod restarts by default.**
+`postgres_persistence_enabled` defaults to `true` (as of 2026-09-26 — data
+durability was decided to matter more here than the old
+reproducible-from-any-state disposability). One real consequence: initdb
+scripts only run against an EMPTY data directory, so once a PVC exists, a
+NEW logical database added to `local.services`/`local.analytics_services`
+will NOT be created automatically on a pod restart — you have to run the
+manual `CREATE ROLE`/`CREATE DATABASE` steps documented for that case (see
+this repo's operational notes / the fleet skill's "initdb never re-runs"
+pitfall). Set `-var postgres_persistence_enabled=false` to go back to the
+old ephemeral emptyDir behavior, e.g. for a disposable CI/throwaway
+cluster.
 
 Credentials are deterministic dev values (`postgres` / `<db name>`), not
 `random_password`, so the commands in this README are copy-pasteable and a
 re-apply cannot rotate a credential out from under a running pod. **Local dev
 only.**
+
+---
+
+## Secrets you must supply yourself: ANTHROPIC_API_KEY
+
+warehouse-ops-agent's ADR-0004 model-backed Reasoner is wired real in this
+cluster (`LLM_MODE=shadow` — it calls the real Anthropic API alongside the
+deterministic policy, logs agreement, but never acts on the model's output
+alone). Terraform creates the Kubernetes Secret
+(`kubernetes_secret.ops_agent_anthropic` in `terraform/ops-agent.tf`) but
+**never generates or hardcodes the API key itself** — `var.anthropic_api_key`
+defaults to `""`.
+
+Supply the real value one of two ways, **never** by editing a tracked file:
+
+```bash
+export TF_VAR_anthropic_api_key="sk-ant-..."
+terraform apply
+```
+
+or copy `terraform/terraform.tfvars.example` to a gitignored
+`terraform/terraform.tfvars` (already covered by `.gitignore`'s
+`terraform/*.tfvars`) and fill in the real value there.
+
+Leaving the key empty is fine for `terraform validate`/`plan` (the default
+`""` is deliberately valid input, checked by CI). It is **not** fine for a
+real `apply` with `LLM_MODE=shadow`: warehouse-ops-agent's own composition
+root (`cmd/agent/reasoner.go`, ADR-0004) fails loudly at pod startup —
+`LLM_MODE=shadow requires ANTHROPIC_API_KEY` — rather than silently running
+without the model it was told to use. A `check` block in
+`terraform/ops-agent.tf` surfaces the same condition as a `terraform
+plan`/`apply` warning so you don't have to wait for the crash loop to learn
+it.
 
 ---
 
@@ -479,9 +517,8 @@ gets its own single, explicitly-named `kubectl_manifest` resource instead;
 see `ops-agent.tf`'s `local.ops_agent_helm_values` and `frontends.tf`'s
 `local.console_helm_values`.) A `terraform apply` after adding an entry:
 
-1. Pulls the new service's already-published image from its own repo's
-   registry (no local build; `image.repository`/`image.tag` computed in
-   `services.tf`'s `local.service_helm_values`).
+1. Builds and side-loads the new service's image
+   (`null_resource.build_and_load`, unchanged from before).
 2. Creates its `<service>-db` Secret directly
    (`kubernetes_secret.service_db` in `postgres.tf`) — no chart ever sees a
    plaintext `DATABASE_URL` value through an ArgoCD `Application`'s
@@ -518,18 +555,39 @@ Local admin access is `kubectl port-forward` only, same as above.
 `terraform apply`, and `prune: true` deletes both the `Application` and the
 Helm release it owned — no orphaned resources left behind.
 
-**Image tags are `:latest` pulled straight from each service's own registry**
-(GHCR for order-management/warehouse-ops-agent/network-fulfillment, Docker
-Hub for the rest) with `pullPolicy: Always`, not a locally-built image at
-all (decided 2026-09-26 — the earlier content-derived-local-tag scheme,
-`local.service_image_tags[name]` hashing Go source/migrations/Dockerfile/
-go.mod/go.sum into a `local-<hash>` tag, is retired for backend services).
-Every backend repo's `docker-publish` CI job already republishes `:latest`
-on every merge to main, so ArgoCD's `Application` sees a real, live image
-without warehouse-infra ever running `docker build` for a backend service.
-`pullPolicy: Always` is required for this to work, not cosmetic — it is
-what makes the kubelet actually re-pull `:latest` instead of caching
-whatever it first resolved to.
+**Image tags are content-derived**, not the fixed `"local"` value from
+before this GitOps rollout: `local.service_image_tags[name]` hashes each
+service's Go source/migrations/Dockerfile/go.mod/go.sum (mirroring the
+existing `service_source_hash`). This is required, not cosmetic — ArgoCD's
+sync only fires on an actual diff, and a tag that never changes on rebuild
+gives it nothing to detect. This also happens to fix the older
+"rebuilt image alone does not roll a running Deployment" pitfall documented
+below, as a side effect.
+
+---
+
+## metrics-server (HPA support)
+
+`var.deploy_metrics_server` (default `true`) installs the
+kubernetes-sigs/metrics-server chart into `kube-system`. Every service
+chart in this fleet already ships an `autoscaling/v2` HPA targeting
+CPU/memory utilization; without a `metrics.k8s.io` API server in the
+cluster those HPAs sit at `<unknown>` forever
+(`kubectl describe hpa <name>` reports `FailedGetResourceMetrics`). This
+resource is what makes them work.
+
+It sets `--kubelet-insecure-tls` in the chart's `args` — a genuine
+kind-specific need, not a general shortcut: kind's kubelet serving certs
+are self-signed per-node at cluster boot and aren't trusted by
+metrics-server by default, so without the flag every node scrape fails
+with `x509: certificate signed by unknown authority`. See
+`terraform/metrics-server.tf`'s header comment for the full rationale.
+Verify it after an apply with:
+
+```bash
+kubectl top nodes
+kubectl get hpa -n warehouse-systems
+```
 
 ---
 
@@ -622,9 +680,7 @@ warehouse-infra/
 ├── scripts/
 │   ├── up.sh                    # single entrypoint: init + apply + next steps
 │   ├── down.sh                  # destroy + fallback cluster delete
-│   ├── build-and-load-frontend.sh  # docker build + kind load for MFEs/console
-│                                    # (frontends still build locally; backends
-│                                    #  pull from GHCR/Docker Hub, no build step)
+│   ├── build-and-load.sh        # docker build + kind load, called by Terraform
 │   └── smoke-test.sh            # curls all four /healthz through Kong
 └── terraform/
     ├── versions.tf              # Terraform + provider pins
