@@ -369,8 +369,9 @@ Every line must show `develop` at `origin/develop`'s sha and none may
 print `!!`. Untracked non-Go files (`.schemathesis/`, `node_modules/`) do not
 change the source hash (only `*.go` + `migrations/**` count) and are not
 compiled into the Go binary, so they can stay. An untracked `.worktrees/`
-directory inside a repo DOES contain `*.go` files and is hashed: move it out
-or delete stale worktrees (`git worktree prune`) first. Sanity-check the CloudEvents code is really what will be built:
+directory inside a repo (workforce-management, fulfillment-execution have
+one) is hashed into the tag, but each worktree has its own `go.mod`, so it
+is a separate module and never compiled into the service binary. Sanity-check the CloudEvents code is really what will be built:
 
 ```bash
 for s in $SVCS; do
