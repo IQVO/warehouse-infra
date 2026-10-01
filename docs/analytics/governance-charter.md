@@ -19,8 +19,9 @@ warehouse, lake, or ETL team.
 3. **Self-serve.** Reuse the platform each service already runs — Kafka, Postgres,
    chi, the MCP SDK, the Helm chart. The analytical store is just a second Postgres.
    No new central infrastructure.
-4. **Federated governance.** This charter + the Envelope v1 contract + a per-service
-   ADR are the whole governance surface. Rules below are global; everything else is
+4. **Federated governance.** This charter + the event envelope contract (originally
+   Envelope v1; since 2026-09-30 the fleet-mandatory CloudEvents 1.0 standard, see
+   `envelope-v1.md`'s superseded note) + a per-service ADR are the whole governance surface. Rules below are global; everything else is
    the owning team's choice.
 
 ---
