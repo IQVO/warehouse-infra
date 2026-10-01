@@ -30,8 +30,10 @@ config/process-paths/  Process-path seed data consumed by seed-process-paths.py
 scripts/             Cluster lifecycle (up/down), smoke tests, exposure
                      policy assertions, dashboard generation, chart
                      selector conformance
-docs/                Analytics envelope/governance, observability, the
-                     localhost edge topology decision record
+docs/                Analytics governance (envelope-v1 is SUPERSEDED by
+                     CloudEvents), observability, the localhost edge
+                     topology decision record, the CloudEvents cutover
+                     runbook (docs/cloudevents-cutover.md)
 .github/workflows/ci.yml  terraform fmt/validate, helm-lint,
                           chart-selector-check, shellcheck (added Phase 2
                           of the harness-coverage-expansion plan)
@@ -139,6 +141,47 @@ symlinked alongside the worktree — see the pitfall below.
     -rf`.** The terminal approval guard here permanently blocks destructive
     `rm -rf` on tracked paths; `git rm -r` stages the deletion cleanly and
     is never blocked.
+
+## Events: CloudEvents 1.0 is MANDATORY
+
+Every Kafka message on every topic this repo's cluster hosts (integration
+`warehouse.<ctx>.events` AND analytics `warehouse.<ctx>.analytics`) is a
+CloudEvents 1.0 event in structured content mode. This is a hard fleet
+rule, not a preference — and for infra it means:
+
+- **Never configure an envelope toggle.** No `EVENT_ENVELOPE_MODE` (or any
+  other "flat/dual/cloudevents" switch) in `terraform/` (`local.sync_edge_env`,
+  `services.tf`, `argocd-apps.tf`), `helm-values/`, or `scripts/`. The
+  services have no such variable any more; adding one is a defect.
+- All topics carry CloudEvents only: no flat envelope
+  (`event_id`/`event_type`/`occurred_at`), no dual-write, no dual-read.
+  `docs/analytics/envelope-v1.md` is SUPERSEDED.
+- Wire format the services emit (useful when inspecting a topic with
+  `kafka-console-consumer.sh --property print.headers=true`): Kafka header
+  `content-type: application/cloudevents+json; charset=UTF-8`; required
+  attributes `specversion=1.0`, `id` (UUID, stable across outbox
+  redelivery), `source=/warehouse/<repo>`, `type`, `subject` (aggregate
+  id), `time` (occurred-at, UTC), `datacontenttype=application/json`,
+  `dataschema=urn:warehouse:<repo>:<events|analytics>:<EventName>:v<N>`.
+- `type` = `com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`
+  (`wms` for facility-layout / inventory-storage, `wes` for everything
+  else; wes-work-planning's context segment is `work-planning`).
+- Recreating a topic (8 partitions, RF 1) or replaying one never needs an
+  envelope migration step; a flat message on any topic is a defect (the
+  consumers DLQ/skip it).
+- Topic wipes / outbox drains / projector resets for an envelope change
+  follow `docs/cloudevents-cutover.md`. When running Kafka CLI tools inside
+  `kafka-controller-0`, prefix with `env KAFKA_HEAP_OPTS=-Xmx128m` — the
+  tools share the broker container's 1Gi limit and `--describe
+  --all-groups` has OOMKilled the broker.
+- `scripts/seed-process-paths.py` drives process-path-management's REST
+  API; it never produces Kafka messages itself, so it needs no envelope
+  logic.
+
+Full standard and the fleet's cross-service type catalogue: warehouse-docs
+`docs/strategic-design/event-standard-cloudevents.md` (each service repo
+also carries it as its "CloudEvents 1.0 as the mandatory event envelope"
+ADR under `docs/docs/adr/`).
 
 ## The localhost edge (Nginx :80 assets, Kong :8000 APIs)
 

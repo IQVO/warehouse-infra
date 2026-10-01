@@ -1,6 +1,24 @@
 # Analytics Event Envelope — v1
 
-Status: **Accepted** · Applies to: all warehouse-systems services · Owner: platform/architecture
+Status: **Superseded (2026-09-30)** by the fleet standard *CloudEvents 1.0 is
+the ONLY event envelope* · Owner: platform/architecture
+
+> **Superseded.** The flat envelope in §2 (`event_id` / `event_type` /
+> `occurred_at` / `source` / `schema_version` / `data`) is no longer emitted
+> or accepted anywhere. Every message on `warehouse.<ctx>.analytics` (and on
+> `warehouse.<ctx>.events`) is now a CloudEvents 1.0 event in structured
+> content mode (`content-type: application/cloudevents+json; charset=UTF-8`)
+> with `specversion`, `id`, `source=/warehouse/<repo>`,
+> `type=com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`,
+> `subject`, `time`, `datacontenttype=application/json` and
+> `dataschema=urn:warehouse:<repo>:analytics:<EventName>:v<N>` (which
+> replaces `schema_version`). `data` payloads are unchanged. See the
+> fleet standard in warehouse-docs
+> (`docs/strategic-design/event-standard-cloudevents.md`), each service's
+> "CloudEvents 1.0 as the mandatory event envelope" ADR, and the cutover
+> runbook `docs/cloudevents-cutover.md`. The topic split (§1), payload
+> rules (§3), registry (§5) and non-goals (§6) below still apply; the
+> envelope (§2) and the `schema_version` rule in §4 do not.
 
 This is the **published language** for the analytical plane. Every service emits its
 report-input domain events onto its own **analytics topic** wrapped in this envelope.
