@@ -55,9 +55,18 @@ resource "helm_release" "kafka" {
         # laptop kind cluster and avoids reserving 8Gi of host disk per PVC.
         size = "3Gi"
       }
+      # 2Gi limit (was 1Gi). The broker runs with KAFKA_HEAP_OPTS
+      # MaxRAMPercentage=75, so heap scales with the limit; at 1Gi it sat at
+      # ~950Mi in steady state and was OOMKilled during a full warehouse-day
+      # simulation (60 orders, every context publishing integration +
+      # analytics events, ~20 topics x 8 partitions + .dlq topics). An OOM
+      # restart is not a soft failure here: consumers without broker-restart
+      # recovery stopped for good (order-management exited; fulfillment-
+      # execution's WorkReleased consumer silently stopped). Kafka CLI tools
+      # run inside this same container (see AGENTS.md) and need headroom too.
       resources = {
-        requests = { cpu = "250m", memory = "512Mi" }
-        limits   = { cpu = "1000m", memory = "1Gi" }
+        requests = { cpu = "250m", memory = "1Gi" }
+        limits   = { cpu = "1000m", memory = "2Gi" }
       }
     }
 
