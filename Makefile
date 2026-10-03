@@ -90,3 +90,14 @@ check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check
 # No deeper local gate exists yet — see the help text above for the
 # cluster-dependent scripts that are NOT part of this target.
 check-all: check
+
+# --- agent harness (harness-template v3) -----------------------------------
+.PHONY: check-fast guide-lint harness-test
+# Fast local gate used by the agent Stop hook (this repo's own quick checks).
+check-fast: tf-fmt-check shellcheck chart-selector-check
+
+guide-lint: ## lint agent guides: skills load, references resolve, context budget
+	python3 scripts/harness/guide_lint.py
+
+harness-test: ## unit-test the agent hooks (pre/post/stop)
+	python3 scripts/harness/test_hook.py
