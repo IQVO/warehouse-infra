@@ -5,3 +5,4 @@ terraform/terraform.tfstate
 terraform/terraform.tfstate.*
 terraform/kubeconfig
 terraform/*.tfvars
+.claude/settings.local.json
