@@ -83,9 +83,9 @@ locals {
     # the two consumer-group ids, OUTBOX_RELAY_INTERVAL) all have DEDICATED chart
     # values, so they live in helm-values/warehouse-planning.yaml, NOT in
     # local.sync_edge_env (that map is only for env with no chart value; setting
-    # both would render duplicate env entries). It joins neither
-    # analytics_services (no analytics stream yet) nor mcp_services (cmd/mcp not
-    # merged yet) -- see terraform/mcp.tf.
+    # both would render duplicate env entries). It joins mcp_services (cmd/mcp
+    # merged; see terraform/mcp.tf) but not analytics_services (no analytics
+    # stream yet).
     "warehouse-planning" = {
       db         = "warehouse_planning"
       user       = "warehouse_planning"
