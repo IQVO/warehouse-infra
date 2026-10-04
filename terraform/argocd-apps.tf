@@ -79,7 +79,7 @@ resource "kubectl_manifest" "ops_agent_application" {
     spec = {
       project = "default"
       source = {
-        repoURL        = "https://github.com/claudioed/warehouse-ops-agent.git"
+        repoURL        = "https://github.com/IQVO/warehouse-ops-agent.git"
         targetRevision = "develop"
         path           = "charts/warehouse-ops-agent"
         helm = {
@@ -118,7 +118,7 @@ resource "kubectl_manifest" "network_fulfillment_application" {
     spec = {
       project = "default"
       source = {
-        repoURL        = "https://github.com/claudioed/network-fulfillment.git"
+        repoURL        = "https://github.com/IQVO/network-fulfillment.git"
         targetRevision = "develop"
         path           = "charts/network-fulfillment"
         helm = {
@@ -156,7 +156,7 @@ resource "kubectl_manifest" "console_application" {
     spec = {
       project = "default"
       source = {
-        repoURL        = "https://github.com/claudioed/warehouse-console.git"
+        repoURL        = "https://github.com/IQVO/warehouse-console.git"
         targetRevision = "develop"
         path           = "charts/warehouse-console"
         helm = {
