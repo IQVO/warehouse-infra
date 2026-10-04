@@ -71,11 +71,11 @@ CHARTS: dict[str, dict[str, str]] = {
     "../../process-path-management/charts/process-path-management": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
     },
-    # warehouse-planning: OLTP api + an optional mcp component only (no
-    # analytics/frontend yet). The chart refuses to render without a database
+    # warehouse-planning: OLTP api + optional mcp and frontend (capacity_mfe)
+    # components. The chart refuses to render without a database
     # source, so give it a dummy DSN (no password).
     "../../warehouse-planning/charts/warehouse-planning": {
-        "mcp.enabled": "true",
+        "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
     },
     # Single Deployment/Service each, no optional-component toggles that
