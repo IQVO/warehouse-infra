@@ -2,233 +2,109 @@
 
 Terraform + Helm deployment of the entire `warehouse-systems` fleet onto a
 local `kind` cluster named `warehouse`. This repo owns the cluster's
-existence, not any bounded context's business logic — it is infrastructure
-glue, one Terraform root module plus one Helm chart per deployed service
-(sourced from that service's own repo).
+existence, not any bounded context's business logic: one Terraform root
+module plus per-service values; each service's chart lives in that
+service's own repo.
 
-> **Study project.** Personal DDD/hexagonal-architecture/Kubernetes learning
-> exercise. Not a production system; no uptime or support guarantee.
+> **Study project.** Personal DDD/hexagonal/Kubernetes learning exercise. Not
+> a production system; no uptime or support guarantee.
 
-## What this repo actually deploys
+## What this repo deploys
 
 `terraform/locals.tf`'s `local.services` map is the **single source of
-truth** for what gets deployed. It does NOT auto-discover sibling repos — a
-new bounded-context repo must be added here by hand, and its own chart
-under `charts/<repo>/` must already exist, or it is never deployed no
-matter how complete the service's own code is. Before answering "is
-everything running" or "what does the cluster know about", read this file
-first — it directly answers "what does Terraform even know about."
+truth** for what gets deployed. It does NOT auto-discover sibling repos: a
+new bounded-context repo must be added by hand and its own `charts/<repo>/`
+must already exist. Read that file before answering "what does the cluster
+know about".
 
-Layout:
 ```
-terraform/          Root Terraform config: helm_release per service, Kafka,
-                     Postgres instances, MCP servers, ArgoCD, dashboards,
-                     the Nginx/Kong localhost edge
-helm-values/         Per-service Helm values files (the STATIC layer — see
-                     the computed-extraEnv pitfall below)
-config/process-paths/  Process-path seed data consumed by seed-process-paths.py
-scripts/             Cluster lifecycle (up/down), smoke tests, exposure
-                     policy assertions, dashboard generation, chart
-                     selector conformance
-docs/                Analytics governance (envelope-v1 is SUPERSEDED by
-                     CloudEvents), observability, the localhost edge
-                     topology decision record, the CloudEvents cutover
-                     runbook (docs/cloudevents-cutover.md)
-.github/workflows/ci.yml  terraform fmt/validate, helm-lint,
-                          chart-selector-check, shellcheck (added Phase 2
-                          of the harness-coverage-expansion plan)
-Makefile              make check / make check-all — mirrors ci.yml 1:1
+terraform/             Root module: services, Kafka, Postgres + PgBouncer, MCP, ArgoCD,
+                       dashboards, the Nginx/Kong localhost edge
+helm-values/           Per-service STATIC values (computed layer in services.tf wins)
+config/process-paths/  Seed data for scripts/seed-process-paths.py
+scripts/               up/down, smoke test, exposure-policy gate, chart selector check
+docs/                  Analytics governance, observability, edge decision, CloudEvents cutover
+.github/workflows/ci.yml   terraform, helm-lint, shellcheck, chart-selector-check, guide-lint
+Makefile               make check / check-fast / check-all mirror ci.yml 1:1
 ```
 
-Each deployed service's chart actually lives in **that service's own
-repo** (`<repo>/charts/<repo>/`), not here — this repo only references it
-via a relative path (`../../<repo>/charts/<repo>`) from `terraform/`. A
-`terraform validate`/`plan` run from a worktree under `.worktrees/` will
-fail with `filesha256(...): no such file` unless the sibling repos are
-symlinked alongside the worktree — see the pitfall below.
+## Non-negotiables (short form; detail loads from `.claude/rules/` when you touch the files)
 
-## Non-negotiables (read before touching Terraform or a chart)
-
-1. **`terraform apply` does NOT pick up chart-template changes.**
-   `local.services`' `service_source_hash` covers each service's Go source
-   + migrations, NOT its `charts/<svc>/templates/*.yaml`. Editing a chart
-   template changes nothing Terraform can see — `apply` reports `0
-   changed` and the Helm release keeps its OLD render. Force it with
-   `terraform taint 'helm_release.service["<svc>"]'` then re-apply (destroy
-   +recreate, which is fine for this local cluster).
-
-2. **Terraform builds images from the LOCAL sibling checkout, not
-   `origin/develop`.** Merging a PR on GitHub changes nothing `apply`
-   builds until `~/warehouse-systems/<repo>` itself is pulled to that
-   commit. Always `git -C ~/warehouse-systems/<repo> pull --ff-only origin
-   develop` before applying, and verify the new code is actually present
-   in the working tree before assuming a fresh apply will pick it up.
-
-3. **A rebuilt image alone does not roll a running Deployment.** Every
-   service chart pins `image.tag: "local"` with `pullPolicy: IfNotPresent`
-   — Kubernetes sees a byte-identical pod spec and does nothing, even
-   after Terraform rebuilds and reloads a new image into kind. After any
-   apply whose only change is a rebuilt image, manually `kubectl rollout
-   restart deployment/<name> -n warehouse-systems` for every affected
-   service, then confirm with `kubectl rollout status` — never trust
-   "apply succeeded" + "pod is Running" as proof the new code is live;
-   check the binary's mtime inside the container if in doubt.
-
-4. **Frontend images are content-addressed** (`local-<hash>` spanning the
-   remote AND `warehouse-ui-kit`). Never "simplify" them back to a fixed
-   `local` tag — that reintroduces the documented defect where a rebuilt
-   image never rolls.
-
-5. **Adding a service to `analytics_services` or `mcp_services` on a
-   Postgres that already has data does nothing on its own.** Bitnami's
-   Postgres chart only runs `primary.initdb.scripts` once, against an
-   EMPTY data directory. A new entry renders correctly into
-   `init-databases.sql.tftpl` but that render never re-executes against a
-   live cluster — the new projector CrashLoopBackOffs with `password
-   authentication failed`. After `apply`, fetch the generated password via
-   a throwaway `terraform output -raw` block, then manually run the
-   equivalent `CREATE ROLE`/`CREATE DATABASE` SQL against the live
-   `postgres-postgresql-0` pod (mirror `init-databases.sql.tftpl`'s loop
-   body exactly), THEN `helm rollback` the crashed release before
-   re-applying — doing the SQL fix before the rollback leaves the release
-   stuck `pending-upgrade`.
-
-6. **`terraform validate`: keep BOTH branches of a ternary the same
-   key-set**, even when one side's key is a structural no-op
-   (`enabled = false`, `extraEnv = []`). An inconsistent key set between a
-   ternary's true/false object results fails with "Inconsistent
-   conditional result types" — the fix is always to add the missing key
-   with an inert value to the other branch, never to make the branches
-   structurally different.
-
-7. **`services.tf`'s computed `extraEnv` OVERRIDES `helm-values/*.yaml`.**
-   `helm_release.service` merges the static values file with a computed
-   `yamlencode(merge(...))` layer that wins. Per-service env with no
-   dedicated chart value must go in `local.sync_edge_env`
-   (terraform/locals.tf) — an `extraEnv` list written directly into a
-   `helm-values/<svc>.yaml` file is silently dropped and `terraform plan`
-   shows no change at all.
-
-8. **Every `*_MODE` env var defaults to `permissive` (no network) if
-   unset.** A new sync edge between two services needs its `MODE` +
-   `BASE_URL` wired in `local.sync_edge_env` in the SAME PR that adds the
-   integration, or it silently runs permissive in the cluster. Grep the
-   pod's startup log for `mode":"http"` after apply to confirm the mode a
-   binary actually chose.
-
-9. **Every chart's `selectorLabels` helper must scope by
-   `app.kubernetes.io/component`, not just name+instance.** Those two
-   labels are identical across a service's OLTP/MCP/projector/reports
-   pods, so an OLTP `Service` without a component selector matches ALL of
-   them — verified live: a request to a service's OLTP endpoint was
-   answered by its reports pod instead. `scripts/check-chart-selectors.py`
-   (wired into CI's `chart-selector-check` job) renders every chart with
-   every optional component enabled and asserts each Service selects
-   exactly one Deployment; run it locally (`make chart-selector-check`)
-   before touching any chart's selector/label wiring, and prove a fix by
-   deliberately breaking a selector and watching the script report `Service
-   <ctx> selects N Deployments`.
-
-10. **`terraform destroy` leaves ~60 phantom resources in Terraform state.**
-    The API server dies before Helm releases are removed, the safety net
-    deletes the kind cluster, and every release stays in state pointing at
-    nothing — the next `apply` then fails trying to upgrade releases that
-    don't exist. Fix: back up `terraform.tfstate`, then `terraform state
-    list | while read r; do terraform state rm "$r"; done` before
-    re-applying. Confirm `kind get clusters` shows none first.
-
-11. **Deleting a tracked file: use `git rm -r <path>`, never a bare `rm
-    -rf`.** The terminal approval guard here permanently blocks destructive
-    `rm -rf` on tracked paths; `git rm -r` stages the deletion cleanly and
-    is never blocked.
+1. **`terraform apply` does NOT pick up chart-template changes.** The source
+   hash covers Go source, migrations, Dockerfile and go.mod/go.sum only.
+   ArgoCD (`terraform/argocd-apps.tf`) installs each chart from the service
+   repo's GitHub `develop`. NOTE: the older recipe here (`terraform taint
+   helm_release.service[...]`) is obsolete; that resource no longer exists.
+2. **Images are built from the LOCAL sibling checkout, not `origin/develop`.**
+   `git -C ~/warehouse-systems/<repo> pull --ff-only origin develop` before
+   applying, and verify the new code is in the tree.
+3. **Never trust "apply succeeded" + "pod Running" as proof new code is
+   live.** Image tags are content-derived (`local-<hash12>`); never
+   simplify them back to a fixed `local` tag (frontends included). Confirm
+   with `kubectl rollout status` and the live image tag.
+4. **Adding to `analytics_services` / `mcp_services` on a Postgres that
+   already has data does nothing alone** (initdb runs once on an empty data
+   dir): create the role/DB by hand. See the `add-or-change-a-service` skill.
+5. **`terraform validate`: both branches of a ternary must have the same
+   key set**, even when one side is inert.
+6. **The computed layer in `terraform/services.tf` OVERRIDES
+   `helm-values/*.yaml`.** Per-service env with no chart value goes in
+   `local.sync_edge_env`; an `extraEnv` in a helm-values file is silently dropped.
+7. **Every `*_MODE` env var defaults to `permissive` if unset.** Wire `MODE`
+   + `BASE_URL` in `local.sync_edge_env` in the SAME PR as a new sync edge.
+8. **Every chart `Service` must select exactly ONE Deployment** (scope
+   `selectorLabels` by `app.kubernetes.io/component`). Run
+   `make chart-selector-check` before touching selector/label wiring.
+9. **`terraform destroy` leaves ~60 phantom resources in state.** Back up
+   the tfstate, confirm `kind get clusters` is empty, then `terraform state rm`
+   each, before re-applying.
+10. **Delete tracked files with `git rm -r <path>`, never bare `rm -rf`.**
+11. **Worktrees have no tfstate and no sibling repos.** Copy the real
+    `terraform.tfstate` in, scope plan/apply with `-target=`, copy it back
+    after an apply, and symlink siblings (see `deploy-local-checkout`). Never
+    apply, destroy or run SQL/kubectl mutations against the live cluster
+    without the user's go-ahead.
 
 ## Events: CloudEvents 1.0 is MANDATORY
 
-Every Kafka message on every topic this repo's cluster hosts (integration
-`warehouse.<ctx>.events` AND analytics `warehouse.<ctx>.analytics`) is a
-CloudEvents 1.0 event in structured content mode. This is a hard fleet
-rule, not a preference — and for infra it means:
+Every Kafka message on every topic is a CloudEvents 1.0 event in structured
+mode. **Never configure an envelope toggle** (no `EVENT_ENVELOPE_MODE` or any
+flat/dual switch) in `terraform/`, `helm-values/` or `scripts/`; adding one is
+a defect. `docs/analytics/envelope-v1.md` is SUPERSEDED. Wire format, type
+naming and the Kafka-CLI heap prefix: `.claude/rules/events-cloudevents.md`;
+topic wipes follow `docs/cloudevents-cutover.md`. The full standard lives in
+the warehouse-docs repo and each service repo's own ADRs, not here.
 
-- **Never configure an envelope toggle.** No `EVENT_ENVELOPE_MODE` (or any
-  other "flat/dual/cloudevents" switch) in `terraform/` (`local.sync_edge_env`,
-  `services.tf`, `argocd-apps.tf`), `helm-values/`, or `scripts/`. The
-  services have no such variable any more; adding one is a defect.
-- All topics carry CloudEvents only: no flat envelope
-  (`event_id`/`event_type`/`occurred_at`), no dual-write, no dual-read.
-  `docs/analytics/envelope-v1.md` is SUPERSEDED.
-- Wire format the services emit (useful when inspecting a topic with
-  `kafka-console-consumer.sh --property print.headers=true`): Kafka header
-  `content-type: application/cloudevents+json; charset=UTF-8`; required
-  attributes `specversion=1.0`, `id` (UUID, stable across outbox
-  redelivery), `source=/warehouse/<repo>`, `type`, `subject` (aggregate
-  id), `time` (occurred-at, UTC), `datacontenttype=application/json`,
-  `dataschema=urn:warehouse:<repo>:<events|analytics>:<EventName>:v<N>`.
-- `type` = `com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`
-  (`wms` for facility-layout / inventory-storage, `wes` for everything
-  else; wes-work-planning's context segment is `work-planning`).
-- Recreating a topic (8 partitions, RF 1) or replaying one never needs an
-  envelope migration step; a flat message on any topic is a defect (the
-  consumers DLQ/skip it).
-- Topic wipes / outbox drains / projector resets for an envelope change
-  follow `docs/cloudevents-cutover.md`. When running Kafka CLI tools inside
-  `kafka-controller-0`, prefix with `env KAFKA_HEAP_OPTS=-Xmx128m` — the
-  tools share the broker container's 1Gi limit and `--describe
-  --all-groups` has OOMKilled the broker.
-- `scripts/seed-process-paths.py` drives process-path-management's REST
-  API; it never produces Kafka messages itself, so it needs no envelope
-  logic.
+## The localhost edge
 
-Full standard and the fleet's cross-service type catalogue: warehouse-docs
-`docs/strategic-design/event-standard-cloudevents.md` (each service repo
-also carries it as its "CloudEvents 1.0 as the mandatory event envelope"
-ADR under `docs/docs/adr/`).
-
-## The localhost edge (Nginx :80 assets, Kong :8000 APIs)
-
-`terraform output product_endpoints` prints both edges. They are
-INDEPENDENT — neither proxies to the other, and that split is a
-deliberate, reviewed decision (`docs/exposure/localhost-edge-topology.md`),
-not a gap to "simplify" by chaining one through the other. CORS is a
-`KongClusterPlugin` labelled `global: "true"` (KIC selects global plugins
-by that label plus a matching ingress class), not a per-route annotation —
-none of the charts' `httproute.yaml` templates render an annotations block,
-so per-route CORS attachment would need N chart PRs, not one infra change.
-`scripts/test-exposure-policy.sh` (30 checks) is the policy conformance
-gate for this edge; run it after any change here. Its own assertions match
-on content-type/upstream identity, never bare HTTP status — the gateway's
-catch-all legitimately returns `200 text/html` for unknown `/api/**` paths
-(SPA fallback), and a naive status-code check reads that as a violation
-when it is the policy working correctly.
-
-## Worktree gotcha
-
-`terraform validate`/`plan` run from `.worktrees/<name>/` fails with
-`filesha256(...): no such file` because `service_source_hash` paths assume
-sibling repos exist next to the checkout. Symlink every referenced sibling
-repo into the worktree (`ln -s ~/warehouse-systems/<repo> <repo>`), or run
-Terraform from the real checkout instead of a worktree.
+Nginx `:80` (assets) and Kong `:8000` (APIs) are INDEPENDENT; never chain
+one through the other (`docs/exposure/localhost-edge-topology.md`). Run
+`scripts/test-exposure-policy.sh` after any edge change. Detail:
+`.claude/rules/edge-and-selectors.md`.
 
 ## Key commands
 
 ```bash
-make check              # tf-fmt-check + tf-validate + helm-lint + shellcheck
-                         # + chart-selector-check (mirrors ci.yml)
-make check-all          # same as check today (no coverage/arch-test dimension
-                         # here — this repo is infra, not a Go/TS module)
-terraform -chdir=terraform init
-terraform -chdir=terraform plan
-terraform -chdir=terraform apply
-bash scripts/up.sh              # bring the whole cluster up
-bash scripts/down.sh            # tear it down (see the phantom-state pitfall)
-bash scripts/smoke-test.sh      # post-apply smoke check
-bash scripts/test-exposure-policy.sh   # the 30-check localhost-edge policy gate
-python3 scripts/check-chart-selectors.py   # selector-collision conformance
+make check-fast         # tf-fmt-check + shellcheck + chart-selector-check (agent Stop hook)
+make check              # + tf-validate + helm-lint (mirrors ci.yml); check-all is an alias
+make guide-lint         # agent-guide lint (blocking in CI)
+terraform -chdir=terraform plan      # see deploy-local-checkout before apply
+bash scripts/up.sh | down.sh | smoke-test.sh | test-exposure-policy.sh
 ```
 
-## Where the rest of the detail lives
+## Skills and rules
 
-Full pitfalls corpus (istio native-sidecar restart-on-first-connect, MCP
-server deployment shape, ArgoCD rollout, observability dashboards-as-code)
-lives in the `warehouse-systems-fleet-ops` Hermes skill's `references/`
-directory — load that skill before any non-trivial infra change here
-rather than re-deriving cluster behaviour from scratch.
+- Skills (`.claude/skills/`): `add-or-change-a-service`, `run-infra-checks`,
+  `deploy-local-checkout`.
+- Path-scoped rules (`.claude/rules/`): `terraform-wiring`, `events-cloudevents`,
+  `edge-and-selectors`.
+- Wider pitfalls corpus (istio native sidecar, MCP deployment shape, ArgoCD
+  rollout, dashboards-as-code): the `warehouse-systems-fleet-ops` Hermes skill's `references/`.
+
+<!-- harness:scoped-rules:start (generated by tools/migrate_v3.py in warehouse-harness-template; do not hand-edit) -->
+## Scoped rules and harness
+
+Claude Code loads each rule below automatically when you touch the matching paths. OpenCode and Codex do NOT: read the rule BEFORE editing matching files.
+
+Hooks (`scripts/harness/hook.py`, wired for Claude Code, Codex and OpenCode) block pushes to develop/main, `--no-verify`, bare `rm -rf`, and edits to generated files, and feed gofmt/vet findings back after each edit. Before saying "done" run `make check-fast`; the full gate is `make check-all`. `HARNESS_OFF=1` disables the hooks when debugging the harness itself.
+<!-- harness:scoped-rules:end -->

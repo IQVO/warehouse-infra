@@ -19,6 +19,17 @@ defaults:
     shell: bash
 
 jobs:
+
+  # Agent-guide sensor (harness-template v3): skills load, references resolve, context budget.
+  # BLOCKING: guides are clean, so a stale path or broken skill fails the PR.
+  guide-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: python3 scripts/harness/guide_lint.py
+      - run: python3 scripts/harness/test_hook.py
+
   # ============================================================
   # CLASSIFICATION: STATIC VALIDATION (Terraform)
   # ============================================================
