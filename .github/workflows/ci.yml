@@ -28,7 +28,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: python3 scripts/harness/guide_lint.py
+      - run: python3 scripts/harness/repo_lint.py
       - run: python3 scripts/harness/test_hook.py
+      - run: python3 scripts/harness/test_repo_lint.py
 
   # ============================================================
   # CLASSIFICATION: STATIC VALIDATION (Terraform)
@@ -42,42 +44,42 @@ jobs:
           path: warehouse-infra
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/order-management
+          repository: IQVO/order-management
           ref: develop
           path: order-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/inventory-storage
+          repository: IQVO/inventory-storage
           ref: develop
           path: inventory-storage
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/wes-work-planning
+          repository: IQVO/wes-work-planning
           ref: develop
           path: wes-work-planning
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/fulfillment-execution
+          repository: IQVO/fulfillment-execution
           ref: develop
           path: fulfillment-execution
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/workforce-management
+          repository: IQVO/workforce-management
           ref: develop
           path: workforce-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/facility-layout
+          repository: IQVO/facility-layout
           ref: develop
           path: facility-layout
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/labor-performance
+          repository: IQVO/labor-performance
           ref: develop
           path: labor-performance
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/process-path-management
+          repository: IQVO/process-path-management
           ref: develop
           path: process-path-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -87,22 +89,22 @@ jobs:
           path: warehouse-planning
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-ops-agent
+          repository: IQVO/warehouse-ops-agent
           ref: develop
           path: warehouse-ops-agent
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/network-fulfillment
+          repository: IQVO/network-fulfillment
           ref: develop
           path: network-fulfillment
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-console
+          repository: IQVO/warehouse-console
           ref: develop
           path: warehouse-console
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-ui-kit
+          repository: IQVO/warehouse-ui-kit
           ref: develop
           path: warehouse-ui-kit
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
@@ -148,42 +150,42 @@ jobs:
           path: warehouse-infra
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/order-management
+          repository: IQVO/order-management
           ref: develop
           path: order-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/inventory-storage
+          repository: IQVO/inventory-storage
           ref: develop
           path: inventory-storage
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/wes-work-planning
+          repository: IQVO/wes-work-planning
           ref: develop
           path: wes-work-planning
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/fulfillment-execution
+          repository: IQVO/fulfillment-execution
           ref: develop
           path: fulfillment-execution
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/workforce-management
+          repository: IQVO/workforce-management
           ref: develop
           path: workforce-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/facility-layout
+          repository: IQVO/facility-layout
           ref: develop
           path: facility-layout
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/labor-performance
+          repository: IQVO/labor-performance
           ref: develop
           path: labor-performance
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/process-path-management
+          repository: IQVO/process-path-management
           ref: develop
           path: process-path-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -193,17 +195,17 @@ jobs:
           path: warehouse-planning
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-ops-agent
+          repository: IQVO/warehouse-ops-agent
           ref: develop
           path: warehouse-ops-agent
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/network-fulfillment
+          repository: IQVO/network-fulfillment
           ref: develop
           path: network-fulfillment
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-console
+          repository: IQVO/warehouse-console
           ref: develop
           path: warehouse-console
       - uses: azure/setup-helm@59b1c81c6280f5abebb1fb1bc585696daa7dfb42 # v5
@@ -230,42 +232,42 @@ jobs:
           path: warehouse-infra
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/order-management
+          repository: IQVO/order-management
           ref: develop
           path: order-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/inventory-storage
+          repository: IQVO/inventory-storage
           ref: develop
           path: inventory-storage
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/wes-work-planning
+          repository: IQVO/wes-work-planning
           ref: develop
           path: wes-work-planning
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/fulfillment-execution
+          repository: IQVO/fulfillment-execution
           ref: develop
           path: fulfillment-execution
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/workforce-management
+          repository: IQVO/workforce-management
           ref: develop
           path: workforce-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/facility-layout
+          repository: IQVO/facility-layout
           ref: develop
           path: facility-layout
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/labor-performance
+          repository: IQVO/labor-performance
           ref: develop
           path: labor-performance
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/process-path-management
+          repository: IQVO/process-path-management
           ref: develop
           path: process-path-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -275,17 +277,17 @@ jobs:
           path: warehouse-planning
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-ops-agent
+          repository: IQVO/warehouse-ops-agent
           ref: develop
           path: warehouse-ops-agent
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/network-fulfillment
+          repository: IQVO/network-fulfillment
           ref: develop
           path: network-fulfillment
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-console
+          repository: IQVO/warehouse-console
           ref: develop
           path: warehouse-console
       - uses: azure/setup-helm@59b1c81c6280f5abebb1fb1bc585696daa7dfb42 # v5

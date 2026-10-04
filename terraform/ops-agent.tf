@@ -17,7 +17,7 @@
 # Terraform side keeps only the endpoints; no keys are needed to call them.
 #
 # DECIDED 2026-09-26: no local build. This repo's `docker-publish` CI job
-# publishes to GHCR (ghcr.io/claudioed/warehouse-ops-agent), including a
+# publishes to GHCR (ghcr.io/iqvo/warehouse-ops-agent), including a
 # `:latest` tag on every merge to main -- pulled straight from there now,
 # same as services.tf.
 # ---------------------------------------------------------------------------
@@ -104,7 +104,7 @@ locals {
   ops_agent_helm_values = merge(
     {
       image = {
-        repository = "ghcr.io/claudioed/warehouse-ops-agent"
+        repository = "ghcr.io/iqvo/warehouse-ops-agent"
         tag        = local.ops_agent_image_tag
         # Always, not IfNotPresent: :latest only tracks the newest published
         # image if the kubelet re-pulls it every time.
