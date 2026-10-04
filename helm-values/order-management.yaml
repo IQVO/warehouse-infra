@@ -4,8 +4,10 @@
 #
 # Startup: runs migrations before serving (MIGRATIONS_PATH default "migrations").
 #
-# Kafka: outbound-publish-only (no inbound consumer). Live now that
-# warehouse-infra runs a real Kafka release (kafka.tf).
+# Kafka: publishes integration/analytics events (kafka.tf) and runs inbound
+# consumers: the repromise consumer (fixed in code), the PATH_CATALOGUE_SOURCE
+# caches (see services.tf) and, via `plannedCapacity` below, the
+# warehouse-planning capacity-plan consumer.
 #
 # HTTP outbound dependencies (inventory-storage, wes-work-planning) default
 # to the chart's own "permissive" no-op client unless explicitly pointed at
@@ -27,6 +29,33 @@ inventoryStorage:
 
 kafka:
   brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
+
+# Planned capacity from warehouse-planning (order-management ADR 0031): consume
+# warehouse.warehouse-planning.events into a local read model, serve
+# GET /planned-capacity?site=, and annotate an order response with
+# `capacityConstraint` when its promise overlaps a PUBLISHED shortage window.
+# Annotate-only: no promise moves, no order is rejected, allocation is untouched.
+#
+# Both keys are DEDICATED chart values (charts/order-management renders them to
+# PLANNED_CAPACITY_CONSUMER_GROUP / PLANNED_CAPACITY_SITE_ID), so they live here
+# and NOT in local.sync_edge_env (an extraEnv here would be silently dropped by
+# the computed layer in terraform/services.tf; setting both would double-render).
+# KAFKA_BROKERS is already rendered (config.eventPublisher=kafka above).
+#   consumerGroup: fixed and stable, so a restarted pod resumes from its
+#     committed offsets and N replicas share partitions. The binary has no
+#     default on purpose; an empty value turns the integration off.
+#   siteId: the warehouse-planning `location` (site/building code) order
+#     promises are matched against. Orders carry no site of their own, so this
+#     is one site for the whole service, like DEFAULT_SITE_ID (which is unset
+#     here and so is "site-1", the CPT-schedule site -- NOT what planning uses).
+#     "SIM1" is the site code warehouse-planning's live capacity is registered
+#     under (its ADR 0003); change it here if that location is ever renamed. If
+#     it does not equal the `location` of the published plans, NO order is
+#     annotated (fail-open) -- GET /planned-capacity?site=<code> shows what the
+#     service actually holds.
+plannedCapacity:
+  consumerGroup: "order-management-planned-capacity"
+  siteId: "SIM1"
 
 analytics:
   enabled: true
