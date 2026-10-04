@@ -43,6 +43,12 @@ locals {
     # gives it an entry in `local.mcp_endpoint` for potential future
     # ops-agent consumption, exactly like the other eight.
     "network-fulfillment",
+    # warehouse-planning is DELIBERATELY not listed yet: its cmd/mcp binary is
+    # not merged. When it lands (and warehouse-planning's chart `mcp` env names
+    # are re-checked against cmd/mcp/main.go), add "warehouse-planning" here --
+    # services.tf's `contains(local.mcp_services, name)` gate then sets
+    # mcp.enabled = var.deploy_mcp_servers with no other edit -- and, if the ops
+    # agent should reach it, a `warehousePlanning` endpoint in ops-agent.tf.
   ])
 
   mcp_endpoint = {

@@ -6,7 +6,7 @@
 
 TF_DIR := terraform
 
-# The ten Helm charts this repo deploys, taken directly from
+# The eleven Helm charts this repo deploys, taken directly from
 # terraform/locals.tf's local.services chart_path values plus
 # ops-agent.tf's local.ops_agent_chart_path and warehouse-console's own
 # chart (frontends.tf). Keep this list in sync with those files — it is
@@ -20,6 +20,7 @@ CHARTS := \
 	../facility-layout/charts/facility-layout \
 	../labor-performance/charts/labor-performance \
 	../process-path-management/charts/process-path-management \
+	../warehouse-planning/charts/warehouse-planning \
 	../warehouse-ops-agent/charts/warehouse-ops-agent \
 	../warehouse-console/charts/warehouse-console
 
@@ -32,7 +33,7 @@ help:
 	@echo "  tf-fmt-check    terraform fmt -check -recursive -diff (from $(TF_DIR)/)"
 	@echo "  tf-validate     terraform init -backend=false + terraform validate"
 	@echo "  helm-lint       helm lint on every chart in \$$(CHARTS) — workforce-management"
-	@echo "                  needs a dummy database.url, wired in below"
+	@echo "                  and warehouse-planning need a dummy database.url, wired in below"
 	@echo "  shellcheck      shellcheck --severity=warning on scripts/*.sh"
 	@echo "  chart-selector-check  render every chart with all components enabled,"
 	@echo "                  assert every Service selects exactly one Deployment"
@@ -59,6 +60,8 @@ helm-lint:
 		echo "==> $$c"; \
 		if [ "$$(basename $$c)" = "workforce-management" ]; then \
 			helm lint "$$c" --set database.url=postgres://u:p@example.invalid:5432/db || exit 1; \
+		elif [ "$$(basename $$c)" = "warehouse-planning" ]; then \
+			helm lint "$$c" --set database.url=postgres://u@example.invalid:5432/db || exit 1; \
 		else \
 			helm lint "$$c" || exit 1; \
 		fi; \

@@ -132,7 +132,7 @@ Every bounded-context service's OLTP pod listens on container port `8080`
 
 | Service (`warehouse-systems` ns)         | Service port → target | What it is |
 |--------------------------------------------|------------------------|------------|
-| `<service>` (8 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management) | `80 → 8080` | OLTP REST API, routed by Kong |
+| `<service>` (9 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning) | `80 → 8080` | OLTP REST API, routed by Kong |
 | `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — all 8 services above, per `mcp.tf`'s `local.mcp_services` |
 | `<service>-reports`                        | `80 → 8092`             | Analytics read-only REST API (only where `analytics.enabled`, see `locals.tf`'s `analytics_services`) |
 | `<service>-frontend`                       | `80 → 8080`             | Module Federation remote, proxied by the web gateway at `/mfes/<context>/` |
@@ -318,6 +318,7 @@ collides head-on with the console shell's own client-side routes —
 | `http://localhost:8000/api/facility-layout/*`             | `/api/facility-layout` → `/*`        | `facility-layout.warehouse-systems.svc.cluster.local`       |
 | `http://localhost:8000/api/labor-performance/*`           | `/api/labor-performance` → `/*`      | `labor-performance.warehouse-systems.svc.cluster.local`     |
 | `http://localhost:8000/api/process-path-management/*`     | `/api/process-path-management` → `/*`| `process-path-management...svc.cluster.local`                |
+| `http://localhost:8000/api/warehouse-planning/*`          | `/api/warehouse-planning` → `/*`     | `warehouse-planning.warehouse-systems.svc.cluster.local`    |
 | `http://localhost:8000/api/warehouse-ops-agent/*`         | `/api/warehouse-ops-agent` → `/*`    | `warehouse-ops-agent.warehouse-systems.svc.cluster.local`   |
 
 Container port 8080 is not an assumption: every `cmd/*/main.go` defaults
