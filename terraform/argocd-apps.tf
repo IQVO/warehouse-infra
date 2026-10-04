@@ -27,7 +27,7 @@ resource "kubectl_manifest" "application" {
     spec = {
       project = "default"
       source = {
-        repoURL        = "https://github.com/claudioed/${each.key}.git"
+        repoURL        = "https://github.com/${lookup(local.argocd_repo_owner, each.key, "claudioed")}/${each.key}.git"
         targetRevision = "develop"
         path           = "charts/${each.key}"
         helm = {
