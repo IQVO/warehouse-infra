@@ -98,8 +98,8 @@ locals {
   # GitHub owner of the repo ArgoCD clones per service (argocd-apps.tf). The
   # fleet repos were transferred claudioed -> IQVO on 2026-10-03; the older
   # services keep resolving through GitHub's transfer redirect from
-  # github.com/claudioed/<name>. warehouse-planning was created directly under
-  # IQVO, so github.com/claudioed/warehouse-planning does NOT exist (404) and
+  # github.com/IQVO/<name>. warehouse-planning was created directly under
+  # IQVO, so github.com/IQVO/warehouse-planning does NOT exist (404) and
   # must be addressed by its real owner.
   argocd_repo_owner = {
     "warehouse-planning" = "IQVO"
@@ -190,7 +190,7 @@ locals {
   # fulfillment-execution WAS temporarily excluded here (its Dockerfile
   # never built/copied the projector/reports binaries its own chart
   # references, a real deploy gap that would CrashLoopBackOff both pods).
-  # That fix merged 2026-08-30: https://github.com/claudioed/
+  # That fix merged 2026-08-30: https://github.com/IQVO/
   # fulfillment-execution/pull/47. Re-included in the set below, but the
   # NEXT `terraform apply` must not run until REPOS_ROOT/
   # fulfillment-execution (what build-and-load.sh actually builds from)
