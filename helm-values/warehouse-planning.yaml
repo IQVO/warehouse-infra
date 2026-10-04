@@ -20,7 +20,10 @@
 # itself goes through PgBouncer.
 #
 # Deliberately absent (tracked deferrals): analytics projector/reports (no
-# analytics stream yet), MCP (cmd/mcp not merged), frontend (no web/).
+# analytics stream yet), MCP (cmd/mcp not merged). The console remote
+# (capacity_mfe, web/) is NOT set here: terraform/services.tf computes
+# `frontend` (enabled + content-addressed image tag) for every context in
+# local.frontend_remotes, and a `frontend:` key in this file would be overridden.
 
 replicaCount: 1
 
