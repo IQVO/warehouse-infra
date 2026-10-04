@@ -1,0 +1,42 @@
+# warehouse-planning -- capacity planning bounded context (ProcessPathCapacity,
+# CapacityPlan + shortage detection). OLTP REST on :8080 plus, in the SAME
+# process, a transactional-outbox relay and two Kafka consumers:
+#   - labor capacity   <- warehouse.workforce.events (workforce-management)
+#   - storage capacity <- warehouse.facility.events  (facility-layout)
+# and it PUBLISHES warehouse.warehouse-planning.events (CloudEvents) via the
+# outbox relay. Topics are auto-created by the brokers' writers (kafka.tf has no
+# topic resources), so nothing to declare for the new topic.
+#
+# Every key below is a DEDICATED chart value (charts/warehouse-planning/values.yaml
+# renders each one to its env var), so none of this belongs in
+# local.sync_edge_env -- an `extraEnv` in THIS file would be silently dropped by
+# the computed layer (see helm-values/_README.md and terraform/locals.tf).
+#
+# Startup: runs golang-migrate before serving, over MIGRATIONS_DATABASE_URL (the
+# direct, non-pooled DSN Terraform puts in the <svc>-db Secret); DATABASE_URL
+# itself goes through PgBouncer.
+#
+# Deliberately absent (tracked deferrals): analytics projector/reports (no
+# analytics stream yet), MCP (cmd/mcp not merged), frontend (no web/).
+
+replicaCount: 1
+
+config:
+  httpAddr: ":8080"
+  migrationsPath: "migrations"
+  logLevel: "info"
+  # Relay CapacityPlan events onto warehouse.warehouse-planning.events instead
+  # of the log sink. Requires kafka.enabled (below); the chart refuses to render
+  # otherwise.
+  eventPublisher: "kafka"
+  outboxRelayInterval: "1s"
+  # Fixed, stable consumer-group ids: a restarted pod resumes from its committed
+  # offsets rather than re-reading the topic from the start. Equal to the
+  # binary's own defaults, pinned here so a rename in code cannot silently
+  # orphan the committed offsets.
+  laborCapacityConsumerGroup: "warehouse-planning-labor-capacity"
+  storageCapacityConsumerGroup: "warehouse-planning-storage-capacity"
+
+kafka:
+  enabled: true
+  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"

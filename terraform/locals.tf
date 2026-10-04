@@ -79,6 +79,30 @@ locals {
       path       = "${var.api_path_prefix}/process-path-management"
       chart_path = "${path.module}/../../process-path-management/charts/process-path-management"
     }
+    # warehouse-planning: capacity planning. Its env (EVENT_PUBLISHER, KAFKA_BROKERS,
+    # the two consumer-group ids, OUTBOX_RELAY_INTERVAL) all have DEDICATED chart
+    # values, so they live in helm-values/warehouse-planning.yaml, NOT in
+    # local.sync_edge_env (that map is only for env with no chart value; setting
+    # both would render duplicate env entries). It joins mcp_services (cmd/mcp
+    # merged; see terraform/mcp.tf) but not analytics_services (no analytics
+    # stream yet).
+    "warehouse-planning" = {
+      db         = "warehouse_planning"
+      user       = "warehouse_planning"
+      port       = 8080
+      path       = "${var.api_path_prefix}/warehouse-planning"
+      chart_path = "${path.module}/../../warehouse-planning/charts/warehouse-planning"
+    }
+  }
+
+  # GitHub owner of the repo ArgoCD clones per service (argocd-apps.tf). The
+  # fleet repos were transferred claudioed -> IQVO on 2026-10-03; the older
+  # services keep resolving through GitHub's transfer redirect from
+  # github.com/claudioed/<name>. warehouse-planning was created directly under
+  # IQVO, so github.com/claudioed/warehouse-planning does NOT exist (404) and
+  # must be addressed by its real owner.
+  argocd_repo_owner = {
+    "warehouse-planning" = "IQVO"
   }
 
   # Per-service database passwords are GENERATED, never committed. Each service

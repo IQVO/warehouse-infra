@@ -82,6 +82,11 @@ jobs:
           path: process-path-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/warehouse-planning
+          ref: develop
+          path: warehouse-planning
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: claudioed/warehouse-ops-agent
           ref: develop
           path: warehouse-ops-agent
@@ -126,7 +131,7 @@ jobs:
   # ============================================================
   # CLASSIFICATION: PACKAGING VALIDATION (Helm charts)
   # Every chart this repo deploys lives in a SIBLING repo, so this job
-  # checks out all ten (nine service repos + warehouse-console) next to
+  # checks out all eleven (ten service repos + warehouse-console) next to
   # this one, exactly matching the local dev layout the Makefile's CHARTS
   # variable and terraform/locals.tf's chart_path values already assume.
   # develop is checked out for each sibling (not main) to match what a
@@ -181,6 +186,11 @@ jobs:
           repository: claudioed/process-path-management
           ref: develop
           path: process-path-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/warehouse-planning
+          ref: develop
+          path: warehouse-planning
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: claudioed/warehouse-ops-agent
@@ -258,6 +268,11 @@ jobs:
           repository: claudioed/process-path-management
           ref: develop
           path: process-path-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/warehouse-planning
+          ref: develop
+          path: warehouse-planning
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: claudioed/warehouse-ops-agent

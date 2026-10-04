@@ -43,6 +43,16 @@ locals {
     # gives it an entry in `local.mcp_endpoint` for potential future
     # ops-agent consumption, exactly like the other eight.
     "network-fulfillment",
+    # warehouse-planning: cmd/mcp merged (IQVO/warehouse-planning#9) -- 7 tools,
+    # Streamable HTTP on :8090 at `/` and `/mcp`, open `/healthz`, no auth, no
+    # outbox relay and no Kafka dial (the api pod's relay drains the outbox rows
+    # the MCP create/publish tools insert). Its chart `mcp` env names were
+    # re-checked against cmd/mcp/main.go. services.tf's
+    # `contains(local.mcp_services, name)` gate then sets
+    # mcp.enabled = var.deploy_mcp_servers with no other edit. A
+    # `warehousePlanning` endpoint in ops-agent.tf is a separate, tracked
+    # follow-up (the ops agent has no use case for it yet).
+    "warehouse-planning",
   ])
 
   mcp_endpoint = {
