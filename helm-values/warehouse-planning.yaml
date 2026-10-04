@@ -31,7 +31,10 @@
 # that merge these values are ignored. The role/database are NOT created by a
 # plain apply on an already-populated Postgres: see the infra PR runbook.
 #
-# Deliberately absent (tracked deferrals): frontend (not wired in this repo yet).
+# The console remote (capacity_mfe, web/) is NOT set here: terraform/services.tf
+# computes `frontend` (enabled + content-addressed image tag) for every context
+# in local.frontend_remotes, and a `frontend:` key in this file would be
+# overridden.
 
 replicaCount: 1
 
