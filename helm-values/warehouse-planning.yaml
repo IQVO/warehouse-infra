@@ -19,8 +19,19 @@
 # direct, non-pooled DSN Terraform puts in the <svc>-db Secret); DATABASE_URL
 # itself goes through PgBouncer.
 #
-# Deliberately absent (tracked deferrals): analytics projector/reports (no
-# analytics stream yet), MCP (cmd/mcp not merged), frontend (no web/).
+# Analytics read side (warehouse-planning ADR 0005): planning-projector (the only
+# writer of the SEPARATE warehouse_planning_analytics database) and
+# planning-reports (read-only, Service warehouse-planning-reports, routed by
+# Kong at /api/warehouse-planning/reports by services.tf like every sibling).
+# Both ship in the SAME image as the api (one build_and_load). The DSNs
+# (analytics.database.projectorUrl/reportsUrl) are computed by Terraform
+# (services.tf, from local.analytics_services) and merged over this block, so
+# only the static bits live here. Needs warehouse-planning's chart `analytics:`
+# block on its develop branch (ArgoCD installs the chart from there); before
+# that merge these values are ignored. The role/database are NOT created by a
+# plain apply on an already-populated Postgres: see the infra PR runbook.
+#
+# Deliberately absent (tracked deferrals): frontend (not wired in this repo yet).
 
 replicaCount: 1
 
@@ -64,3 +75,17 @@ kafka:
 demand:
   consumerGroup: "warehouse-planning-demand"
   siteId: "SIM1"
+
+# Analytics read side (ADR 0005). `enabled` is also set by Terraform's computed
+# layer (services.tf, contains(local.analytics_services, name)); repeated here so
+# this file is the readable source of truth, exactly as the siblings do. The
+# projector's consumer group is a FIXED, stable id (fleet charter naming
+# `<ctx>-analytics`): a restarted pod resumes from its committed offsets, and a
+# brand-new group rebuilds the model from the topic's history. Pinned here equal
+# to the binary's/chart's default so a rename in code cannot silently orphan the
+# committed offsets. The DSNs come from the computed layer (database.projectorUrl
+# / reportsUrl), shallow-merged over this block (disjoint keys).
+analytics:
+  enabled: true
+  projector:
+    consumerGroup: "warehouse-planning-analytics"

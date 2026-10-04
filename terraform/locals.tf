@@ -84,8 +84,9 @@ locals {
     # values, so they live in helm-values/warehouse-planning.yaml, NOT in
     # local.sync_edge_env (that map is only for env with no chart value; setting
     # both would render duplicate env entries). It joins mcp_services (cmd/mcp
-    # merged; see terraform/mcp.tf) but not analytics_services (no analytics
-    # stream yet).
+    # merged; see terraform/mcp.tf) and analytics_services (its analytics read
+    # side, warehouse-planning ADR 0005: projector + reports + a separate
+    # warehouse_planning_analytics database).
     "warehouse-planning" = {
       db         = "warehouse_planning"
       user       = "warehouse_planning"
@@ -228,6 +229,19 @@ locals {
     # already derive from this single set, so no other file needs a
     # change to pick this service up.
     "process-path-management",
+    # Added (warehouse-planning ADR 0005): the analytics read side -- the
+    # `warehouse.warehouse-planning.analytics` stream, cmd/planning-projector
+    # (writer) and cmd/planning-reports (read-only reader, role/database
+    # warehouse_planning_analytics) -- ships in the SAME image as the OLTP api
+    # and mcp binaries (one build_and_load resource, no new image). The chart
+    # values it needs (analytics.database.projectorUrl/reportsUrl) are the same
+    # ones every sibling chart takes, so services.tf's
+    # `contains(local.analytics_services, name)` branch, the postgres.tf
+    # init-job template, the <name>-reports Kong route (services.tf) and
+    # ops-agent's reports URL all pick it up from this one entry. On an
+    # already-populated Postgres the new role/database are NOT created by
+    # `terraform apply` (initdb never re-runs): see the PR runbook.
+    "warehouse-planning",
   ])
 
   analytics_db_info = {
