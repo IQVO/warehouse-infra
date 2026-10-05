@@ -46,6 +46,15 @@ locals {
     # web/vite.config.ts: federation name "netfulfil_mfe", dev/preview
     # server port 5188.
     "network-fulfillment" = { remote_name = "netfulfil_mfe" }
+    # warehouse-planning (IQVO/warehouse-planning#20): federation container
+    # `capacity_mfe` (NOT planning_mfe, which is wes-work-planning's), exposes
+    # ./App, Vite base /mfes/warehouse-planning/, dev/preview port 5190. Its
+    # web/ sits at the standard <repo>/web path, so the source-hash fileset
+    # below and build-and-load-frontend.sh need no change. The chart's
+    # frontend Service is "warehouse-planning-frontend" (release name ==
+    # chart name, so fullname has no suffix) -- the name the gateway upstream
+    # below is derived from.
+    "warehouse-planning" = { remote_name = "capacity_mfe" }
   } : {}
 
   # Content-addressed image tags, NOT the fixed "local" tag the Go services

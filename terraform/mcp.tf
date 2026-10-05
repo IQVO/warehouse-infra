@@ -49,9 +49,9 @@ locals {
     # the MCP create/publish tools insert). Its chart `mcp` env names were
     # re-checked against cmd/mcp/main.go. services.tf's
     # `contains(local.mcp_services, name)` gate then sets
-    # mcp.enabled = var.deploy_mcp_servers with no other edit. A
-    # `warehousePlanning` endpoint in ops-agent.tf is a separate, tracked
-    # follow-up (the ops agent has no use case for it yet).
+    # mcp.enabled = var.deploy_mcp_servers with no other edit. The
+    # ops-agent consumes it via the `warehousePlanning` endpoint in
+    # ops-agent.tf (read tools only; warehouse-ops-agent ADR 0013).
     "warehouse-planning",
   ])
 

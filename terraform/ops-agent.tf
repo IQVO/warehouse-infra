@@ -133,6 +133,15 @@ locals {
         orderManagement       = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["order-management"] : "" }
         laborPerformance      = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["labor-performance"] : "" }
         processPathManagement = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["process-path-management"] : "" }
+        # warehouse-planning (warehouse-ops-agent ADR 0013): the agent's
+        # outbound client calls ONLY its read tools (get_process_path_capacity,
+        # get_capacity_plan, get_storage_capacity, list_station_standards)
+        # even though that MCP server is read+write; the capacity-outlook
+        # section of the daily brief consumes get_process_path_capacity.
+        # An empty endpoint (var.deploy_mcp_servers=false) leaves the agent
+        # exactly as before: the client is not wired and the brief omits
+        # the section.
+        warehousePlanning = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["warehouse-planning"] : "" }
       }
       # Real, in-cluster REST base URLs for the console-bff order-lifecycle
       # fan-out (cmd/agent/main.go's restclient wiring) — these ARE live
