@@ -136,6 +136,7 @@ each service ships its report (Phase 1/2/3 of the analytics plan).
 | inventory-storage (`inventory`) | `warehouse.inventory.analytics` | *(TBD)* |
 | facility-layout (`facility`) | `warehouse.facility.analytics` | *(TBD — needs Kafka enabled first)* |
 | workforce-management (`workforce`) | `warehouse.workforce.analytics` | *(TBD)* |
+| warehouse-planning (`warehouse-planning`) | `warehouse.warehouse-planning.analytics` | CapacityPlanCreated, CapacityPlanPublished (+ `binding_constraint`), CapacityShortageDetected, BottleneckDetected (CloudEvents 1.0; same `type` and `id` as the integration topic; warehouse-planning ADR 0005) |
 
 ---
 
