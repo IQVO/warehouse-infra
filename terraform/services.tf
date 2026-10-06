@@ -243,6 +243,25 @@ locals {
           enabled = true
         }
       } : {},
+      # labor-performance's event publisher. The chart natively templates
+      # EVENT_PUBLISHER from config.eventPublisher (default "log"). Setting
+      # it via extraEnv instead -- as this repo did before -- produced a
+      # duplicate env entry next to the chart's own, which breaks ArgoCD's
+      # three-way diff (ComparisonError, app Unknown; see locals.tf's
+      # sync_edge_env header). Unconditional "kafka" because this overlay
+      # always deploys with a broker and the analytics projector/reports
+      # pair consumes warehouse.labor-performance.analytics -- the same
+      # always-on shape order-management's helm-values uses for its own
+      # eventPublisher. Only `config` is set here: `kafka` (enabled +
+      # brokers) comes wholly from helm-values/labor-performance.yaml --
+      # setting kafka = { enabled = true } here would shallow-replace the
+      # static map and silently drop brokers back to the chart's
+      # "kafka:9092" default.
+      name == "labor-performance" ? {
+        config = {
+          eventPublisher = "kafka"
+        }
+      } : {},
       # MCP server per context (terraform/mcp.tf). Auth removed fleet-wide
       # (2026-09-09): MCP servers are unauthenticated now, so the chart's
       # mcp.enabled flag alone controls whether the MCP Deployment exists --
@@ -280,19 +299,23 @@ locals {
       # inventory-storage's side of that same integration. Kept as its own
       # merge entry (rather than folded into the block above) because the
       # two services need DIFFERENT keys: facility-layout needs a publisher
-      # switch, inventory-storage needs a consumer-mode env var. Note both
-      # branches of this ternary declare the SAME key set -- see the
-      # process-path block's comment for the "Inconsistent conditional
-      # result types" failure that rule exists to avoid.
+      # switch, inventory-storage needs a consumer-mode setting. The chart
+      # natively templates LOCATION_LOOKUP_MODE from
+      # config.locationLookupMode (default "permissive"), so this sets that
+      # key -- an extraEnv LOCATION_LOOKUP_MODE here would duplicate the
+      # chart's own rendered env and break ArgoCD's three-way diff, exactly
+      # like labor-performance's EVENT_PUBLISHER did (ComparisonError, app
+      # Unknown; found live 2026-10-06). Both branches declare the SAME key
+      # set -- see the process-path block's comment for the "Inconsistent
+      # conditional result types" failure that rule exists to avoid.
       name == "inventory-storage" ? (var.deploy_facility_events_integration ? {
-        extraEnv = [
-          {
-            name  = "LOCATION_LOOKUP_MODE"
-            value = "kafka"
-          },
-        ]
+        config = {
+          locationLookupMode = "kafka"
+        }
         } : {
-        extraEnv = []
+        config = {
+          locationLookupMode = "permissive"
+        }
       }) : {},
       # order-management's process-path catalogue validation
       # (order-management ADR-0013). Independent of the
@@ -395,6 +418,13 @@ locals {
       {
         config    = merge(lookup(local.static_helm_values[name], "config", {}), lookup(local.service_helm_values[name], "config", {}))
         analytics = merge(lookup(local.static_helm_values[name], "analytics", {}), lookup(local.service_helm_values[name], "analytics", {}))
+        # kafka deep-merged for the same reason as config/analytics: the
+        # computed layer's conditional blocks (facility-layout,
+        # process-path-management) set ONLY `enabled`, and a shallow merge
+        # would drop the static layer's real `brokers` DNS -- silently
+        # falling every consumer back to the chart's "kafka:9092" default
+        # (found live 2026-10-06: facility-layout ran on that default).
+        kafka = merge(lookup(local.static_helm_values[name], "kafka", {}), lookup(local.service_helm_values[name], "kafka", {}))
       }
     )
   }
