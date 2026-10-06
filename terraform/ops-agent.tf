@@ -98,17 +98,24 @@ check "anthropic_api_key_required_for_llm_mode" {
 # ---------------------------------------------------------------------------
 locals {
   # `:latest` -- this repo's docker-publish CI job pushes it on every merge
-  # to main. See this file's header re: no local build.
+  # to main. See this file's header re: no local build. Overridable via
+  # var.ops_agent_image_* (e.g. a kind-loaded `warehouse/warehouse-ops-agent`
+  # local build) because GHCR org packages are PRIVATE by default: the
+  # documented pull-straight-from-GHCR posture needs the package public
+  # (org Settings -> Packages -> warehouse-ops-agent -> Change visibility),
+  # which needs admin:packages and cannot be done from Terraform.
   ops_agent_image_tag = "latest"
 
   ops_agent_helm_values = merge(
     {
       image = {
-        repository = "ghcr.io/iqvo/warehouse-ops-agent"
-        tag        = local.ops_agent_image_tag
-        # Always, not IfNotPresent: :latest only tracks the newest published
-        # image if the kubelet re-pulls it every time.
-        pullPolicy = "Always"
+        repository = var.ops_agent_image_repository
+        tag        = var.ops_agent_image_tag != "" ? var.ops_agent_image_tag : local.ops_agent_image_tag
+        # Always for the GHCR default (a :latest tag only tracks the newest
+        # published image if the kubelet re-pulls it); IfNotPresent for a
+        # kind-loaded local image, which exists only in the nodes'
+        # containerd store and must never be pulled.
+        pullPolicy = var.ops_agent_image_repository == "ghcr.io/iqvo/warehouse-ops-agent" ? "Always" : "IfNotPresent"
       }
 
       service = {

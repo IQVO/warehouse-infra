@@ -3,10 +3,12 @@
 # fulfillment-execution's TaskCompleted event (warehouse.fulfillment.events)
 # AND, since its analytics data product (ADR-0007 there) and transactional
 # outbox (ADR-0010 there), a PUBLISHER onto warehouse.labor-performance.analytics.
-# The chart carries no eventPublisher value (its configmap never renders
-# EVENT_PUBLISHER); it is injected from terraform/locals.tf's sync_edge_env
-# (extraEnv in THIS file would be overridden by the computed layer -- see
-# that local's comment).
+# EVENT_PUBLISHER is set by the chart itself (config.eventPublisher),
+# overridden to "kafka" from terraform/services.tf's computed merge --
+# never via extraEnv, which would duplicate the chart's own rendered env
+# and break ArgoCD's diff (see terraform/locals.tf's sync_edge_env
+# header). An extraEnv in THIS file would also be silently overridden by
+# the computed layer.
 #
 # Startup: runs migrations before serving.
 #
