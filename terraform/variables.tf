@@ -337,6 +337,32 @@ variable "anthropic_api_key" {
   sensitive   = true
 }
 
+variable "ops_agent_image_repository" {
+  description = <<-EOT
+    Container repository for warehouse-ops-agent. Default is the CI-published
+    GHCR image (docker-publish job pushes ghcr.io/iqvo/warehouse-ops-agent on
+    every merge to main). NOTE: GHCR org packages are private unless an org
+    admin makes them public; for a local kind cluster where the package is
+    NOT public, set this to a kind-loaded local image instead, e.g.
+    warehouse/warehouse-ops-agent (built and loaded via
+    `docker build` + `kind load docker-image`, tag matching
+    var.ops_agent_image_tag) -- pullPolicy then flips to IfNotPresent
+    automatically (see ops-agent.tf).
+  EOT
+  type        = string
+  default     = "ghcr.io/iqvo/warehouse-ops-agent"
+}
+
+variable "ops_agent_image_tag" {
+  description = <<-EOT
+    Image tag for warehouse-ops-agent. Empty string keeps the computed
+    default "latest" (GHCR, re-pulled every pod start). Set to a specific
+    tag when overriding the repository for a local build, e.g. local-<sha>.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "postgres_persistence_enabled" {
   description = <<-EOT
     Whether the PostgreSQL primary gets a PersistentVolumeClaim.

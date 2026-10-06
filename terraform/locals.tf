@@ -318,15 +318,18 @@ locals {
   # set), and that computed layer overrides the helm-values/*.yaml file.
   # So an extraEnv entry in a helm-values file is silently dropped; any
   # per-service env that has no dedicated chart value MUST live here.
-  # labor-performance's EVENT_PUBLISHER is the first such case: its chart
-  # never rendered that variable, so the binary ran the log publisher and
-  # warehouse.labor-performance.analytics stayed at offset 0 until
-  # 2026-09-07 -- the labor projector/reports pair never saw an event.
+  #
+  # labor-performance's EVENT_PUBLISHER originally lived here as an
+  # extraEnv entry because its chart didn't render that variable. The
+  # chart now natively templates it (config.eventPublisher), so the env
+  # is set via that key in services.tf instead -- an extraEnv
+  # EVENT_PUBLISHER on top of the chart's own rendered one produces a
+  # DUPLICATE env entry in the Deployment, which breaks ArgoCD's
+  # three-way diff (ComparisonError "doesn't match $setElementOrder
+  # list", app stuck Unknown/Progressing; found live 2026-10-05 when the
+  # adr-conformance chart changes landed).
   # ---------------------------------------------------------------------------
   sync_edge_env = {
-    "labor-performance" = [
-      { name = "EVENT_PUBLISHER", value = "kafka" },
-    ]
     "wes-work-planning" = [
       { name = "PRODUCT_CLASSIFICATION_MODE", value = "http" },
       { name = "INVENTORY_STORAGE_BASE_URL", value = "http://inventory-storage.${var.apps_namespace}.svc.cluster.local:80" },
