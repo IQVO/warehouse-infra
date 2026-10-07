@@ -16,6 +16,18 @@ config:
   httpAddr: ":8080"
   eventPublisher: "kafka"
   migrationsPath: "migrations"
+  # Site-scoped transfer allocation command consumer (ADR-0030): consumes
+  # network-inventory-planning's TransferAllocationRequested commands from
+  # warehouse.network-inventory-planning.events. The chart natively
+  # templates TRANSFER_ALLOCATION_CONSUMER_MODE/GROUP from these keys --
+  # setting them via extraEnv would duplicate the chart's own env entries
+  # and break ArgoCD's three-way diff (see locals.tf's sync_edge_env
+  # header). The group id is the chart's own documented default, set
+  # explicitly so the Deployment's env is self-describing; a locally-run
+  # process overrides it so it can never steal the live Deployment's
+  # partitions.
+  transferAllocationConsumerMode: "kafka"
+  transferAllocationConsumerGroup: "inventory-storage-transfer-allocation"
 
 kafka:
   enabled: true
