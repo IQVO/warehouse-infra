@@ -55,6 +55,15 @@ locals {
     # chart name, so fullname has no suffix) -- the name the gateway upstream
     # below is derived from.
     "warehouse-planning" = { remote_name = "capacity_mfe" }
+    # product-master (IQVO/product-master#10): federation container
+    # `productmaster_mfe` (registered by the console in warehouse-console#66),
+    # Vite base /mfes/product-master/. Its web/ sits at the standard <repo>/web
+    # path with web/Dockerfile taking warehouse-ui-kit as the named `uikit`
+    # build context, exactly what build-and-load-frontend.sh supplies, so the
+    # source-hash fileset below needs no change. The web gateway location
+    # /mfes/product-master/ is rendered from this entry; the chart's frontend
+    # Service is "product-master-frontend".
+    "product-master" = { remote_name = "productmaster_mfe" }
   } : {}
 
   # Content-addressed image tags, NOT the fixed "local" tag the Go services

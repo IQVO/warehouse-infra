@@ -149,6 +149,11 @@ locals {
         # exactly as before: the client is not wired and the brief omits
         # the section.
         warehousePlanning = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["warehouse-planning"] : "" }
+        # product-master (warehouse-ops-agent #120): chart value
+        # upstreams.productMaster.endpoint -> env PRODUCT_MASTER_MCP_ENDPOINT.
+        # product-master's MCP server is read-only. Empty
+        # (var.deploy_mcp_servers=false) leaves the client unwired.
+        productMaster = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["product-master"] : "" }
       }
       # Real, in-cluster REST base URLs for the console-bff order-lifecycle
       # fan-out (cmd/agent/main.go's restclient wiring) — these ARE live
