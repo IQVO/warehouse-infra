@@ -19,14 +19,15 @@ locals {
     name => sha256(join("", concat(
       [for f in sort(fileset("${path.module}/../../${name}", "**/*.go")) : filesha256("${path.module}/../../${name}/${f}")],
       [for f in sort(fileset("${path.module}/../../${name}", "migrations/**")) : filesha256("${path.module}/../../${name}/${f}")],
-      # warehouse-planning keeps its migrations under internal/ (the others use a
-      # top-level migrations/ dir, matched above). No other service has files
-      # matching this pattern, so adding it leaves their hashes unchanged.
+      # warehouse-planning and product-master keep their migrations under
+      # internal/ (the others use a top-level migrations/ dir, matched above).
+      # No other service has files matching this pattern, so adding it leaves
+      # their hashes unchanged.
       [for f in sort(fileset("${path.module}/../../${name}", "internal/**/migrations/**")) : filesha256("${path.module}/../../${name}/${f}")],
-      # warehouse-planning's ANALYTICAL migrations live in a top-level
-      # analytics/migrations/ (applied by its planning-projector; no Go file
-      # changes with them, so a migration-only change would otherwise never
-      # rebuild the image). The other services keep theirs under
+      # warehouse-planning's and product-master's ANALYTICAL migrations live in
+      # a top-level analytics/migrations/ (applied by their projectors; no Go
+      # file changes with them, so a migration-only change would otherwise
+      # never rebuild the image). The other services keep theirs under
       # migrations/analytics/, already matched by the top-level migrations/**
       # term above, and have no top-level analytics/ directory, so this leaves
       # their hashes unchanged.

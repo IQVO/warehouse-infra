@@ -94,6 +94,26 @@ locals {
       path       = "${var.api_path_prefix}/warehouse-planning"
       chart_path = "${path.module}/../../warehouse-planning/charts/warehouse-planning"
     }
+    # product-master: the product master data context (SKU identity,
+    # dimensions, handling classification; product-master ADRs 0001-0004). Its
+    # env (EVENT_PUBLISHER, KAFKA_BROKERS, LEGACY_IMPORT_CONSUMER_GROUP,
+    # OUTBOX_RELAY_INTERVAL) all have DEDICATED chart values, so they live in
+    # helm-values/product-master.yaml, NOT in local.sync_edge_env (setting both
+    # would render duplicate env entries). It publishes
+    # warehouse.product-master.events (ProductClassified is what the
+    # classification readers -- inventory-storage, order-management,
+    # wes-work-planning, fulfillment-execution -- keep local copies of; ADR 0003
+    # stage D). It joins mcp_services (cmd/mcp merged; see terraform/mcp.tf),
+    # analytics_services (product-master ADR 0006: product-projector +
+    # product-reports + a separate product_master_analytics database) and
+    # frontend_remotes (productmaster_mfe, web/; terraform/frontends.tf).
+    "product-master" = {
+      db         = "product_master"
+      user       = "product_master"
+      port       = 8080
+      path       = "${var.api_path_prefix}/product-master"
+      chart_path = "${path.module}/../../product-master/charts/product-master"
+    }
   }
 
   # GitHub owner of the repo ArgoCD clones per service (argocd-apps.tf). The
@@ -101,9 +121,11 @@ locals {
   # services keep resolving through GitHub's transfer redirect from
   # github.com/IQVO/<name>. warehouse-planning was created directly under
   # IQVO, so github.com/IQVO/warehouse-planning does NOT exist (404) and
-  # must be addressed by its real owner.
+  # must be addressed by its real owner. product-master was likewise created
+  # directly under IQVO.
   argocd_repo_owner = {
     "warehouse-planning" = "IQVO"
+    "product-master"     = "IQVO"
   }
 
   # Per-service database passwords are GENERATED, never committed. Each service
@@ -242,6 +264,15 @@ locals {
     # already-populated Postgres the new role/database are NOT created by
     # `terraform apply` (initdb never re-runs): see the PR runbook.
     "warehouse-planning",
+    # Added (product-master ADR 0006): the master data quality data product --
+    # the `warehouse.product-master.analytics` stream (same outbox as the
+    # integration topic), cmd/product-projector (writer, admin :8091, group
+    # product-master-analytics) and cmd/product-reports (read-only reader,
+    # :8092), role/database product_master_analytics. Same image as the api and
+    # mcp binaries (one build_and_load). Its analytical migrations live in a
+    # top-level analytics/migrations/, already hashed by services.tf's
+    # service_source_hash. Same one-time SQL caveat as warehouse-planning above.
+    "product-master",
   ])
 
   analytics_db_info = {
