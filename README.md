@@ -205,6 +205,25 @@ schema and rationale.
 
 ---
 
+## Network inventory planning (NIP) runbook
+
+`network-inventory-planning` is deployed by `terraform/network-inventory-planning.tf`
+(image build/load, database secret, ArgoCD Application, Kong route, chart values).
+Two things a plain `terraform apply` does NOT do on an already-populated cluster:
+
+1. **Database and role.** Postgres runs its init script once, on an empty data
+   directory. Create `network_inventory_planning` (database + role, password from
+   `terraform output -raw network_inventory_planning_db_password`) by hand, mirroring
+   `templates/init-databases.sql.tftpl`, before ArgoCD syncs the pod.
+2. **The dispatch path.** NIP releases the dispatch leg with
+   `TRANSFER_DISPATCH_PATH_ID=transfer-dispatch`. process-path-management is the
+   catalogue's source of truth (the YAML under `config/process-paths/` is frozen), so
+   create the path there once: id `TRANSFER_DISPATCH`, matchPrefix `transfer-dispatch`,
+   direct, with the capability the dispatch crew carries. Until it exists the dispatch
+   leg is fail-closed (the saga stops after the pick).
+
+---
+
 ## Prerequisites
 
 Versions this was actually built and verified against, on `darwin/arm64`:
@@ -330,6 +349,7 @@ collides head-on with the console shell's own client-side routes —
 | `http://localhost:8000/api/labor-performance/*`           | `/api/labor-performance` → `/*`      | `labor-performance.warehouse-systems.svc.cluster.local`     |
 | `http://localhost:8000/api/process-path-management/*`     | `/api/process-path-management` → `/*`| `process-path-management...svc.cluster.local`                |
 | `http://localhost:8000/api/warehouse-planning/*`          | `/api/warehouse-planning` → `/*`     | `warehouse-planning.warehouse-systems.svc.cluster.local`    |
+| `http://localhost:8000/api/network-inventory-planning/*`  | `/api/network-inventory-planning` → `/*` | `network-inventory-planning.warehouse-systems.svc.cluster.local` |
 | `http://localhost:8000/api/warehouse-ops-agent/*`         | `/api/warehouse-ops-agent` → `/*`    | `warehouse-ops-agent.warehouse-systems.svc.cluster.local`   |
 
 Container port 8080 is not an assumption: every `cmd/*/main.go` defaults
