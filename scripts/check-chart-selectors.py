@@ -81,6 +81,13 @@ CHARTS: dict[str, dict[str, str]] = {
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
         "database.url": "postgres://u@example.invalid:5432/db",
     },
+    # network-inventory-planning: OLTP api only for now (mcp/frontend/analytics
+    # components arrive with their own PRs). The chart needs a database source;
+    # routing templates are opt-in and rendered here too.
+    "../../network-inventory-planning/charts/network-inventory-planning": {
+        "kafka.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+    },
     # Single Deployment/Service each, no optional-component toggles that
     # add another pair -- included for completeness/regression coverage,
     # not because they're currently at risk of this specific bug shape.

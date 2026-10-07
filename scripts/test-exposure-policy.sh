@@ -120,7 +120,7 @@ done
 echo "==> 6. Every API answers on the API origin"
 for ctx in order-management inventory-storage wes-work-planning fulfillment-execution \
            workforce-management facility-layout labor-performance process-path-management \
-           warehouse-planning; do
+           warehouse-planning network-inventory-planning; do
   CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${API_URL}/api/${ctx}/healthz" || echo 000)"
   if [[ "${CODE}" == "200" ]]; then
     pass "${ctx} /healthz -> 200"
