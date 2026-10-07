@@ -28,6 +28,13 @@ config:
   # partitions.
   transferAllocationConsumerMode: "kafka"
   transferAllocationConsumerGroup: "inventory-storage-transfer-allocation"
+  # product-master classification local copy (inventory-storage ADR-0034;
+  # product-master ADR 0003 stage D): consume ProductClassified from
+  # warehouse.product-master.events into product_classifications. A DEDICATED
+  # chart value (rendered to PRODUCT_MASTER_CONSUMER_GROUP), so it lives here and
+  # never in extraEnv. A fixed, stable id: a restarted pod resumes from its
+  # committed offsets. Empty would leave the consumer off.
+  productMasterConsumerGroup: "inventory-storage-product-master"
 
 kafka:
   enabled: true

@@ -266,11 +266,14 @@ locals {
       # MCP server per context (terraform/mcp.tf). Auth removed fleet-wide
       # (2026-09-09): MCP servers are unauthenticated now, so the chart's
       # mcp.enabled flag alone controls whether the MCP Deployment exists --
-      # no keys needed.
+      # no keys needed. A service in local.mcp_extra_env (locals.tf) also gets
+      # mcp.extraEnv; the filtered for-expression adds that key ONLY for those
+      # services, so every other chart's values stay byte-identical.
       contains(local.mcp_services, name) ? {
-        mcp = {
-          enabled = var.deploy_mcp_servers
-        }
+        mcp = merge(
+          { enabled = var.deploy_mcp_servers },
+          { for k, v in { extraEnv = lookup(local.mcp_extra_env, name, []) } : k => v if length(v) > 0 },
+        )
       } : {},
       # facility-layout -> inventory-storage location-classification
       # integration (inventory-storage ADR-0013). Same "flip both sides
