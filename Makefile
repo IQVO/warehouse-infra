@@ -6,7 +6,7 @@
 
 TF_DIR := terraform
 
-# The eleven Helm charts this repo deploys, taken directly from
+# The thirteen Helm charts this repo deploys, taken directly from
 # terraform/locals.tf's local.services chart_path values plus
 # ops-agent.tf's local.ops_agent_chart_path and warehouse-console's own
 # chart (frontends.tf). Keep this list in sync with those files — it is
@@ -21,6 +21,7 @@ CHARTS := \
 	../labor-performance/charts/labor-performance \
 	../process-path-management/charts/process-path-management \
 	../warehouse-planning/charts/warehouse-planning \
+	../product-master/charts/product-master \
 	../network-inventory-planning/charts/network-inventory-planning \
 	../warehouse-ops-agent/charts/warehouse-ops-agent \
 	../warehouse-console/charts/warehouse-console
@@ -61,7 +62,7 @@ helm-lint:
 		echo "==> $$c"; \
 		if [ "$$(basename $$c)" = "workforce-management" ]; then \
 			helm lint "$$c" --set database.url=postgres://u:p@example.invalid:5432/db || exit 1; \
-		elif [ "$$(basename $$c)" = "warehouse-planning" ] || [ "$$(basename $$c)" = "network-inventory-planning" ]; then \
+		elif [ "$$(basename $$c)" = "warehouse-planning" ] || [ "$$(basename $$c)" = "network-inventory-planning" ] || [ "$$(basename $$c)" = "product-master" ]; then \
 			helm lint "$$c" --set database.url=postgres://u@example.invalid:5432/db || exit 1; \
 		else \
 			helm lint "$$c" || exit 1; \

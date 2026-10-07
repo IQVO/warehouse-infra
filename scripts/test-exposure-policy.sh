@@ -105,7 +105,7 @@ done
 echo "==> 5. Every remote is served through the gateway, as JavaScript"
 for ctx in order-management inventory-storage wes-work-planning fulfillment-execution \
            workforce-management facility-layout labor-performance process-path-management \
-           warehouse-planning; do
+           warehouse-planning product-master; do
   URL="${WEB_URL}/mfes/${ctx}/remoteEntry.js"
   read -r CODE CTYPE < <(curl -s -o /dev/null -w '%{http_code} %{content_type}' --max-time 10 "${URL}" || echo "000 none")
   if [[ "${CODE}" == "200" && "${CTYPE}" == *javascript* ]]; then
@@ -120,7 +120,7 @@ done
 echo "==> 6. Every API answers on the API origin"
 for ctx in order-management inventory-storage wes-work-planning fulfillment-execution \
            workforce-management facility-layout labor-performance process-path-management \
-           warehouse-planning network-inventory-planning; do
+           warehouse-planning product-master network-inventory-planning; do
   CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${API_URL}/api/${ctx}/healthz" || echo 000)"
   if [[ "${CODE}" == "200" ]]; then
     pass "${ctx} /healthz -> 200"
@@ -171,21 +171,24 @@ else
   fail "preflight from ${WEB_URL} -> allow-origin '${ALLOW:-<none>}'"
 fi
 
-# The warehouse-planning remote's station-standard form issues a cross-origin
-# PUT with a JSON Content-Type, which the browser preflights. GET alone would
-# pass the check above even if PUT were dropped from the plugin's methods.
-PUT_PREFLIGHT="$(curl -s -D - -o /dev/null --max-time 10 -X OPTIONS \
-  -H "Origin: ${WEB_URL}" \
-  -H 'Access-Control-Request-Method: PUT' \
-  -H 'Access-Control-Request-Headers: content-type' \
-  "${API_URL}/api/warehouse-planning/healthz" || true)"
-PUT_METHODS="$(grep -i '^access-control-allow-methods:' <<<"${PUT_PREFLIGHT}" | tr -d '\r')"
-PUT_HEADERS="$(grep -i '^access-control-allow-headers:' <<<"${PUT_PREFLIGHT}" | tr -d '\r')"
-if grep -qiE '(:|,) *PUT *(,|$)' <<<"${PUT_METHODS}" && grep -qi 'content-type' <<<"${PUT_HEADERS}"; then
-  pass "PUT preflight from ${WEB_URL} allows PUT + Content-Type"
-else
-  fail "PUT preflight from ${WEB_URL} -> methods '${PUT_METHODS:-<none>}' headers '${PUT_HEADERS:-<none>}' (the capacity remote needs PUT and Content-Type)"
-fi
+# The warehouse-planning remote's station-standard form and the product-master
+# remote's register/classify/dimensions forms issue cross-origin PUTs with a
+# JSON Content-Type, which the browser preflights. GET alone would pass the
+# check above even if PUT were dropped from the plugin's methods.
+for ctx in warehouse-planning product-master; do
+  PUT_PREFLIGHT="$(curl -s -D - -o /dev/null --max-time 10 -X OPTIONS \
+    -H "Origin: ${WEB_URL}" \
+    -H 'Access-Control-Request-Method: PUT' \
+    -H 'Access-Control-Request-Headers: content-type' \
+    "${API_URL}/api/${ctx}/healthz" || true)"
+  PUT_METHODS="$(grep -i '^access-control-allow-methods:' <<<"${PUT_PREFLIGHT}" | tr -d '\r')"
+  PUT_HEADERS="$(grep -i '^access-control-allow-headers:' <<<"${PUT_PREFLIGHT}" | tr -d '\r')"
+  if grep -qiE '(:|,) *PUT *(,|$)' <<<"${PUT_METHODS}" && grep -qi 'content-type' <<<"${PUT_HEADERS}"; then
+    pass "${ctx} PUT preflight from ${WEB_URL} allows PUT + Content-Type"
+  else
+    fail "${ctx} PUT preflight from ${WEB_URL} -> methods '${PUT_METHODS:-<none>}' headers '${PUT_HEADERS:-<none>}' (its remote needs PUT and Content-Type)"
+  fi
+done
 
 EVIL="$(curl -s -D - -o /dev/null --max-time 10 -X OPTIONS \
   -H 'Origin: http://evil.example' \

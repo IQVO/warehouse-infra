@@ -132,7 +132,7 @@ Every bounded-context service's OLTP pod listens on container port `8080`
 
 | Service (`warehouse-systems` ns)         | Service port → target | What it is |
 |--------------------------------------------|------------------------|------------|
-| `<service>` (9 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning) | `80 → 8080` | OLTP REST API, routed by Kong |
+| `<service>` (10 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master) | `80 → 8080` | OLTP REST API, routed by Kong |
 | `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — all 8 services above, per `mcp.tf`'s `local.mcp_services` |
 | `<service>-reports`                        | `80 → 8092`             | Analytics read-only REST API (only where `analytics.enabled`, see `locals.tf`'s `analytics_services`) |
 | `<service>-frontend`                       | `80 → 8080`             | Module Federation remote, proxied by the web gateway at `/mfes/<context>/` |
@@ -157,6 +157,14 @@ api, backed by the separate `warehouse_planning_analytics` database (role
 Postgres, never through PgBouncer). Its projector consumer group is the fixed
 `warehouse-planning-analytics`; its report endpoints are
 `GET /reports/{bottleneck-frequency,shortage-trend,plan-throughput}`.
+
+`product-master` likewise: projector `/app/product-projector` (admin `8091`,
+consumer group `product-master-analytics`, topic
+`warehouse.product-master.analytics`) and reports `/app/product-reports`
+(Service `product-master-reports`, Kong route `/api/product-master/reports/*` →
+`/reports/*`, endpoints `GET /reports/{master-data-quality,freshness}`), backed
+by the separate `product_master_analytics` database (role
+`product_master_analytics`, DSN direct to Postgres).
 
 **A structural gotcha worth knowing before you `kubectl port-forward pod/…`:**
 every chart's `selectorLabels` helper emits only
@@ -349,6 +357,7 @@ collides head-on with the console shell's own client-side routes —
 | `http://localhost:8000/api/labor-performance/*`           | `/api/labor-performance` → `/*`      | `labor-performance.warehouse-systems.svc.cluster.local`     |
 | `http://localhost:8000/api/process-path-management/*`     | `/api/process-path-management` → `/*`| `process-path-management...svc.cluster.local`                |
 | `http://localhost:8000/api/warehouse-planning/*`          | `/api/warehouse-planning` → `/*`     | `warehouse-planning.warehouse-systems.svc.cluster.local`    |
+| `http://localhost:8000/api/product-master/*`              | `/api/product-master` → `/*`         | `product-master.warehouse-systems.svc.cluster.local`        |
 | `http://localhost:8000/api/network-inventory-planning/*`  | `/api/network-inventory-planning` → `/*` | `network-inventory-planning.warehouse-systems.svc.cluster.local` |
 | `http://localhost:8000/api/warehouse-ops-agent/*`         | `/api/warehouse-ops-agent` → `/*`    | `warehouse-ops-agent.warehouse-systems.svc.cluster.local`   |
 
