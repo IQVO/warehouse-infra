@@ -31,11 +31,9 @@
 # name follows the warehouse.<context>.analytics convention) take that
 # same path, so kafka.tf is untouched by design.
 #
-# THE CHART DOES NOT EXIST ON IQVO/network-inventory-planning's develop
-# YET (it lands via a parallel PR in that repo). The Application in
-# argocd-apps.tf is declared now, behind the same convention every
-# sibling uses, and will sit degraded (missing chart path) until that PR
-# merges and ArgoCD syncs — expected, and stated in this PR's body.
+# The packaging (Dockerfile + chart) is on NIP's develop; this file builds
+# and side-loads the image (null_resource.build_and_load_network_inventory_planning,
+# content-derived tag) and carries the chart's environment values.
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
@@ -110,8 +108,74 @@ output "network_inventory_planning_route" {
 # image defaults apply until then.
 # ---------------------------------------------------------------------------
 locals {
+  network_inventory_planning_chart_path = "${path.module}/../../network-inventory-planning/charts/network-inventory-planning"
+
+  # Same content hash as network-fulfillment.tf: every Go file, the
+  # Dockerfile and the module files. NIP keeps its migrations under
+  # internal/adapters/outbound/postgres/migrations, which holds only .sql
+  # files, so they are hashed explicitly (a migration-only change has no Go
+  # diff and would otherwise never rebuild the image).
+  network_inventory_planning_source_hash = sha256(join("", concat(
+    [for f in sort(fileset("${path.module}/../../network-inventory-planning", "**/*.go")) : filesha256("${path.module}/../../network-inventory-planning/${f}")],
+    [for f in sort(fileset("${path.module}/../../network-inventory-planning", "internal/**/migrations/**")) : filesha256("${path.module}/../../network-inventory-planning/${f}")],
+    [
+      filesha256("${path.module}/../../network-inventory-planning/Dockerfile"),
+      filesha256("${path.module}/../../network-inventory-planning/go.mod"),
+      filesha256("${path.module}/../../network-inventory-planning/go.sum"),
+    ],
+  )))
+
+  # Content-derived, same rationale as services.tf's local.service_image_tags:
+  # ArgoCD's sync only fires on an actual diff, so a fixed tag gives it
+  # nothing to detect on a rebuild.
+  network_inventory_planning_image_tag = "local-${substr(local.network_inventory_planning_source_hash, 0, 12)}"
+}
+
+resource "null_resource" "build_and_load_network_inventory_planning" {
+  count = var.deploy_services ? 1 : 0
+
+  depends_on = [kind_cluster.warehouse]
+
+  triggers = {
+    source_hash = local.network_inventory_planning_source_hash
+    image       = "warehouse/network-inventory-planning:${local.network_inventory_planning_image_tag}"
+    cluster     = var.cluster_name
+  }
+
+  provisioner "local-exec" {
+    command = "${path.module}/../scripts/build-and-load.sh 'network-inventory-planning' '${local.network_inventory_planning_image_tag}' '${var.cluster_name}'"
+  }
+}
+
+locals {
   network_inventory_planning_helm_values = merge(
     {
+      image = {
+        repository = "warehouse/network-inventory-planning"
+        tag        = local.network_inventory_planning_image_tag
+        pullPolicy = "IfNotPresent"
+      }
+
+      # Environment the binary reads (cmd/network-inventory-planning/main.go),
+      # each key a dedicated chart value. Consumer-group ids are FIXED and
+      # STABLE (a rescheduled pod resumes from its committed offsets; a new
+      # group rebuilds the read models from topic history). EMPTY would switch
+      # that consumer off.
+      config = {
+        # Fail-closed (NIP ADR 0005): an empty pick path makes
+        # POST /v1/transfers:approve answer 503. `pick` is an existing family
+        # in the process-path catalogue (PICK).
+        transferPickPathId    = "pick"
+        transferPickCptOffset = "2h"
+        # NOT in the seeded catalogue: create it in process-path-management
+        # (id TRANSFER_DISPATCH, matchPrefix transfer-dispatch, direct) before
+        # a TransferPicked fact can release the dispatch demand; until then the
+        # dispatch leg stays fail-closed. README "Network inventory planning".
+        transferDispatchPathId    = "transfer-dispatch"
+        transferDispatchCptOffset = "3h"
+        outboxRelayEnabled        = "true"
+      }
+
       service = {
         type       = "ClusterIP"
         port       = 80
@@ -124,13 +188,21 @@ locals {
       database = {
         existingSecret    = var.deploy_services ? "network-inventory-planning-db" : ""
         existingSecretKey = "DATABASE_URL"
+        # Direct (non-pooled) DSN for the golang-migrate step; the Secret above
+        # already carries it. NIP reads MIGRATIONS_DATABASE_URL since ADR 0006.
+        migrationsExistingSecretKey = "MIGRATIONS_DATABASE_URL"
       }
 
       # Same literal in-cluster bootstrap address every sibling's
       # helm-values/*.yaml sets (kafka.tf's kafka_brokers output).
       kafka = {
-        enabled = true
-        brokers = "kafka.warehouse-systems.svc.cluster.local:9092"
+        enabled                     = true
+        brokers                     = "kafka.warehouse-systems.svc.cluster.local:9092"
+        siteCapabilityConsumerGroup = "network-inventory-planning-site-capability"
+        siteSkuDemandConsumerGroup  = "network-inventory-planning-site-sku-demand"
+        capacityPlanConsumerGroup   = "network-inventory-planning-capacity-plan"
+        transferReplyConsumerGroup  = "network-inventory-planning-transfer-reply"
+        transferFactConsumerGroup   = "network-inventory-planning-transfer-fact"
       }
       # Kong route: chart-rendered Ingress when Gateway API is off,
       # enabled=false-but-present so the key set stays stable. See the

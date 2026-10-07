@@ -21,6 +21,7 @@ CHARTS := \
 	../labor-performance/charts/labor-performance \
 	../process-path-management/charts/process-path-management \
 	../warehouse-planning/charts/warehouse-planning \
+	../network-inventory-planning/charts/network-inventory-planning \
 	../warehouse-ops-agent/charts/warehouse-ops-agent \
 	../warehouse-console/charts/warehouse-console
 
@@ -60,7 +61,7 @@ helm-lint:
 		echo "==> $$c"; \
 		if [ "$$(basename $$c)" = "workforce-management" ]; then \
 			helm lint "$$c" --set database.url=postgres://u:p@example.invalid:5432/db || exit 1; \
-		elif [ "$$(basename $$c)" = "warehouse-planning" ]; then \
+		elif [ "$$(basename $$c)" = "warehouse-planning" ] || [ "$$(basename $$c)" = "network-inventory-planning" ]; then \
 			helm lint "$$c" --set database.url=postgres://u@example.invalid:5432/db || exit 1; \
 		else \
 			helm lint "$$c" || exit 1; \
