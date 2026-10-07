@@ -57,6 +57,21 @@ plannedCapacity:
   consumerGroup: "order-management-planned-capacity"
   siteId: "SIM1"
 
+# Product classification from a local copy of product-master's events
+# (order-management ADR 0036; product-master ADR 0003 stage D). Consumes
+# ProductClassified from warehouse.product-master.events into a Postgres copy
+# instead of the default "permissive" (every SKU unclassified). "http" was
+# REMOVED from the binary and fails boot. Both keys are DEDICATED chart values
+# (rendered to PRODUCT_CLASSIFICATION_MODE / PRODUCT_CLASSIFICATION_CONSUMER_GROUP),
+# so they live here and NOT in local.sync_edge_env (setting both would
+# double-render). consumerGroup is fixed and stable: a restarted pod resumes
+# from its committed offsets and N replicas share partitions; the binary has
+# no default on purpose. KAFKA_BROKERS is already rendered. The `inventoryStorage`
+# block above stays: reservations (allocation) still call inventory-storage.
+productClassification:
+  mode: "kafka"
+  consumerGroup: "order-management-product-classification"
+
 analytics:
   enabled: true
 

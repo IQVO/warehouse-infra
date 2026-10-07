@@ -335,6 +335,17 @@ locals {
   #   - wes-work-planning / fulfillment-execution
   #     PRODUCT_CLASSIFICATION_MODE=permissive is fail-open: WorkReleased
   #     never carries hazmat/fragile hints, so no station gating happens.
+  #     The classification edge is no longer HTTP (product-master ADR 0003
+  #     stage D; wes-work-planning ADR-0035, fulfillment-execution ADR-0039):
+  #     both now keep a local copy of product-master's ProductClassified from
+  #     warehouse.product-master.events, so the mode is "kafka" with a STABLE
+  #     PRODUCT_CLASSIFICATION_CONSUMER_GROUP (shared by every replica: the
+  #     copy is durable in Postgres and the upsert is version-guarded). "http"
+  #     was REMOVED from both binaries and now FAILS AT BOOT, and neither
+  #     reads INVENTORY_STORAGE_BASE_URL any more, so both entries are gone.
+  #     Neither chart has a dedicated value for these, hence extraEnv here.
+  #     (order-management and inventory-storage DO have dedicated values: see
+  #     their helm-values files.)
   #   - workforce-management LABOR_PERFORMANCE_MODE=permissive: ProposePathPlan
   #     always proposes 0 heads (no measured rate).
   #
@@ -362,14 +373,14 @@ locals {
   # ---------------------------------------------------------------------------
   sync_edge_env = {
     "wes-work-planning" = [
-      { name = "PRODUCT_CLASSIFICATION_MODE", value = "http" },
-      { name = "INVENTORY_STORAGE_BASE_URL", value = "http://inventory-storage.${var.apps_namespace}.svc.cluster.local:80" },
+      { name = "PRODUCT_CLASSIFICATION_MODE", value = "kafka" },
+      { name = "PRODUCT_CLASSIFICATION_CONSUMER_GROUP", value = "wes-work-planning-product-classification" },
       { name = "TRAVEL_DISTANCE_MODE", value = "http" },
       { name = "FACILITY_LAYOUT_BASE_URL", value = "http://facility-layout.${var.apps_namespace}.svc.cluster.local:80" },
     ]
     "fulfillment-execution" = [
-      { name = "PRODUCT_CLASSIFICATION_MODE", value = "http" },
-      { name = "INVENTORY_STORAGE_BASE_URL", value = "http://inventory-storage.${var.apps_namespace}.svc.cluster.local:80" },
+      { name = "PRODUCT_CLASSIFICATION_MODE", value = "kafka" },
+      { name = "PRODUCT_CLASSIFICATION_CONSUMER_GROUP", value = "fulfillment-execution-product-classification" },
     ]
     "workforce-management" = [
       { name = "INSTALLED_CAPACITY_MODE", value = "http" },
@@ -382,6 +393,23 @@ locals {
       # only as the rollback value if this ever needs to flip back to "http".
       { name = "LABOR_PERFORMANCE_MODE", value = "kafka-cache" },
       { name = "LABOR_PERFORMANCE_BASE_URL", value = "http://labor-performance.${var.apps_namespace}.svc.cluster.local:80" },
+    ]
+  }
+
+  # Env for a context's MCP Deployment (chart value mcp.extraEnv), for env with
+  # no dedicated chart value -- same rule as sync_edge_env above, which only
+  # reaches the api container. services.tf's mcp block adds `extraEnv` ONLY for
+  # a service listed here, so no other chart's values change.
+  #
+  # wes-work-planning's cmd/mcp (ADR-0035) reads PRODUCT_CLASSIFICATION_MODE too:
+  # with "kafka" and DATABASE_URL it reads the SAME product_classification_copy
+  # table cmd/wes maintains (read-only, it never starts the consumer, so no
+  # consumer group), so a WorkReleased raised through the release_next_work
+  # tool carries the same hazmat/fragile hints as one raised over REST. Unset,
+  # it stays permissive (no hints).
+  mcp_extra_env = {
+    "wes-work-planning" = [
+      { name = "PRODUCT_CLASSIFICATION_MODE", value = "kafka" },
     ]
   }
 
