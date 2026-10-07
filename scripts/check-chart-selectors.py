@@ -81,6 +81,16 @@ CHARTS: dict[str, dict[str, str]] = {
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
         "database.url": "postgres://u@example.invalid:5432/db",
     },
+    # product-master: OLTP api + the optional mcp, frontend (productmaster_mfe)
+    # and analytics (product-projector/product-reports) components. Same render
+    # guards as warehouse-planning (database source; analytics needs a DSN
+    # source and kafka), so give it the same dummies (no password).
+    "../../product-master/charts/product-master": {
+        "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
+        "kafka.enabled": "true",
+        "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
+        "database.url": "postgres://u@example.invalid:5432/db",
+    },
     # network-inventory-planning: OLTP api only for now (mcp/frontend/analytics
     # components arrive with their own PRs). The chart needs a database source;
     # routing templates are opt-in and rendered here too.
