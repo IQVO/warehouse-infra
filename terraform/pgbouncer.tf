@@ -71,6 +71,16 @@ locals {
       name => merge(svc, { password = local.service_passwords[name] })
     },
     {
+      # network-inventory-planning: not in local.services (see
+      # network-inventory-planning.tf's header) but its OLTP database is
+      # pooled on the same terms as network-fulfillment's below.
+      "network-inventory-planning" = {
+        db       = local.network_inventory_planning_db_name
+        user     = local.network_inventory_planning_db_user
+        password = random_password.network_inventory_planning_db.result
+      }
+    },
+    {
       "network-fulfillment" = {
         db       = local.network_fulfillment_db_name
         user     = local.network_fulfillment_db_user

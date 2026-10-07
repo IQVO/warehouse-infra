@@ -143,6 +143,51 @@ resource "kubectl_manifest" "network_fulfillment_application" {
   ]
 }
 
+resource "kubectl_manifest" "network_inventory_planning_application" {
+  count = var.deploy_services ? 1 : 0
+
+  yaml_body = yamlencode({
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "network-inventory-planning"
+      namespace = kubernetes_namespace.argocd.metadata[0].name
+    }
+    spec = {
+      project = "default"
+      source = {
+        # NOTE: charts/network-inventory-planning does not exist on this
+        # repo's develop yet — the chart lands via a parallel PR there.
+        # Until it merges, this Application sits degraded (Argocd
+        # MissingSource) rather than deploying anything, which is the
+        # same convention siblings use for a not-yet-landed chart: the
+        # registration is declared here so the chart PR needs no infra
+        # follow-up. See network-inventory-planning.tf's header.
+        repoURL        = "https://github.com/IQVO/network-inventory-planning.git"
+        targetRevision = "develop"
+        path           = "charts/network-inventory-planning"
+        helm = {
+          valuesObject = local.network_inventory_planning_helm_values
+        }
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = var.apps_namespace
+      }
+      syncPolicy = {
+        automated = {
+          prune    = true
+          selfHeal = true
+        }
+      }
+    }
+  })
+
+  depends_on = [
+    helm_release.argocd,
+  ]
+}
+
 resource "kubectl_manifest" "console_application" {
   count = var.deploy_frontends ? 1 : 0
 
