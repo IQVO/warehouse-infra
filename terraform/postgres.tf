@@ -169,6 +169,17 @@ resource "helm_release" "postgresql" {
                   name => merge(svc, { password = local.service_passwords[name] })
                 },
                 {
+                  # network-inventory-planning is not in local.services
+                  # (see network-inventory-planning.tf's header) but owns
+                  # an OLTP database on the same least-privilege terms,
+                  # merged in exactly like network-fulfillment below.
+                  "network-inventory-planning" = {
+                    db       = local.network_inventory_planning_db_name
+                    user     = local.network_inventory_planning_db_user
+                    password = random_password.network_inventory_planning_db.result
+                  }
+                },
+                {
                   "network-fulfillment" = {
                     db       = local.network_fulfillment_db_name
                     user     = local.network_fulfillment_db_user
