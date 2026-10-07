@@ -19,14 +19,15 @@ locals {
     name => sha256(join("", concat(
       [for f in sort(fileset("${path.module}/../../${name}", "**/*.go")) : filesha256("${path.module}/../../${name}/${f}")],
       [for f in sort(fileset("${path.module}/../../${name}", "migrations/**")) : filesha256("${path.module}/../../${name}/${f}")],
-      # warehouse-planning keeps its migrations under internal/ (the others use a
-      # top-level migrations/ dir, matched above). No other service has files
-      # matching this pattern, so adding it leaves their hashes unchanged.
+      # warehouse-planning and product-master keep their migrations under
+      # internal/ (the others use a top-level migrations/ dir, matched above).
+      # No other service has files matching this pattern, so adding it leaves
+      # their hashes unchanged.
       [for f in sort(fileset("${path.module}/../../${name}", "internal/**/migrations/**")) : filesha256("${path.module}/../../${name}/${f}")],
-      # warehouse-planning's ANALYTICAL migrations live in a top-level
-      # analytics/migrations/ (applied by its planning-projector; no Go file
-      # changes with them, so a migration-only change would otherwise never
-      # rebuild the image). The other services keep theirs under
+      # warehouse-planning's and product-master's ANALYTICAL migrations live in
+      # a top-level analytics/migrations/ (applied by their projectors; no Go
+      # file changes with them, so a migration-only change would otherwise
+      # never rebuild the image). The other services keep theirs under
       # migrations/analytics/, already matched by the top-level migrations/**
       # term above, and have no top-level analytics/ directory, so this leaves
       # their hashes unchanged.
@@ -265,11 +266,14 @@ locals {
       # MCP server per context (terraform/mcp.tf). Auth removed fleet-wide
       # (2026-09-09): MCP servers are unauthenticated now, so the chart's
       # mcp.enabled flag alone controls whether the MCP Deployment exists --
-      # no keys needed.
+      # no keys needed. A service in local.mcp_extra_env (locals.tf) also gets
+      # mcp.extraEnv; the filtered for-expression adds that key ONLY for those
+      # services, so every other chart's values stay byte-identical.
       contains(local.mcp_services, name) ? {
-        mcp = {
-          enabled = var.deploy_mcp_servers
-        }
+        mcp = merge(
+          { enabled = var.deploy_mcp_servers },
+          { for k, v in { extraEnv = lookup(local.mcp_extra_env, name, []) } : k => v if length(v) > 0 },
+        )
       } : {},
       # facility-layout -> inventory-storage location-classification
       # integration (inventory-storage ADR-0013). Same "flip both sides

@@ -53,6 +53,14 @@ locals {
     # ops-agent consumes it via the `warehousePlanning` endpoint in
     # ops-agent.tf (read tools only; warehouse-ops-agent ADR 0013).
     "warehouse-planning",
+    # product-master: cmd/mcp merged (product-master ADR 0005) -- READ-ONLY
+    # tools (a governance test bans write verbs), Streamable HTTP on :8090 at
+    # `/` and `/mcp`, open `/healthz`, no auth, no outbox relay and no Kafka
+    # dial. Its chart `mcp` env names (MCP_ADDR, DATABASE_URL,
+    # MIGRATIONS_DATABASE_URL) were re-checked against cmd/mcp/main.go. The
+    # ops-agent consumes it via the `productMaster` endpoint in ops-agent.tf
+    # (warehouse-ops-agent #120: PRODUCT_MASTER_MCP_ENDPOINT).
+    "product-master",
   ])
 
   mcp_endpoint = {
