@@ -1,0 +1,85 @@
+# inbound-receiving -- the inbound receiving bounded context (ASN, dock
+# appointment, receipt; inbound-receiving ADRs 0001-0006). OLTP REST on :8080
+# plus, in the SAME process, a transactional-outbox relay and two Kafka
+# local-copy consumers (ADR 0003):
+#   - publishes warehouse.inbound-receiving.events (CloudEvents): ReceiptLineReceived
+#     is what inventory-storage consumes to book StockReceived (inventory-storage
+#     ADR 0037; wired in helm-values/inventory-storage.yaml in this same change).
+#   - SKU copy       <- warehouse.product-master.events  (PRODUCT_MODE=kafka)
+#   - inbound-door copy <- warehouse.facility.events     (DOCK_DOOR_MODE=kafka)
+# Topics are auto-created by the first writer with the broker's num.partitions=8
+# / replication-factor-1 overrides (kafka.tf has no topic resources -- the fleet
+# norm, see network-inventory-planning.tf's header), so
+# warehouse.inbound-receiving.events, warehouse.inbound-receiving.analytics and
+# its .dlq need no declaration here.
+#
+# Every key below is a DEDICATED chart value (charts/inbound-receiving/values.yaml
+# renders each one to its env var), so none of this belongs in
+# local.sync_edge_env -- an `extraEnv` in THIS file would be silently dropped by
+# the computed layer (see helm-values/_README.md and terraform/locals.tf).
+#
+# Startup: runs golang-migrate before serving, over MIGRATIONS_DATABASE_URL (the
+# direct, non-pooled DSN Terraform puts in the <svc>-db Secret); DATABASE_URL
+# itself goes through PgBouncer.
+#
+# MCP (inbound-receiving ADR 0005): read-only tools, enabled by services.tf's
+# `contains(local.mcp_services, name)` gate; the ops-agent consumes it via the
+# `inboundReceiving` upstream in ops-agent.tf.
+#
+# Analytics read side (inbound-receiving ADR 0006): inbound-projector (the only
+# writer of the SEPARATE inbound_receiving_analytics database, admin :8091) and
+# inbound-reports (read-only, :8092, Service inbound-receiving-reports, routed by
+# Kong at /api/inbound-receiving/reports by services.tf like every sibling). Both
+# ship in the SAME image as the api (one build_and_load). The DSNs
+# (analytics.database.projectorUrl/reportsUrl) are computed by Terraform
+# (services.tf, from local.analytics_services) and merged over this block, so
+# only the static bits live here. The role/database are NOT created by a plain
+# apply on an already-populated Postgres: see the infra PR runbook.
+#
+# The console remote (inbound_mfe, web/) is NOT set here:
+# terraform/services.tf computes `frontend` (enabled + content-addressed image
+# tag) for every context in local.frontend_remotes, and a `frontend:` key in
+# this file would be overridden.
+
+replicaCount: 1
+
+config:
+  httpAddr: ":8080"
+  logLevel: "info"
+  # Relay Inbound events onto warehouse.inbound-receiving.events (and the
+  # analytics topic) instead of the log sink. Requires kafka.enabled (below);
+  # the chart refuses to render otherwise.
+  eventPublisher: "kafka"
+  outboxRelayInterval: "1s"
+  # ADR 0003 SKU local copy (fed from warehouse.product-master.events): an ASN
+  # line for an unknown SKU is rejected at registration. A FIXED, stable group
+  # id: a rescheduled pod resumes from its committed offsets; a brand-new group
+  # starts at the earliest retained message and rebuilds the copy from history.
+  # Required when productMode is "kafka" (the chart refuses an empty one).
+  productMode: "kafka"
+  productConsumerGroup: "inbound-receiving-product"
+  # ADR 0003 inbound-door local copy (fed from warehouse.facility.events):
+  # an appointment must book a known inbound-capable dock door. Spiked live
+  # (2026-10-08, facility-layout REST GET /sites/{site}/locations?role=Dock):
+  # 90 of 91 sites hold Dock slots, 1598 of them dockFlow=Inbound (the rest
+  # Outbound), and facility-layout publishes to Kafka, so the copy has data to
+  # enforce against. Stable group id, same reasoning as the product group.
+  dockDoorMode: "kafka"
+  dockDoorConsumerGroup: "inbound-receiving-dock-doors"
+
+kafka:
+  enabled: true
+  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
+
+# Analytics read side (ADR 0006). `enabled` is also set by Terraform's computed
+# layer (services.tf, contains(local.analytics_services, name)); repeated here so
+# this file is the readable source of truth, exactly as the siblings do. The
+# projector's consumer group (ANALYTICS_CONSUMER_GROUP) is a FIXED, stable id
+# (fleet charter naming `<ctx>-analytics`), pinned equal to the chart's default
+# so a rename there cannot silently orphan the committed offsets. The DSNs come
+# from the computed layer (database.projectorUrl / reportsUrl), shallow-merged
+# over this block (disjoint keys).
+analytics:
+  enabled: true
+  projector:
+    consumerGroup: "inbound-receiving-analytics"

@@ -154,6 +154,12 @@ locals {
         # product-master's MCP server is read-only. Empty
         # (var.deploy_mcp_servers=false) leaves the client unwired.
         productMaster = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["product-master"] : "" }
+        # inbound-receiving (warehouse-ops-agent #125): chart value
+        # upstreams.inboundReceiving.endpoint. Read tools only. Empty
+        # (var.deploy_mcp_servers=false) leaves the client unwired. The
+        # optional config.inboundStaleReceiptAge is deliberately left UNSET
+        # (the agent's own default applies; no invented value here).
+        inboundReceiving = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["inbound-receiving"] : "" }
         # network-inventory-planning (warehouse-ops-agent #119, ADR 0019):
         # chart value upstreams.networkInventoryPlanning.endpoint -> env
         # NETWORK_INVENTORY_PLANNING_MCP_ENDPOINT. Read tools only. Empty
