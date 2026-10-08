@@ -154,6 +154,12 @@ locals {
         # product-master's MCP server is read-only. Empty
         # (var.deploy_mcp_servers=false) leaves the client unwired.
         productMaster = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["product-master"] : "" }
+        # network-inventory-planning (warehouse-ops-agent #119, ADR 0019):
+        # chart value upstreams.networkInventoryPlanning.endpoint -> env
+        # NETWORK_INVENTORY_PLANNING_MCP_ENDPOINT. Read tools only. Empty
+        # (var.deploy_mcp_servers=false) leaves the transfer watch unwired
+        # (its /transfer-watch/* routes answer 503).
+        networkInventoryPlanning = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["network-inventory-planning"] : "" }
       }
       # Real, in-cluster REST base URLs for the console-bff order-lifecycle
       # fan-out (cmd/agent/main.go's restclient wiring) — these ARE live
