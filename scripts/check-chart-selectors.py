@@ -91,11 +91,13 @@ CHARTS: dict[str, dict[str, str]] = {
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
         "database.url": "postgres://u@example.invalid:5432/db",
     },
-    # network-inventory-planning: OLTP api + the optional mcp and frontend
-    # (nip_mfe) components (analytics lands with its own PR). The chart needs a
-    # database source; routing templates are opt-in and rendered here too.
+    # network-inventory-planning: OLTP api + the optional mcp, frontend
+    # (nip_mfe) and analytics (projector/reports) components. The chart needs a
+    # database source and refuses analytics without a DSN source and kafka, so
+    # give it dummies (no password); routing templates are opt-in.
     "../../network-inventory-planning/charts/network-inventory-planning": {
-        "mcp.enabled": "true", "frontend.enabled": "true",
+        "mcp.enabled": "true", "frontend.enabled": "true", "analytics.enabled": "true",
+        "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
         "kafka.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
     },
