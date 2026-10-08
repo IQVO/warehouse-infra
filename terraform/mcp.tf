@@ -61,6 +61,14 @@ locals {
     # ops-agent consumes it via the `productMaster` endpoint in ops-agent.tf
     # (warehouse-ops-agent #120: PRODUCT_MASTER_MCP_ENDPOINT).
     "product-master",
+    # network-inventory-planning: cmd/mcp merged (NIP ADR 0008) -- READ-ONLY
+    # (get_transfer, list_transfers, find_stuck_transfers,
+    # simulate_transfer_options). It is NOT in local.services (see
+    # network-inventory-planning.tf), so this membership only gives it an entry
+    # in local.mcp_endpoint; its own `mcp.enabled` is set in that file's helm
+    # values. The ops-agent consumes it via the `networkInventoryPlanning`
+    # endpoint in ops-agent.tf (warehouse-ops-agent #119, ADR 0019).
+    "network-inventory-planning",
   ])
 
   mcp_endpoint = {

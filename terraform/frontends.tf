@@ -64,6 +64,14 @@ locals {
     # /mfes/product-master/ is rendered from this entry; the chart's frontend
     # Service is "product-master-frontend".
     "product-master" = { remote_name = "productmaster_mfe" }
+    # network-inventory-planning (IQVO/network-inventory-planning#18):
+    # federation container `nip_mfe`, Vite base /mfes/network-inventory-planning/.
+    # Its web/ sits at the standard <repo>/web path. NIP is not in
+    # local.services (network-inventory-planning.tf), so services.tf's computed
+    # `frontend` block never reaches it; that file mirrors it by hand, exactly
+    # like network-fulfillment.tf. The chart's frontend Service is
+    # "network-inventory-planning-frontend".
+    "network-inventory-planning" = { remote_name = "nip_mfe" }
   } : {}
 
   # Content-addressed image tags, NOT the fixed "local" tag the Go services

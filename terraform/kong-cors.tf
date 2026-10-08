@@ -83,6 +83,11 @@ resource "null_resource" "kong_cors_plugin" {
           - Accept
           - Content-Type
           - Origin
+          # network-inventory-planning's console remote approves a transfer with
+          # POST /v1/transfers:approve + an Idempotency-Key header. A custom
+          # request header is not CORS-safelisted, so without it here the
+          # browser's preflight fails and Approve never reaches the API.
+          - Idempotency-Key
         exposed_headers:
           - Content-Length
         credentials: false
