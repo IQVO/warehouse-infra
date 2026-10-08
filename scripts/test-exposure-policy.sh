@@ -105,7 +105,7 @@ done
 echo "==> 5. Every remote is served through the gateway, as JavaScript"
 for ctx in order-management inventory-storage wes-work-planning fulfillment-execution \
            workforce-management facility-layout labor-performance process-path-management \
-           warehouse-planning product-master network-inventory-planning; do
+           warehouse-planning product-master inbound-receiving network-inventory-planning; do
   URL="${WEB_URL}/mfes/${ctx}/remoteEntry.js"
   read -r CODE CTYPE < <(curl -s -o /dev/null -w '%{http_code} %{content_type}' --max-time 10 "${URL}" || echo "000 none")
   if [[ "${CODE}" == "200" && "${CTYPE}" == *javascript* ]]; then
@@ -120,7 +120,7 @@ done
 echo "==> 6. Every API answers on the API origin"
 for ctx in order-management inventory-storage wes-work-planning fulfillment-execution \
            workforce-management facility-layout labor-performance process-path-management \
-           warehouse-planning product-master network-inventory-planning; do
+           warehouse-planning product-master inbound-receiving network-inventory-planning; do
   CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${API_URL}/api/${ctx}/healthz" || echo 000)"
   if [[ "${CODE}" == "200" ]]; then
     pass "${ctx} /healthz -> 200"
@@ -189,6 +189,22 @@ for ctx in warehouse-planning product-master; do
     fail "${ctx} PUT preflight from ${WEB_URL} -> methods '${PUT_METHODS:-<none>}' headers '${PUT_HEADERS:-<none>}' (its remote needs PUT and Content-Type)"
   fi
 done
+
+# The inbound-receiving remote POSTs JSON with an Idempotency-Key header on every
+# command (register ASN, book appointment, record receipt lines, ...). A custom
+# request header is not CORS-safelisted, so the preflight must list it.
+POST_PREFLIGHT="$(curl -s -D - -o /dev/null --max-time 10 -X OPTIONS \
+  -H "Origin: ${WEB_URL}" \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: content-type,idempotency-key' \
+  "${API_URL}/api/inbound-receiving/healthz" || true)"
+POST_METHODS="$(grep -i '^access-control-allow-methods:' <<<"${POST_PREFLIGHT}" | tr -d '\r')"
+POST_HEADERS="$(grep -i '^access-control-allow-headers:' <<<"${POST_PREFLIGHT}" | tr -d '\r')"
+if grep -qiE '(:|,) *POST *(,|$)' <<<"${POST_METHODS}" && grep -qi 'content-type' <<<"${POST_HEADERS}" && grep -qi 'idempotency-key' <<<"${POST_HEADERS}"; then
+  pass "inbound-receiving POST preflight from ${WEB_URL} allows POST + Content-Type + Idempotency-Key"
+else
+  fail "inbound-receiving POST preflight from ${WEB_URL} -> methods '${POST_METHODS:-<none>}' headers '${POST_HEADERS:-<none>}' (its remote needs POST, Content-Type and Idempotency-Key)"
+fi
 
 EVIL="$(curl -s -D - -o /dev/null --max-time 10 -X OPTIONS \
   -H 'Origin: http://evil.example' \

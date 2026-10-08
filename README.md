@@ -132,8 +132,8 @@ Every bounded-context service's OLTP pod listens on container port `8080`
 
 | Service (`warehouse-systems` ns)         | Service port → target | What it is |
 |--------------------------------------------|------------------------|------------|
-| `<service>` (10 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master) | `80 → 8080` | OLTP REST API, routed by Kong |
-| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — the 12 contexts in `mcp.tf`'s `local.mcp_services` (the 10 above plus network-fulfillment and network-inventory-planning) |
+| `<service>` (11 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master, inbound-receiving) | `80 → 8080` | OLTP REST API, routed by Kong |
+| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — the 13 contexts in `mcp.tf`'s `local.mcp_services` (the 11 above plus network-fulfillment and network-inventory-planning) |
 | `<service>-reports`                        | `80 → 8092`             | Analytics read-only REST API (only where `analytics.enabled`, see `locals.tf`'s `analytics_services`) |
 | `<service>-frontend`                       | `80 → 8080`             | Module Federation remote, proxied by the web gateway at `/mfes/<context>/` |
 | `warehouse-console`                        | `80 → 8080`             | Console shell SPA, proxied by the web gateway at `/` |
@@ -186,6 +186,30 @@ order-management, wes-work-planning and fulfillment-execution
 (`PRODUCT_CLASSIFICATION_MODE=kafka`, `helm-values/order-management.yaml` and
 `locals.tf`); no service reads classification from inventory-storage over REST
 any more.
+
+`inbound-receiving` (ASN, dock appointment, receipt) follows the same shape:
+projector `/app/inbound-projector` (admin `8091`, consumer group
+`inbound-receiving-analytics`, topic `warehouse.inbound-receiving.analytics`)
+and reports `/app/inbound-reports` (Service `inbound-receiving-reports`, Kong
+route `/api/inbound-receiving/reports/*` → `/reports/*`, endpoints
+`GET /reports/{receiving-performance,freshness}`), backed by the separate
+`inbound_receiving_analytics` database (role `inbound_receiving_analytics`, DSN
+direct to Postgres). The same Kong reports-route caveat as product-master
+above applies until that route issue is fixed. The OLTP API runs with
+`EVENT_PUBLISHER=kafka`, `PRODUCT_MODE=kafka` (group `inbound-receiving-product`,
+SKU copy from `warehouse.product-master.events`) and `DOCK_DOOR_MODE=kafka`
+(group `inbound-receiving-dock-doors`, inbound-door copy from
+`warehouse.facility.events`; `helm-values/inbound-receiving.yaml`). The
+read-only MCP server `inbound-receiving-mcp` is read by `warehouse-ops-agent`
+through `upstreams.inboundReceiving` (`ops-agent.tf`), and the console remote
+`inbound-receiving-frontend` is `inbound_mfe` at `/mfes/inbound-receiving/`
+(`frontends.tf`). The handover: inventory-storage consumes
+`ReceiptLineReceived` from `warehouse.inbound-receiving.events`
+(`config.inboundReceiptConsumerGroup=inventory-storage-inbound-receipts`,
+`helm-values/inventory-storage.yaml`, inventory-storage ADR 0037) and books
+`StockReceived`, which leaves the service because inventory-storage runs
+`EVENT_PUBLISHER=kafka`. Nothing in the fleet depends on slotting-optimization
+from this change.
 
 **A structural gotcha worth knowing before you `kubectl port-forward pod/…`:**
 every chart's `selectorLabels` helper emits only
@@ -400,6 +424,7 @@ collides head-on with the console shell's own client-side routes —
 | `http://localhost:8000/api/process-path-management/*`     | `/api/process-path-management` → `/*`| `process-path-management...svc.cluster.local`                |
 | `http://localhost:8000/api/warehouse-planning/*`          | `/api/warehouse-planning` → `/*`     | `warehouse-planning.warehouse-systems.svc.cluster.local`    |
 | `http://localhost:8000/api/product-master/*`              | `/api/product-master` → `/*`         | `product-master.warehouse-systems.svc.cluster.local` (`/api/product-master/reports/*` is meant for `product-master-reports` but currently lands here and 404s, see the known issue above) |
+| `http://localhost:8000/api/inbound-receiving/*`           | `/api/inbound-receiving` → `/*`      | `inbound-receiving.warehouse-systems.svc.cluster.local` (`/api/inbound-receiving/reports/*` is meant for `inbound-receiving-reports`; same caveat as product-master) |
 | `http://localhost:8000/api/network-inventory-planning/*`  | `/api/network-inventory-planning` → `/*` | `network-inventory-planning.warehouse-systems.svc.cluster.local` |
 | `http://localhost:8000/api/warehouse-ops-agent/*`         | `/api/warehouse-ops-agent` → `/*`    | `warehouse-ops-agent.warehouse-systems.svc.cluster.local`   |
 
@@ -757,6 +782,7 @@ warehouse-infra/
 ├── helm-values/                 # static per-service environment config (one file per service; excerpt)
 │   ├── _README.md
 │   ├── inventory-storage.yaml
+│   ├── inbound-receiving.yaml
 │   ├── product-master.yaml
 │   ├── wes-work-planning.yaml
 │   ├── workforce-management.yaml
