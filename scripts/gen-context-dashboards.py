@@ -256,6 +256,31 @@ CONTEXTS = [
             ),
         ],
     },
+    {
+        "key": "warehouse-planning",
+        "title": "Warehouse Planning",
+        "uid": "warehouse-warehouse-planning",
+        # OTel service.name: `warehouse-planning` (the api, inboundhttp.
+        # DefaultServiceName) and `warehouse-planning-reports` (the analytics
+        # reader); the projector and MCP server share the `warehouse-planning`
+        # prefix, so one prefix regex covers every process of this context.
+        "service_regex": "warehouse-planning.*",
+        "kong_service_regex": "httproute\\.warehouse-systems\\.warehouse-planning\\..*",
+        "loki_app": "warehouse-planning",
+        "business_metrics": [
+            (
+                # Source: warehouse-planning internal/adapters/outbound/
+                # telemetry/metrics.go registers the OTel Int64Counter
+                # `warehouse_planning.capacity_plans.created` with an `outcome`
+                # attribute. The Prometheus name is derived with the rule in this
+                # file's docstring (dots -> underscores, `_total` suffix on a
+                # counter), not yet observed live in this cluster.
+                "warehouse_planning_capacity_plans_created_total",
+                "outcome",
+                "CreateCapacityPlan attempts, by outcome (created or rejected). A rising rejected share means callers are submitting plans this service's own invariants refuse.",
+            ),
+        ],
+    },
 ]
 
 
