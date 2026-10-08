@@ -239,13 +239,32 @@ schema and rationale.
 ## Network inventory planning (NIP) runbook
 
 `network-inventory-planning` is deployed by `terraform/network-inventory-planning.tf`
-(image build/load, database secret, ArgoCD Application, Kong route, chart values).
-Two things a plain `terraform apply` does NOT do on an already-populated cluster:
+(image build/load, database secrets, ArgoCD Application, Kong routes for the API and
+`/reports`, chart values incl. MCP, console remote and analytics). Two things a plain
+`terraform apply` does NOT do on an already-populated cluster:
 
-1. **Database and role.** Postgres runs its init script once, on an empty data
-   directory. Create `network_inventory_planning` (database + role, password from
-   `terraform output -raw network_inventory_planning_db_password`) by hand, mirroring
-   `templates/init-databases.sql.tftpl`, before ArgoCD syncs the pod.
+1. **Databases and roles (two of them).** Postgres runs its init script once, on an
+   empty data directory. On a live cluster create, against the primary as the
+   superuser, the OLTP and the analytics database, each with its own owner role and
+   the passwords from `terraform output -raw network_inventory_planning_db_password`
+   and `terraform output -raw network_inventory_planning_analytics_db_password`
+   (the same statements `templates/init-databases.sql.tftpl` renders):
+
+   ```sql
+   CREATE ROLE network_inventory_planning WITH LOGIN PASSWORD '<db_password>';
+   CREATE DATABASE network_inventory_planning WITH OWNER network_inventory_planning ENCODING 'UTF8';
+   REVOKE ALL ON DATABASE network_inventory_planning FROM PUBLIC;
+   GRANT CONNECT, TEMPORARY ON DATABASE network_inventory_planning TO network_inventory_planning;
+
+   CREATE ROLE network_inventory_planning_analytics WITH LOGIN PASSWORD '<analytics_db_password>';
+   CREATE DATABASE network_inventory_planning_analytics WITH OWNER network_inventory_planning_analytics ENCODING 'UTF8';
+   REVOKE ALL ON DATABASE network_inventory_planning_analytics FROM PUBLIC;
+   GRANT CONNECT, TEMPORARY ON DATABASE network_inventory_planning_analytics TO network_inventory_planning_analytics;
+   ```
+
+   Do this before ArgoCD syncs the pods. No PgBouncer step is needed: `pgbouncer.tf`
+   already renders the OLTP role into its userlist on apply, and the analytics database
+   is reached directly (never through PgBouncer).
 2. **The dispatch path.** NIP releases the dispatch leg with
    `TRANSFER_DISPATCH_PATH_ID=transfer-dispatch`. process-path-management is the
    catalogue's source of truth (the YAML under `config/process-paths/` is frozen), so
