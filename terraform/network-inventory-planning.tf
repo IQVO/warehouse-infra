@@ -164,6 +164,22 @@ locals {
         enabled = var.deploy_mcp_servers
       }
 
+      # Analytics read side (NIP ADR 0009): projector (only writer of the
+      # SEPARATE analytical database) + read-only reports. Not in
+      # local.analytics_services (NIP is not in local.services), so the DSN
+      # secret is hand-rolled below, like network-fulfillment.tf. The chart
+      # reads BOTH ANALYTICS_DATABASE_URL (projector) and
+      # ANALYTICS_READER_DATABASE_URL (reports) from this one Secret; the same
+      # DIRECT DSN serves both, the documented local/dev baseline (a
+      # read-only role is the promotion path). The projector's consumer group
+      # is the chart's fixed default `network-inventory-planning-analytics`.
+      analytics = {
+        enabled = true
+        database = {
+          existingSecret = "network-inventory-planning-analytics-db"
+        }
+      }
+
       # Environment the binary reads (cmd/network-inventory-planning/main.go),
       # each key a dedicated chart value. Consumer-group ids are FIXED and
       # STABLE (a rescheduled pod resumes from its committed offsets; a new
@@ -269,4 +285,167 @@ locals {
       }
     } : {},
   )
+}
+
+# ---------------------------------------------------------------------------
+# Analytics database (NIP ADR 0009): the saga-health data product's own
+# analytical Postgres database, mirroring network-fulfillment.tf's analytics
+# block EXACTLY (own random_password, own db/user locals, own
+# kubernetes_secret, own DSN local) rather than joining
+# local.analytics_services, whose analytics_db_info does
+# local.services[name].db/.user and would KeyError for a name not in
+# local.services.
+#
+# Same NOTE as the OLTP database above: Bitnami's primary.initdb.scripts runs
+# exactly ONCE, against an empty data directory. On an already-initialized
+# Postgres, create the role/database by hand against the live primary using
+# `terraform output -raw network_inventory_planning_analytics_db_password`
+# (README "Network inventory planning (NIP) runbook").
+# ---------------------------------------------------------------------------
+resource "random_password" "network_inventory_planning_analytics_db" {
+  length  = 24
+  special = false # URL-safe: no chars needing percent-encoding in the DSN
+}
+
+locals {
+  network_inventory_planning_analytics_db_user = "network_inventory_planning_analytics"
+  network_inventory_planning_analytics_db_name = "network_inventory_planning_analytics"
+
+  # DIRECT (non-pooled) Postgres: the projector also runs the analytical
+  # migrations, which take a session-scoped advisory lock PgBouncer's
+  # transaction pooling cannot honour (and analytics stays direct fleet-wide,
+  # see locals.tf analytics_database_urls).
+  network_inventory_planning_analytics_database_url = "postgres://${local.network_inventory_planning_analytics_db_user}:***@${local.postgres_host}:${local.postgres_port}/${local.network_inventory_planning_analytics_db_name}?sslmode=disable"
+}
+
+resource "kubernetes_secret" "network_inventory_planning_analytics_db" {
+  count = var.deploy_services ? 1 : 0
+
+  metadata {
+    name      = "network-inventory-planning-analytics-db"
+    namespace = var.apps_namespace
+  }
+
+  data = {
+    # Both keys the chart's projector and reports Deployments read
+    # (templates/projector-deployment.yaml, reports-deployment.yaml).
+    ANALYTICS_DATABASE_URL        = local.network_inventory_planning_analytics_database_url
+    ANALYTICS_READER_DATABASE_URL = local.network_inventory_planning_analytics_database_url
+  }
+
+  depends_on = [kubernetes_namespace.apps]
+}
+
+output "network_inventory_planning_analytics_db_password" {
+  description = "Generated password for the network-inventory-planning analytics role (needed to create the role by hand on an already-initialized Postgres)."
+  value       = random_password.network_inventory_planning_analytics_db.result
+  sensitive   = true
+}
+
+# ---------------------------------------------------------------------------
+# Reports route: a SECOND Kong route to the chart's `<release>-reports`
+# Service (analytics.reports.service.port = 80), next to the OLTP route.
+# Strips `${var.api_path_prefix}/network-inventory-planning/reports` down to
+# `/reports`, because cmd/nip-reports registers GET /reports/transfer-funnel
+# etc. Ingress when Gateway API is off, HTTPRoute when it is on, never both
+# (same rule as network-fulfillment.tf: a disabled-but-present route object is
+# one nothing removes).
+# ---------------------------------------------------------------------------
+resource "kubernetes_ingress_v1" "network_inventory_planning_reports" {
+  count = (!var.deploy_gateway_api && var.deploy_services) ? 1 : 0
+
+  metadata {
+    name      = "network-inventory-planning-reports"
+    namespace = var.apps_namespace
+    annotations = {
+      "konghq.com/strip-path"       = "true"
+      "kubernetes.io/ingress.class" = "kong"
+    }
+  }
+
+  spec {
+    ingress_class_name = "kong"
+
+    rule {
+      http {
+        path {
+          path      = "${var.api_path_prefix}/network-inventory-planning/reports"
+          path_type = "Prefix"
+          backend {
+            service {
+              # The chart's reportsFullname helper renders "<release>-reports";
+              # the release is "network-inventory-planning" (argocd-apps.tf).
+              name = "network-inventory-planning-reports"
+              port {
+                number = 80
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_namespace.apps]
+}
+
+# HTTPRoute variant: null_resource + kubectl apply (NOT kubernetes_manifest)
+# for the CRD-schema-at-plan-time chicken/egg documented in gateway-api.tf's
+# header; destroy-time counterpart so flipping deploy_gateway_api back does not
+# orphan the object.
+resource "null_resource" "network_inventory_planning_reports_httproute" {
+  count = (var.deploy_gateway_api && var.deploy_services) ? 1 : 0
+
+  depends_on = [null_resource.gateway]
+
+  triggers = {
+    cluster_id      = kind_cluster.warehouse.id
+    kubeconfig      = local.kubeconfig_path
+    name            = "network-inventory-planning-reports"
+    namespace       = var.apps_namespace
+    gateway_name    = local.gateway_name
+    kong_namespace  = var.kong_namespace
+    api_path_prefix = var.api_path_prefix
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      cat <<'MANIFEST' | kubectl --kubeconfig '${local.kubeconfig_path}' apply -f -
+      apiVersion: gateway.networking.k8s.io/v1
+      kind: HTTPRoute
+      metadata:
+        name: network-inventory-planning-reports
+        namespace: ${var.apps_namespace}
+      spec:
+        parentRefs:
+          - name: ${local.gateway_name}
+            namespace: ${var.kong_namespace}
+            sectionName: http
+        rules:
+          - matches:
+              - path:
+                  type: PathPrefix
+                  value: ${var.api_path_prefix}/network-inventory-planning/reports
+            filters:
+              - type: URLRewrite
+                urlRewrite:
+                  path:
+                    type: ReplacePrefixMatch
+                    replacePrefixMatch: /reports
+            backendRefs:
+              - name: network-inventory-planning-reports
+                port: 80
+      MANIFEST
+    EOT
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "kubectl --kubeconfig '${self.triggers.kubeconfig}' delete httproute '${self.triggers.name}' -n '${self.triggers.namespace}' --ignore-not-found=true || true"
+  }
+}
+
+output "network_inventory_planning_reports_route" {
+  description = "Kong/Gateway path this context's analytics reports Service is reachable on."
+  value       = "${var.api_path_prefix}/network-inventory-planning/reports"
 }
