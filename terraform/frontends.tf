@@ -64,6 +64,17 @@ locals {
     # /mfes/product-master/ is rendered from this entry; the chart's frontend
     # Service is "product-master-frontend".
     "product-master" = { remote_name = "productmaster_mfe" }
+    # inbound-receiving (IQVO/inbound-receiving web remote): federation
+    # container `inbound_mfe` (registered by the console in
+    # warehouse-console#73), Vite base /mfes/inbound-receiving/. Its web/ sits at
+    # the standard <repo>/web path with web/Dockerfile taking warehouse-ui-kit
+    # as the named `uikit` build context, exactly what
+    # build-and-load-frontend.sh supplies, so the source-hash fileset below
+    # needs no change. The web gateway location /mfes/inbound-receiving/ is
+    # rendered from this entry; the chart's frontend Service is
+    # "inbound-receiving-frontend". The remote sends an Idempotency-Key header
+    # on every POST (allowed in kong-cors.tf).
+    "inbound-receiving" = { remote_name = "inbound_mfe" }
     # network-inventory-planning (IQVO/network-inventory-planning#18):
     # federation container `nip_mfe`, Vite base /mfes/network-inventory-planning/.
     # Its web/ sits at the standard <repo>/web path. NIP is not in

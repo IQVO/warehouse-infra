@@ -61,6 +61,14 @@ locals {
     # ops-agent consumes it via the `productMaster` endpoint in ops-agent.tf
     # (warehouse-ops-agent #120: PRODUCT_MASTER_MCP_ENDPOINT).
     "product-master",
+    # inbound-receiving: cmd/mcp (inbound-receiving ADR 0005) -- READ-ONLY
+    # tools (a governance test bans write verbs), Streamable HTTP on :8090 at
+    # `/` and `/mcp`, open `/healthz`, no auth, no outbox relay and no Kafka
+    # dial. services.tf's `contains(local.mcp_services, name)` gate sets
+    # mcp.enabled = var.deploy_mcp_servers with no other edit. The ops-agent
+    # consumes it via the `inboundReceiving` endpoint in ops-agent.tf
+    # (warehouse-ops-agent #125: upstreams.inboundReceiving.endpoint).
+    "inbound-receiving",
     # network-inventory-planning: cmd/mcp merged (NIP ADR 0008) -- READ-ONLY
     # (get_transfer, list_transfers, find_stuck_transfers,
     # simulate_transfer_options). It is NOT in local.services (see

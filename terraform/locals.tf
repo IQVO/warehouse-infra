@@ -114,6 +114,29 @@ locals {
       path       = "${var.api_path_prefix}/product-master"
       chart_path = "${path.module}/../../product-master/charts/product-master"
     }
+    # inbound-receiving: the inbound receiving context (ASN, dock appointment,
+    # receipt, putaway handover; inbound-receiving ADRs 0001-0006). Its env
+    # (EVENT_PUBLISHER, KAFKA_BROKERS, OUTBOX_RELAY_INTERVAL, PRODUCT_MODE +
+    # PRODUCT_CONSUMER_GROUP, DOCK_DOOR_MODE + DOCK_DOOR_CONSUMER_GROUP) all
+    # have DEDICATED chart values, so they live in
+    # helm-values/inbound-receiving.yaml, NOT in local.sync_edge_env (setting
+    # both would render duplicate env entries). It publishes
+    # warehouse.inbound-receiving.events; inventory-storage consumes the
+    # receipt events from it and books StockReceived (inventory-storage ADR
+    # 0037: config.inboundReceiptConsumerGroup). It consumes
+    # warehouse.product-master.events (SKU copy) and warehouse.facility.events
+    # (inbound dock-door copy). It joins mcp_services (cmd/mcp; see
+    # terraform/mcp.tf), analytics_services (inbound-receiving ADR 0006:
+    # inbound-projector + inbound-reports + a separate
+    # inbound_receiving_analytics database) and frontend_remotes
+    # (inbound_mfe, web/; terraform/frontends.tf).
+    "inbound-receiving" = {
+      db         = "inbound_receiving"
+      user       = "inbound_receiving"
+      port       = 8080
+      path       = "${var.api_path_prefix}/inbound-receiving"
+      chart_path = "${path.module}/../../inbound-receiving/charts/inbound-receiving"
+    }
   }
 
   # GitHub owner of the repo ArgoCD clones per service (argocd-apps.tf). The
@@ -122,10 +145,11 @@ locals {
   # github.com/IQVO/<name>. warehouse-planning was created directly under
   # IQVO, so github.com/IQVO/warehouse-planning does NOT exist (404) and
   # must be addressed by its real owner. product-master was likewise created
-  # directly under IQVO.
+  # directly under IQVO, as was inbound-receiving.
   argocd_repo_owner = {
     "warehouse-planning" = "IQVO"
     "product-master"     = "IQVO"
+    "inbound-receiving"  = "IQVO"
   }
 
   # Per-service database passwords are GENERATED, never committed. Each service
@@ -273,6 +297,16 @@ locals {
     # top-level analytics/migrations/, already hashed by services.tf's
     # service_source_hash. Same one-time SQL caveat as warehouse-planning above.
     "product-master",
+    # Added (inbound-receiving ADR 0006): the receiving performance and
+    # accuracy data product -- the `warehouse.inbound-receiving.analytics`
+    # stream (same outbox as the integration topic), cmd/inbound-projector
+    # (writer, admin :8091, group inbound-receiving-analytics) and
+    # cmd/inbound-reports (read-only reader, :8092), role/database
+    # inbound_receiving_analytics. Same image as the api and mcp binaries (one
+    # build_and_load). Its analytical migrations live in a top-level
+    # analytics/migrations/, already hashed by services.tf's
+    # service_source_hash. Same one-time SQL caveat as warehouse-planning above.
+    "inbound-receiving",
   ])
 
   analytics_db_info = {
