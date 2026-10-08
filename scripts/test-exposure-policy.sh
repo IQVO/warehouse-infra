@@ -105,7 +105,7 @@ done
 echo "==> 5. Every remote is served through the gateway, as JavaScript"
 for ctx in order-management inventory-storage wes-work-planning fulfillment-execution \
            workforce-management facility-layout labor-performance process-path-management \
-           warehouse-planning product-master; do
+           warehouse-planning product-master network-inventory-planning; do
   URL="${WEB_URL}/mfes/${ctx}/remoteEntry.js"
   read -r CODE CTYPE < <(curl -s -o /dev/null -w '%{http_code} %{content_type}' --max-time 10 "${URL}" || echo "000 none")
   if [[ "${CODE}" == "200" && "${CTYPE}" == *javascript* ]]; then

@@ -156,6 +156,14 @@ locals {
         pullPolicy = "IfNotPresent"
       }
 
+      # Read-only MCP server (NIP ADR 0008): the chart's mcp.enabled flag alone
+      # decides whether the Deployment exists (MCP is unauthenticated
+      # fleet-wide). Mirrors services.tf's `contains(local.mcp_services, name)`
+      # block, which never reaches NIP because it is not in local.services.
+      mcp = {
+        enabled = var.deploy_mcp_servers
+      }
+
       # Environment the binary reads (cmd/network-inventory-planning/main.go),
       # each key a dedicated chart value. Consumer-group ids are FIXED and
       # STABLE (a rescheduled pod resumes from its committed offsets; a new
@@ -241,6 +249,23 @@ locals {
           pathType = "PathPrefix"
         }]
         stripPath = true
+      }
+    } : {},
+    # The context's own Module Federation remote (nip_mfe), the same
+    # `frontend.enabled` chart block services.tf sets for every service in
+    # local.frontend_remotes -- mirrored by hand because NIP is not in
+    # local.services (network-fulfillment.tf does the same). Routing for it
+    # belongs to the Nginx web gateway (frontends.tf), never Kong. The chart's
+    # frontend component lands with IQVO/network-inventory-planning#18; before
+    # that merge these values are ignored by the chart (harmless).
+    contains(keys(local.frontend_remotes), "network-inventory-planning") ? {
+      frontend = {
+        enabled = true
+        image = {
+          repository = "warehouse/network-inventory-planning-frontend"
+          tag        = "local-${local.frontend_source_hash["network-inventory-planning"]}"
+          pullPolicy = "IfNotPresent"
+        }
       }
     } : {},
   )
