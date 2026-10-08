@@ -210,6 +210,16 @@ resource "helm_release" "postgresql" {
                     password = random_password.network_fulfillment_analytics_db.result
                   }
                 },
+                {
+                  # network-inventory-planning: same reasoning as
+                  # network-fulfillment above (not in local.services, so not
+                  # in analytics_db_info); see network-inventory-planning.tf.
+                  "network-inventory-planning" = {
+                    db       = local.network_inventory_planning_analytics_db_name
+                    user     = local.network_inventory_planning_analytics_db_user
+                    password = random_password.network_inventory_planning_analytics_db.result
+                  }
+                },
               )
             }
           )
