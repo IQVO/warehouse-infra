@@ -133,7 +133,7 @@ Every bounded-context service's OLTP pod listens on container port `8080`
 | Service (`warehouse-systems` ns)         | Service port → target | What it is |
 |--------------------------------------------|------------------------|------------|
 | `<service>` (10 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master) | `80 → 8080` | OLTP REST API, routed by Kong |
-| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — all 8 services above, per `mcp.tf`'s `local.mcp_services` |
+| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — the 12 contexts in `mcp.tf`'s `local.mcp_services` (the 10 above plus network-fulfillment and network-inventory-planning) |
 | `<service>-reports`                        | `80 → 8092`             | Analytics read-only REST API (only where `analytics.enabled`, see `locals.tf`'s `analytics_services`) |
 | `<service>-frontend`                       | `80 → 8080`             | Module Federation remote, proxied by the web gateway at `/mfes/<context>/` |
 | `warehouse-console`                        | `80 → 8080`             | Console shell SPA, proxied by the web gateway at `/` |
@@ -166,13 +166,36 @@ consumer group `product-master-analytics`, topic
 by the separate `product_master_analytics` database (role
 `product_master_analytics`, DSN direct to Postgres).
 
+Known issue (product-master reports through Kong): the
+`product-master-reports` HTTPRoute (`/api/product-master/reports` →
+`/reports`) is declared, but requests to it are answered by the
+`/api/product-master` route instead, so
+`http://localhost:8000/api/product-master/reports/*` returns `404` from the
+OLTP API (which has no `/reports/*` path). The reports service itself works
+in-cluster: `kubectl -n warehouse-systems port-forward svc/product-master-reports 8092:80`.
+
+The rest of product-master's deployment: the OLTP API (`EVENT_PUBLISHER=kafka`,
+legacy importer group `product-master-legacy-import`), the read-only MCP server
+`product-master-mcp` (read by `warehouse-ops-agent` through
+`PRODUCT_MASTER_MCP_ENDPOINT`, `ops-agent.tf`) and the console remote
+`product-master-frontend` (`productmaster_mfe`, `/mfes/product-master/`,
+`frontends.tf`). Its `ProductClassified` events on
+`warehouse.product-master.events` feed local copies in inventory-storage
+(`productMasterConsumerGroup`, `helm-values/inventory-storage.yaml`) and in
+order-management, wes-work-planning and fulfillment-execution
+(`PRODUCT_CLASSIFICATION_MODE=kafka`, `helm-values/order-management.yaml` and
+`locals.tf`); no service reads classification from inventory-storage over REST
+any more.
+
 **A structural gotcha worth knowing before you `kubectl port-forward pod/…`:**
 every chart's `selectorLabels` helper emits only
 `app.kubernetes.io/name`+`app.kubernetes.io/instance`, identical across the
 OLTP, MCP, projector, and reports pods of the same service — so the OLTP
 `Service` actually selects ALL of them, and which pod answers a given
 request is undefined. Port-forward `pod/<exact-name>`, never `deploy/` or
-`svc/`, when you need a specific one.
+`svc/`, when you need a specific one. product-master's chart is the exception:
+each of its Services also selects `app.kubernetes.io/component`, so exactly
+one Deployment answers (its `charts/product-master/tests/test_service_selectors.py`).
 
 ### ArgoCD
 
@@ -376,7 +399,7 @@ collides head-on with the console shell's own client-side routes —
 | `http://localhost:8000/api/labor-performance/*`           | `/api/labor-performance` → `/*`      | `labor-performance.warehouse-systems.svc.cluster.local`     |
 | `http://localhost:8000/api/process-path-management/*`     | `/api/process-path-management` → `/*`| `process-path-management...svc.cluster.local`                |
 | `http://localhost:8000/api/warehouse-planning/*`          | `/api/warehouse-planning` → `/*`     | `warehouse-planning.warehouse-systems.svc.cluster.local`    |
-| `http://localhost:8000/api/product-master/*`              | `/api/product-master` → `/*`         | `product-master.warehouse-systems.svc.cluster.local`        |
+| `http://localhost:8000/api/product-master/*`              | `/api/product-master` → `/*`         | `product-master.warehouse-systems.svc.cluster.local` (`/api/product-master/reports/*` is meant for `product-master-reports` but currently lands here and 404s, see the known issue above) |
 | `http://localhost:8000/api/network-inventory-planning/*`  | `/api/network-inventory-planning` → `/*` | `network-inventory-planning.warehouse-systems.svc.cluster.local` |
 | `http://localhost:8000/api/warehouse-ops-agent/*`         | `/api/warehouse-ops-agent` → `/*`    | `warehouse-ops-agent.warehouse-systems.svc.cluster.local`   |
 
@@ -731,9 +754,10 @@ docker rmi warehouse/inventory-storage:local warehouse/wes-work-planning:local \
 ```
 warehouse-infra/
 ├── README.md
-├── helm-values/                 # static per-service environment config
+├── helm-values/                 # static per-service environment config (one file per service; excerpt)
 │   ├── _README.md
 │   ├── inventory-storage.yaml
+│   ├── product-master.yaml
 │   ├── wes-work-planning.yaml
 │   ├── workforce-management.yaml
 │   └── fulfillment-execution.yaml
@@ -746,7 +770,7 @@ warehouse-infra/
     ├── versions.tf              # Terraform + provider pins
     ├── providers.tf             # kind / kubernetes / helm wiring
     ├── variables.tf             # every knob, with the reasoning for each pin
-    ├── locals.tf                # the four bounded contexts in one map
+    ├── locals.tf                # every bounded context in one map (local.services; product-master included)
     ├── main.tf                  # kind cluster + namespaces
     ├── postgres.tf              # PostgreSQL release + 4 databases
     ├── istio.tf                 # istio-base -> istiod
