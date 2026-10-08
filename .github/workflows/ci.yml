@@ -94,6 +94,11 @@ jobs:
           path: product-master
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/inbound-receiving
+          ref: develop
+          path: inbound-receiving
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/network-inventory-planning
           ref: develop
           path: network-inventory-planning
@@ -210,6 +215,11 @@ jobs:
           path: product-master
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/inbound-receiving
+          ref: develop
+          path: inbound-receiving
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/network-inventory-planning
           ref: develop
           path: network-inventory-planning
@@ -300,6 +310,11 @@ jobs:
           repository: IQVO/product-master
           ref: develop
           path: product-master
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/inbound-receiving
+          ref: develop
+          path: inbound-receiving
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: IQVO/network-inventory-planning

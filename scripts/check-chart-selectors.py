@@ -91,6 +91,16 @@ CHARTS: dict[str, dict[str, str]] = {
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
         "database.url": "postgres://u@example.invalid:5432/db",
     },
+    # inbound-receiving: OLTP api + the optional mcp, frontend (inbound_mfe)
+    # and analytics (inbound-projector/inbound-reports) components. Same render
+    # guards as product-master (database source; analytics needs a DSN source
+    # and kafka), so give it the same dummies (no password).
+    "../../inbound-receiving/charts/inbound-receiving": {
+        "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
+        "kafka.enabled": "true",
+        "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
+        "database.url": "postgres://u@example.invalid:5432/db",
+    },
     # network-inventory-planning: OLTP api + the optional mcp, frontend
     # (nip_mfe) and analytics (projector/reports) components. The chart needs a
     # database source and refuses analytics without a DSN source and kafka, so

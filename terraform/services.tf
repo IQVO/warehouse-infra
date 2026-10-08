@@ -19,7 +19,7 @@ locals {
     name => sha256(join("", concat(
       [for f in sort(fileset("${path.module}/../../${name}", "**/*.go")) : filesha256("${path.module}/../../${name}/${f}")],
       [for f in sort(fileset("${path.module}/../../${name}", "migrations/**")) : filesha256("${path.module}/../../${name}/${f}")],
-      # warehouse-planning and product-master keep their migrations under
+      # warehouse-planning, product-master and inbound-receiving keep their migrations under
       # internal/ (the others use a top-level migrations/ dir, matched above).
       # No other service has files matching this pattern, so adding it leaves
       # their hashes unchanged.
