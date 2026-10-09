@@ -281,6 +281,40 @@ CONTEXTS = [
             ),
         ],
     },
+    {
+        "key": "network-fulfillment",
+        "title": "Network Fulfillment",
+        "uid": "warehouse-network-fulfillment",
+        # Chart OTEL_SERVICE_NAME values: `network-fulfillment` (api,
+        # values.yaml otel.serviceName), `network-fulfillment-mcp`,
+        # `netfulfil-projector`, `netfulfil-reports`. NOTE: the repo has NO
+        # OTel SDK (telemetry/circuit_breaker_metrics.go: "no OTel/otelchi
+        # wiring at all"), so these series are empty in the live cluster
+        # (checked against Prometheus label_values(service_name), 2026-10-08).
+        # The regex is correct for the day it is instrumented; the Kong and
+        # Loki rows work today.
+        "service_regex": "(network-fulfillment|netfulfil).*",
+        "kong_service_regex": "httproute\\.warehouse-systems\\.network-fulfillment\\..*",
+        "loki_app": "network-fulfillment",
+        # Deliberately empty: its only metric, circuit_breaker_state{dependency},
+        # is served on a private Prometheus registry at GET /metrics and no
+        # scrape config targets it, so a panel would be permanently empty.
+        "business_metrics": [],
+    },
+    {
+        "key": "network-inventory-planning",
+        "title": "Network Inventory Planning",
+        "uid": "warehouse-network-inventory-planning",
+        # The chart sets no OTEL_SERVICE_NAME and the repo imports only the
+        # otel trace/propagation API (no SDK, no meter, no otelchi), so no
+        # service_name series exists for NIP in the live cluster. The prefix
+        # regex follows the fleet convention (api / -mcp / -projector /
+        # -reports) so it picks them up once instrumented.
+        "service_regex": "network-inventory-planning.*",
+        "kong_service_regex": "httproute\\.warehouse-systems\\.network-inventory-planning\\..*",
+        "loki_app": "network-inventory-planning",
+        "business_metrics": [],
+    },
 ]
 
 
@@ -387,8 +421,9 @@ def build_dashboard(ctx):
     y += 8
 
     # --- Row: business metrics ---------------------------------------------------
-    panels.append(row(y, f"{ctx['title']} — business metrics (Tier 2, ADR-0009)"))
-    y += 1
+    if ctx["business_metrics"]:
+        panels.append(row(y, f"{ctx['title']} — business metrics (Tier 2, ADR-0009)"))
+        y += 1
     bw = 24 // max(len(ctx["business_metrics"]), 1)
     x = 0
     for metric, attr, desc in ctx["business_metrics"]:
@@ -404,7 +439,8 @@ def build_dashboard(ctx):
             )
         )
         x += bw
-    y += 8
+    if ctx["business_metrics"]:
+        y += 8
 
     # --- Row: Go runtime (this context's processes only) ------------------------
     panels.append(row(y, "Go runtime (this context's processes)"))
