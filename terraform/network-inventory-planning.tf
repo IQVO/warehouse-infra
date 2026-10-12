@@ -315,7 +315,7 @@ locals {
   # migrations, which take a session-scoped advisory lock PgBouncer's
   # transaction pooling cannot honour (and analytics stays direct fleet-wide,
   # see locals.tf analytics_database_urls).
-  network_inventory_planning_analytics_database_url = "postgres://${local.network_inventory_planning_analytics_db_user}:***@${local.postgres_host}:${local.postgres_port}/${local.network_inventory_planning_analytics_db_name}?sslmode=disable"
+  network_inventory_planning_analytics_database_url = "postgres://${local.network_inventory_planning_analytics_db_user}:${random_password.network_inventory_planning_analytics_db.result}@${local.postgres_host}:${local.postgres_port}/${local.network_inventory_planning_analytics_db_name}?sslmode=disable"
 }
 
 resource "kubernetes_secret" "network_inventory_planning_analytics_db" {
