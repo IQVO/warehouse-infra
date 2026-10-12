@@ -287,33 +287,111 @@ CONTEXTS = [
         "uid": "warehouse-network-fulfillment",
         # Chart OTEL_SERVICE_NAME values: `network-fulfillment` (api,
         # values.yaml otel.serviceName), `network-fulfillment-mcp`,
-        # `netfulfil-projector`, `netfulfil-reports`. NOTE: the repo has NO
-        # OTel SDK (telemetry/circuit_breaker_metrics.go: "no OTel/otelchi
-        # wiring at all"), so these series are empty in the live cluster
-        # (checked against Prometheus label_values(service_name), 2026-10-08).
-        # The regex is correct for the day it is instrumented; the Kong and
-        # Loki rows work today.
+        # `netfulfil-projector`, `netfulfil-reports`. FIXED (ADR-0013 Tier-1
+        # audit, 2026-10-12, PR IQVO/network-fulfillment#73): otelchi.Middleware
+        # + otelchimetric.NewServerRequestDuration are now wired on every HTTP
+        # surface, so the HTTP RED row below is live. Still no Tier-2 business
+        # counter on the shared OTel path -- circuit_breaker_state{dependency}
+        # (ADR 0004) remains on its own private Prometheus registry at GET
+        # /metrics with no scrape target, hence business_metrics stays empty.
         "service_regex": "(network-fulfillment|netfulfil).*",
         "kong_service_regex": "httproute\\.warehouse-systems\\.network-fulfillment\\..*",
         "loki_app": "network-fulfillment",
-        # Deliberately empty: its only metric, circuit_breaker_state{dependency},
-        # is served on a private Prometheus registry at GET /metrics and no
-        # scrape config targets it, so a panel would be permanently empty.
         "business_metrics": [],
     },
     {
         "key": "network-inventory-planning",
         "title": "Network Inventory Planning",
         "uid": "warehouse-network-inventory-planning",
-        # The chart sets no OTEL_SERVICE_NAME and the repo imports only the
-        # otel trace/propagation API (no SDK, no meter, no otelchi), so no
-        # service_name series exists for NIP in the live cluster. The prefix
-        # regex follows the fleet convention (api / -mcp / -projector /
-        # -reports) so it picks them up once instrumented.
+        # FIXED (ADR-0013 Tier-1 audit, 2026-10-12, PR
+        # IQVO/network-inventory-planning#33): every chi router (REST API,
+        # cmd/mcp, cmd/nip-projector, cmd/nip-reports) now wires the full
+        # otelchi RED stack, and telemetry.Setup (the MeterProvider) is now
+        # called from all four cmd/ mains instead of only the API's -- so the
+        # HTTP RED row and Go-runtime row below are both live. No Tier-2
+        # business counter exists yet for this context.
         "service_regex": "network-inventory-planning.*",
         "kong_service_regex": "httproute\\.warehouse-systems\\.network-inventory-planning\\..*",
         "loki_app": "network-inventory-planning",
         "business_metrics": [],
+    },
+    {
+        "key": "product-master",
+        "title": "Product Master",
+        "uid": "warehouse-product-master",
+        # OTel service.name: `product-master` (cmd/api), `product-master-mcp`
+        # (cmd/mcp/router.go mcpServiceName), the projector and reports
+        # processes share the `product-master` prefix -- one prefix regex
+        # covers every process of this context, same convention as the other
+        # locals.tf-routed services.
+        "service_regex": "product-master.*",
+        "kong_service_regex": "httproute\\.warehouse-systems\\.product-master\\..*",
+        "loki_app": "product-master",
+        "business_metrics": [
+            (
+                # Source: product-master's RegisterProduct use case, behind
+                # ports.ProductMetrics / telemetry.ProductMetrics (ADR-0013
+                # Tier-2, PR IQVO/product-master#22). Int64Counter, unit
+                # {product}.
+                "product_master_products_registered_total",
+                "outcome",
+                "RegisterProduct attempts, by outcome (created, description_changed, or unchanged). A created rate flatlining means SKU onboarding/import has stalled.",
+            ),
+        ],
+    },
+    {
+        "key": "inbound-receiving",
+        "title": "Inbound Receiving",
+        "uid": "warehouse-inbound-receiving",
+        # OTel service.name: `inbound-receiving` (cmd/api), `inbound-receiving-mcp`
+        # (cmd/mcp/router.go mcpServiceName), cmd/inbound-projector and
+        # cmd/inbound-reports share the `inbound-receiving` prefix.
+        "service_regex": "inbound-receiving.*",
+        "kong_service_regex": "httproute\\.warehouse-systems\\.inbound-receiving\\..*",
+        "loki_app": "inbound-receiving",
+        "business_metrics": [
+            (
+                # Source: inbound-receiving's ReceiveLine use case, behind
+                # ports.ReceiptMetrics / telemetry adapter (ADR-0013 Tier-2,
+                # PR IQVO/inbound-receiving#15). Int64Counter, unit {unit}.
+                "inbound_receiving_receipts_units_received_total",
+                "outcome",
+                "Units received onto a receipt line, by outcome (good or damaged). Per ADR 0003 only the good share ever becomes stock in inventory-storage, so a rising damaged share is cargo counted at the dock that will never become inventory.",
+            ),
+        ],
+    },
+    {
+        "key": "warehouse-ops-agent",
+        "title": "Warehouse Ops Agent",
+        "uid": "warehouse-warehouse-ops-agent",
+        # warehouse-ops-agent is a different shape from the database-backed
+        # contexts above (ops-agent.tf: no DB, no Kafka, a single process
+        # cmd/agent) but it IS routed through Kong at
+        # ${api_path_prefix}/warehouse-ops-agent (ops-agent.tf) and DOES emit
+        # its own Tier-2-shaped OTel metrics for LLM arbitration (ADR 0004),
+        # so it earns a dashboard like every other context rather than being
+        # treated purely as the metrics-reader side of its design.
+        "service_regex": "warehouse-ops-agent.*",
+        "kong_service_regex": "httproute\\.warehouse-systems\\.warehouse-ops-agent\\..*",
+        "loki_app": "warehouse-ops-agent",
+        "business_metrics": [
+            (
+                # Source: internal/adapters/outbound/telemetry/arbitration_metrics.go
+                # -- renamed to the dotted OTel instrument name
+                # `ops_agent.llm.arbitrations` in PR
+                # IQVO/warehouse-ops-agent#131 (ADR-0013 conformance); the
+                # Prometheus-exported series name is unchanged by that rename
+                # (dots -> underscores, `_total` suffix on a counter).
+                "ops_agent_llm_arbitrations_total",
+                "source",
+                "LLM-arbitration decisions (ADR 0004), by winning source (deterministic policy vs. model-backed Reasoner). A source shift with no corresponding LLM_MODE config change is worth investigating.",
+            ),
+            (
+                "ops_agent_llm_agreement_total",
+                "agree",
+                "Valid model plans compared against the deterministic decision, by agreement. This ratio is the shadow-mode rollout gate: agree=true over the total is how confident the fleet is that the model-backed Reasoner can safely replace the deterministic policy.",
+            ),
+        ],
     },
 ]
 
