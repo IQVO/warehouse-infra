@@ -118,12 +118,14 @@ for ctx in order-management inventory-storage wes-work-planning fulfillment-exec
 done
 
 echo "==> 6. Every API answers on the API origin"
+# network-inventory-planning's healthz deliberately returns 204 No Content
+# (no body by design) — that is a healthy answer, not a failure.
 for ctx in order-management inventory-storage wes-work-planning fulfillment-execution \
            workforce-management facility-layout labor-performance process-path-management \
            warehouse-planning product-master inbound-receiving network-inventory-planning; do
   CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${API_URL}/api/${ctx}/healthz" || echo 000)"
-  if [[ "${CODE}" == "200" ]]; then
-    pass "${ctx} /healthz -> 200"
+  if [[ "${CODE}" == "200" || ( "${CODE}" == "204" && "${ctx}" == "network-inventory-planning" ) ]]; then
+    pass "${ctx} /healthz -> ${CODE}"
   else
     fail "${ctx} /healthz -> ${CODE}"
   fi
@@ -325,20 +327,18 @@ else
 fi
 # Prometheus pipeline: Kong's :8100 status listener has no curl/wget in the
 # container, so prove it the real way — Prometheus itself scraped kong_*
-# metrics (plugin -> :8100 -> prometheus scrape). Prometheus's own UI
-# port-forward is not needed: query through the same API URL pattern the
-# dashboards use, via the in-cluster Service through kubectl proxy-free
-# port-forward fallback. Simplest robust check: port-forward prometheus.
-PROM_PF_PORT=19090
-(kubectl --context "${CONTEXT}" -n observability port-forward svc/prometheus-server "${PROM_PF_PORT}:80" >/dev/null 2>&1 &)
-sleep 3
-KONG_METRICS="$(curl -s --max-time 10 "http://localhost:${PROM_PF_PORT}/api/v1/query?query=kong_http_requests_total" 2>/dev/null || true)"
+# metrics (plugin -> :8100 -> prometheus scrape). The Prometheus UI is
+# already host-reachable at the observability NodePort (exposure.tf);
+# query it directly, no port-forward needed. KUBECONFIG's prometheus
+# port-forward in an earlier draft targeted :80 while the Service listens
+# on 9090 — that mismatch made this check always fail.
+PROM_URL="http://localhost:9090"
+KONG_METRICS="$(curl -s --max-time 10 "${PROM_URL}/api/v1/query?query=kong_http_requests_total" 2>/dev/null || true)"
 if grep -q '"result":\[{' <<<"${KONG_METRICS}"; then
   pass "Prometheus is scraping Kong's prometheus-plugin metrics (kong_http_requests_total present)"
 else
-  fail "kong_http_requests_total absent from Prometheus — the prometheus plugins or the :8100 scrape path is broken"
+  fail "kong_http_requests_total absent from Prometheus at ${PROM_URL} — the prometheus plugins or the :8100 scrape path is broken"
 fi
-pkill -f "port-forward svc/prometheus-server" 2>/dev/null || true
 
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
