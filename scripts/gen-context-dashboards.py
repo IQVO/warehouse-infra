@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Generate the per-bounded-context Grafana dashboards, plus the fleet-wide
-Kong API Gateway dashboard, as committed JSON under terraform/dashboards/.
+Kong API Gateway dashboard, as committed JSON under terraform/dashboards/,
+and the per-context Prometheus alert rules as
+terraform/alerting/warehouse-alert-rules.json (see build_alert_rules).
 
 This is the SOURCE for those dashboards -- edit the CONTEXTS table (or the
 panel builders) below and re-run this script, never hand-edit the generated
@@ -37,7 +39,6 @@ import json
 import os
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT_DIR = os.path.join(REPO_ROOT, "terraform", "dashboards", "contexts")
 
 PROM_DS = {"type": "prometheus", "uid": "prometheus"}
 LOKI_DS = {"type": "loki", "uid": "loki"}
@@ -115,9 +116,14 @@ def row(y, title):
 # MCP server) even though the naming isn't uniform across the fleet
 # (order-management-projector vs. wes-projector vs. fulfillment-projector) --
 # see kubectl/Prometheus label_values(service_name) as the ground truth this
-# was built from. `kong_service_regex` matches the Kong Gateway API service
-# object name Terraform generates for that context's route
-# (httproute.warehouse-systems.<context>.0), see locals.tf `services` map.
+# was built from. The Kong `service` label is DERIVED from `key` (see
+# kong_service_regex below), never typed per entry: Kong names the service
+# behind each chart-rendered HTTPRoute httproute.warehouse-systems.<route>.0,
+# where <route> is the context's API route (`<key>`), its MCP route
+# (`<key>-mcp`) or its reports route (`<key>-reports`).
+# `outbox_lag_metric` (optional) is the context's outbox-lag gauge, only where
+# its observability page names one -- it drives the "Transactional outbox"
+# row; contexts without one get no such row.
 # `loki_app` is the Loki/Alloy `app` label value for this context's pods --
 # unlike `service_regex`, this one IS uniform across the fleet: Alloy's
 # pipeline (logging.tf) maps `app` straight from the
@@ -136,8 +142,11 @@ CONTEXTS = [
         "title": "Order Management",
         "uid": "warehouse-order-management",
         "service_regex": "order-management.*",
-        "kong_service_regex": "httproute\\.warehouse-systems\\.order-management\\..*",
         "loki_app": "order-management",
+        # Outbox lag gauge: the order-management observability page names the OTel
+        # Float64ObservableGauge `order.outbox.lag_seconds` (age of the oldest unpublished
+        # outbox_events row, 0 when drained) -> `order_outbox_lag_seconds` (observed live).
+        "outbox_lag_metric": "order_outbox_lag_seconds",
         "business_metrics": [
             (
                 "order_orders_received_total",
@@ -151,7 +160,6 @@ CONTEXTS = [
         "title": "Inventory & Storage",
         "uid": "warehouse-inventory-storage",
         "service_regex": "inventory-(storage|projector|reports).*",
-        "kong_service_regex": "httproute\\.warehouse-systems\\.inventory-storage\\..*",
         "loki_app": "inventory-storage",
         "business_metrics": [
             (
@@ -166,8 +174,11 @@ CONTEXTS = [
         "title": "WES — Work Planning & Release",
         "uid": "warehouse-wes-work-planning",
         "service_regex": "wes-(work-planning|projector|reports).*",
-        "kong_service_regex": "httproute\\.warehouse-systems\\.wes-work-planning\\..*",
         "loki_app": "wes-work-planning",
+        # Outbox lag gauge: the wes-work-planning observability page names the OTel
+        # Float64ObservableGauge `wes.outbox.lag_seconds` (age of the oldest unpublished
+        # outbox_events row, 0 when drained) -> `wes_outbox_lag_seconds` (observed live).
+        "outbox_lag_metric": "wes_outbox_lag_seconds",
         "business_metrics": [
             (
                 "wes_work_units_released_total",
@@ -181,7 +192,6 @@ CONTEXTS = [
         "title": "Fulfillment Execution",
         "uid": "warehouse-fulfillment-execution",
         "service_regex": "fulfillment-(execution|projector|reports).*",
-        "kong_service_regex": "httproute\\.warehouse-systems\\.fulfillment-execution\\..*",
         "loki_app": "fulfillment-execution",
         "business_metrics": [
             (
@@ -201,13 +211,23 @@ CONTEXTS = [
         "title": "Workforce Management",
         "uid": "warehouse-workforce-management",
         "service_regex": "workforce-(management|projector|reports).*",
-        "kong_service_regex": "httproute\\.warehouse-systems\\.workforce-management\\..*",
         "loki_app": "workforce-management",
+        # Outbox lag gauge: the workforce-management observability page names the OTel
+        # Float64ObservableGauge `workforce.outbox.lag_seconds` (age of the oldest unpublished
+        # outbox_events row, 0 when drained) -> `workforce_outbox_lag_seconds` (observed live).
+        "outbox_lag_metric": "workforce_outbox_lag_seconds",
         "business_metrics": [
             (
+                # Source: workforce-management internal/adapters/outbound/
+                # telemetry/labor_metrics.go -- the OTel Int64Counter
+                # `workforce.labor_assignments`; its attributes have been
+                # `outcome`/`reason` since that repo's ADR-0015 conformance pass
+                # (they were `workforce.assignment.outcome`/`.reason` before),
+                # so grouping by the old `workforce_assignment_outcome` label
+                # collapsed the panel into one unlabelled series (gap fix D20).
                 "workforce_labor_assignments_total",
-                "workforce_assignment_outcome",
-                "Labor assignment attempts, by outcome (accepted/rejected) and, on rejection, workforce_assignment_reason (uncertified, on_break, shift_ended, max_hours_exceeded, associate_not_found).",
+                "outcome",
+                "Labor assignment attempts, by outcome (accepted/rejected). On rejection the counter also carries `reason` (uncertified, on_break, shift_ended, max_hours_exceeded, associate_not_found, internal_error).",
             ),
         ],
     },
@@ -216,7 +236,6 @@ CONTEXTS = [
         "title": "Facility Layout",
         "uid": "warehouse-facility-layout",
         "service_regex": "facility-layout.*",
-        "kong_service_regex": "httproute\\.warehouse-systems\\.facility-layout\\..*",
         "loki_app": "facility-layout",
         "business_metrics": [
             (
@@ -231,8 +250,11 @@ CONTEXTS = [
         "title": "Labor Performance",
         "uid": "warehouse-labor-performance",
         "service_regex": "labor-performance.*",
-        "kong_service_regex": "httproute\\.warehouse-systems\\.labor-performance\\..*",
         "loki_app": "labor-performance",
+        # Outbox lag gauge: the labor-performance observability page names the OTel
+        # Float64ObservableGauge `labor_performance.outbox.lag_seconds` (age of the oldest unpublished
+        # outbox_events row, 0 when drained) -> `labor_performance_outbox_lag_seconds` (derived from the instrument name, not yet observed live).
+        "outbox_lag_metric": "labor_performance_outbox_lag_seconds",
         "business_metrics": [
             (
                 "labor_performance_standards_defined_total",
@@ -246,8 +268,11 @@ CONTEXTS = [
         "title": "Process Path Management",
         "uid": "warehouse-process-path-management",
         "service_regex": "process-path-management.*",
-        "kong_service_regex": "httproute\\.warehouse-systems\\.process-path-management\\..*",
         "loki_app": "process-path-management",
+        # Outbox lag gauge: the process-path-management observability page names the OTel
+        # Float64ObservableGauge `process_path_management.outbox.lag_seconds` (age of the oldest unpublished
+        # outbox_events row, 0 when drained) -> `process_path_management_outbox_lag_seconds` (observed live).
+        "outbox_lag_metric": "process_path_management_outbox_lag_seconds",
         "business_metrics": [
             (
                 "process_path_management_paths_defined_total",
@@ -265,7 +290,6 @@ CONTEXTS = [
         # reader); the projector and MCP server share the `warehouse-planning`
         # prefix, so one prefix regex covers every process of this context.
         "service_regex": "warehouse-planning.*",
-        "kong_service_regex": "httproute\\.warehouse-systems\\.warehouse-planning\\..*",
         "loki_app": "warehouse-planning",
         "business_metrics": [
             (
@@ -295,8 +319,11 @@ CONTEXTS = [
         # (ADR 0004) remains on its own private Prometheus registry at GET
         # /metrics with no scrape target, hence business_metrics stays empty.
         "service_regex": "(network-fulfillment|netfulfil).*",
-        "kong_service_regex": "httproute\\.warehouse-systems\\.network-fulfillment\\..*",
         "loki_app": "network-fulfillment",
+        # network-fulfillment publishes no docs site (no Docusaurus config,
+        # https://iqvo.github.io/network-fulfillment/ is 404), so its alert
+        # rules link the runbook file on GitHub instead.
+        "runbook_url": "https://github.com/IQVO/network-fulfillment/blob/develop/docs/operations/runbook.md",
         "business_metrics": [],
     },
     {
@@ -311,7 +338,6 @@ CONTEXTS = [
         # HTTP RED row and Go-runtime row below are both live. No Tier-2
         # business counter exists yet for this context.
         "service_regex": "network-inventory-planning.*",
-        "kong_service_regex": "httproute\\.warehouse-systems\\.network-inventory-planning\\..*",
         "loki_app": "network-inventory-planning",
         "business_metrics": [],
     },
@@ -325,7 +351,6 @@ CONTEXTS = [
         # covers every process of this context, same convention as the other
         # locals.tf-routed services.
         "service_regex": "product-master.*",
-        "kong_service_regex": "httproute\\.warehouse-systems\\.product-master\\..*",
         "loki_app": "product-master",
         "business_metrics": [
             (
@@ -347,7 +372,6 @@ CONTEXTS = [
         # (cmd/mcp/router.go mcpServiceName), cmd/inbound-projector and
         # cmd/inbound-reports share the `inbound-receiving` prefix.
         "service_regex": "inbound-receiving.*",
-        "kong_service_regex": "httproute\\.warehouse-systems\\.inbound-receiving\\..*",
         "loki_app": "inbound-receiving",
         "business_metrics": [
             (
@@ -361,6 +385,23 @@ CONTEXTS = [
         ],
     },
     {
+        "key": "slotting-optimization",
+        "title": "Slotting Optimization",
+        "uid": "warehouse-slotting-optimization",
+        # Gap fix D10/D20. OTel service.name: `slotting-optimization`
+        # (cmd/api, telemetry.newResource); cmd/mcp shares the prefix. Its
+        # observability page (docs/docs/operations/observability.md on
+        # origin/develop) states it defines NO business metric and no outbox
+        # gauge: only otelchi's http.server.request.duration (no status code)
+        # and the Go runtime metrics. So business_metrics stays empty (never
+        # invent a metric) and there is no outbox-lag panel; the Kong rows stay
+        # empty until its chart renders the Kong prometheus plugin
+        # (kong-plugins.yaml, not on its develop yet).
+        "service_regex": "slotting-optimization.*",
+        "loki_app": "slotting-optimization",
+        "business_metrics": [],
+    },
+    {
         "key": "warehouse-ops-agent",
         "title": "Warehouse Ops Agent",
         "uid": "warehouse-warehouse-ops-agent",
@@ -372,7 +413,6 @@ CONTEXTS = [
         # so it earns a dashboard like every other context rather than being
         # treated purely as the metrics-reader side of its design.
         "service_regex": "warehouse-ops-agent.*",
-        "kong_service_regex": "httproute\\.warehouse-systems\\.warehouse-ops-agent\\..*",
         "loki_app": "warehouse-ops-agent",
         "business_metrics": [
             (
@@ -396,9 +436,25 @@ CONTEXTS = [
 ]
 
 
+def kong_service_regex(key):
+    """PromQL regex for every Kong `service` label of one context: its API,
+    MCP and reports routes (httproute.warehouse-systems.<key>[-mcp|-reports].N).
+
+    Dots are matched with `[.]`, never with a backslash escape: inside a
+    PromQL double-quoted string a single backslash before `.` is a parse
+    error ("unknown escape sequence U+002E"), and that is exactly what the
+    previous per-entry regexes put into the generated JSON. Every Kong panel
+    of every context dashboard failed that way until gap fix D20 (verified
+    against the cluster's Prometheus 3.14);
+    scripts/test_gen_context_dashboards.py now rejects any backslash in a
+    generated expression.
+    """
+    return f"httproute[.]warehouse-systems[.]{key}(-mcp|-reports)?[.][0-9]+"
+
+
 def build_dashboard(ctx):
     svc_re = ctx["service_regex"]
-    kong_re = ctx["kong_service_regex"]
+    kong_re = kong_service_regex(ctx["key"])
     loki_app = ctx["loki_app"]
     # Excludes istio-proxy/istio-init noise -- every pod in this fleet has a
     # native sidecar (see kubernetes-deployment.md's Istio note) whose own
@@ -415,7 +471,7 @@ def build_dashboard(ctx):
         panel(
             0, y, 8, 8,
             "Request rate (Kong)",
-            "Requests/sec Kong forwarded to this context's Service, by HTTP status code. Kong sees a request even when the upstream pod never got instrumented (e.g. crashed before otelchi ran).",
+            "Requests/sec Kong forwarded to this context's routes (API, MCP and reports), by HTTP status code. Kong sees a request even when the upstream pod never got instrumented (e.g. crashed before otelchi ran).",
             [target(
                 f'sum by (code) (rate(kong_http_requests_total{{service=~"{kong_re}"}}[5m]))',
                 legend="{{code}}",
@@ -429,7 +485,9 @@ def build_dashboard(ctx):
             "Error rate (Kong, 5xx)",
             "5xx responses Kong returned or proxied for this context, as a fraction of all requests. A 5xx here with a flat upstream error rate on the service's own panel below means Kong itself (or the network to the upstream) is failing, not the application.",
             [target(
-                f'sum(rate(kong_http_requests_total{{service=~"{kong_re}", code=~"5.."}}[5m])) '
+                # `or vector(0)`: with no 5xx at all the numerator is an empty
+                # vector, which would render "No data" instead of a healthy 0.
+                f'(sum(rate(kong_http_requests_total{{service=~"{kong_re}", code=~"5.."}}[5m])) or vector(0)) '
                 f'/ clamp_min(sum(rate(kong_http_requests_total{{service=~"{kong_re}"}}[5m])), 1e-9)',
                 legend="5xx ratio",
             )],
@@ -474,12 +532,11 @@ def build_dashboard(ctx):
     panels.append(
         panel(
             8, y, 8, 8,
-            "Error rate (HTTP 5xx, by process)",
-            "5xx responses this context's own processes returned, split by which process (OLTP vs. reports vs. MCP) so a reports-only outage doesn't get hidden inside a healthy OLTP average. Two label variants are unioned: newer otelchi/semconv releases in this fleet use http_response_status_code, older ones (riandyrn/otelchi metric package pre-dating the semconv bump) use http_status_code.",
+            "5xx rate by Kong route (API / MCP / reports)",
+            "5xx responses per second for each of this context's Kong routes (httproute.warehouse-systems.<context>.N is the REST API, <context>-mcp.N the MCP server, <context>-reports.N the analytics reports), so a reports-only or MCP-only outage is not hidden inside a healthy API average. Read from Kong's prometheus plugin, not from the service: otelchi's http.server.request.duration carries no status-code attribute in this fleet (gap fix D20), so the service's own histogram cannot tell a 5xx from a 200.",
             [target(
-                f'sum by (service_name) (rate(http_server_request_duration_seconds_count{{service_name=~"{svc_re}", http_response_status_code=~"5.."}}[5m])) '
-                f'or sum by (service_name) (rate(http_server_request_duration_seconds_count{{service_name=~"{svc_re}", http_status_code=~"5.."}}[5m]))',
-                legend="{{service_name}}",
+                f'sum by (service) (rate(kong_http_requests_total{{service=~"{kong_re}", code=~"5.."}}[5m]))',
+                legend="{{service}}",
             )],
             unit="reqps",
         )
@@ -518,6 +575,25 @@ def build_dashboard(ctx):
         )
         x += bw
     if ctx["business_metrics"]:
+        y += 8
+
+    # --- Row: transactional outbox (only where a lag gauge exists) --------------
+    if ctx.get("outbox_lag_metric"):
+        lag_metric = ctx["outbox_lag_metric"]
+        panels.append(row(y, "Transactional outbox"))
+        y += 1
+        panels.append(
+            panel(
+                0, y, 24, 8,
+                "Outbox lag (age of the oldest unpublished event)",
+                f"{lag_metric}: seconds since the oldest outbox_events row with published_at IS NULL was written, 0 when the outbox is drained (sampled at each metric collection). A steadily growing value means the relay is not publishing -- Kafka unreachable, or a head row failing until it reaches OUTBOX_MAX_ATTEMPTS and is parked (see this context's runbook for the re-arm SQL). Alert: WarehouseOutboxLagHigh.",
+                [target(
+                    f'max by (service_name) ({lag_metric}{{service_name=~"{svc_re}"}})',
+                    legend="{{service_name}}",
+                )],
+                unit="s",
+            )
+        )
         y += 8
 
     # --- Row: Go runtime (this context's processes only) ------------------------
@@ -810,28 +886,124 @@ def build_logs_overview():
     }
 
 
-def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
+# ---------------------------------------------------------------------------
+# Alert rules (gap fix D30), generated from the same CONTEXTS table so every
+# context's alerts, dashboard and Kong/outbox metric names can never disagree.
+# Written as JSON (valid YAML) to terraform/alerting/warehouse-alert-rules.json
+# and loaded by observability.tf into the prometheus-community/prometheus
+# chart's serverFiles."alerting_rules.yml" (this cluster runs the plain chart,
+# no Prometheus Operator, so a PrometheusRule CRD would be watched by nothing).
+#
+# Per context, only where the signal exists:
+#   - WarehouseKong5xxRatioHigh: Kong's 5xx share per route (API/MCP/reports),
+#     the only 5xx source (otelchi records no status code).
+#   - WarehouseOutboxLagHigh: the context's outbox-lag gauge > 60 s for 5 m,
+#     the threshold its own observability page suggests. Only contexts that
+#     export a gauge; no context exports an outbox dead-row (attempt-cap)
+#     metric -- that signal is a log line / SQL query only, so no rule.
+#   - WarehousePodRestarting: kube-state-metrics'
+#     kube_pod_container_status_restarts_total (enabled in observability.tf
+#     by the same change).
+# No consumer-lag rule: no Kafka exporter runs in this cluster, so no
+# consumer-group lag metric exists to alert on.
+# Every rule carries annotations.runbook_url: the context's own runbook page.
+# ---------------------------------------------------------------------------
+APPS_NAMESPACE = "warehouse-systems"
+GRAFANA_URL = "http://localhost:3000"
+KONG_5XX_RATIO_THRESHOLD = 0.05
+OUTBOX_LAG_THRESHOLD_SECONDS = 60
+POD_RESTARTS_THRESHOLD = 2
+
+
+def runbook_url(ctx):
+    return ctx.get("runbook_url", f"https://iqvo.github.io/{ctx['key']}/docs/operations/runbook")
+
+
+def pod_regex(key):
+    """Every pod of one context: the chart's Deployments are all named
+    `<release>` or `<release>-<component>` and the release is the context key
+    (no context key is a `<other key>-` prefix of another; the test pins it)."""
+    return f"{key}-.+"
+
+
+def build_alert_rules():
+    groups = []
     for ctx in CONTEXTS:
-        dashboard = build_dashboard(ctx)
-        out_path = os.path.join(OUT_DIR, f"{ctx['key']}.json")
-        with open(out_path, "w") as f:
-            json.dump(dashboard, f, indent=2, sort_keys=False)
-            f.write("\n")
-        print(f"wrote {out_path}")
+        key = ctx["key"]
+        labels = {"context": key, "severity": "warning"}
+        common = {
+            "runbook_url": runbook_url(ctx),
+            "dashboard_url": f"{GRAFANA_URL}/d/{ctx['uid']}",
+        }
+        kong_re = kong_service_regex(key)
+        rules = [{
+            "alert": "WarehouseKong5xxRatioHigh",
+            "expr": (
+                f'sum by (service) (rate(kong_http_requests_total{{service=~"{kong_re}", code=~"5.."}}[5m])) '
+                f'/ sum by (service) (rate(kong_http_requests_total{{service=~"{kong_re}"}}[5m])) '
+                f"> {KONG_5XX_RATIO_THRESHOLD}"
+            ),
+            "for": "5m",
+            "labels": labels,
+            "annotations": {
+                "summary": f"{ctx['title']}: more than {int(KONG_5XX_RATIO_THRESHOLD * 100)}% of requests on a Kong route answer 5xx",
+                "description": "Kong route {{ $labels.service }} answered 5xx for {{ $value | humanizePercentage }} of its requests over the last 5 minutes (API route = <context>.N, MCP = <context>-mcp.N, reports = <context>-reports.N).",
+                **common,
+            },
+        }]
+        if ctx.get("outbox_lag_metric"):
+            rules.append({
+                "alert": "WarehouseOutboxLagHigh",
+                "expr": f'max by (service_name) ({ctx["outbox_lag_metric"]}{{service_name=~"{ctx["service_regex"]}"}}) > {OUTBOX_LAG_THRESHOLD_SECONDS}',
+                "for": "5m",
+                "labels": labels,
+                "annotations": {
+                    "summary": f"{ctx['title']}: the transactional outbox is not draining",
+                    "description": "The oldest unpublished outbox_events row of {{ $labels.service_name }} is {{ $value | humanizeDuration }} old. Kafka is unreachable or a head row keeps failing until OUTBOX_MAX_ATTEMPTS parks it; downstream contexts stop seeing this context's events. The runbook has the re-arm SQL.",
+                    **common,
+                },
+            })
+        rules.append({
+            "alert": "WarehousePodRestarting",
+            "expr": (
+                f'sum by (pod, container) (increase(kube_pod_container_status_restarts_total{{namespace="{APPS_NAMESPACE}", pod=~"{pod_regex(key)}"}}[15m])) '
+                f">= {POD_RESTARTS_THRESHOLD}"
+            ),
+            "for": "0m",
+            "labels": labels,
+            "annotations": {
+                "summary": f"{ctx['title']}: a container is restarting",
+                "description": "{{ $labels.pod }}/{{ $labels.container }} restarted {{ $value | humanize }} times in 15 minutes (boot-retry exhaustion, a failed migration, a stopped consumer that exits on purpose, or an OOM kill). Read the previous container's last log lines first.",
+                **common,
+            },
+        })
+        groups.append({"name": f"warehouse-{key}", "rules": rules})
+    return {"groups": groups}
 
-    gateway_dir = os.path.join(REPO_ROOT, "terraform", "dashboards")
-    gateway_path = os.path.join(gateway_dir, "kong-gateway-overview.json")
-    with open(gateway_path, "w") as f:
-        json.dump(build_gateway_overview(), f, indent=2, sort_keys=False)
-        f.write("\n")
-    print(f"wrote {gateway_path}")
 
-    logs_path = os.path.join(gateway_dir, "logs-overview.json")
-    with open(logs_path, "w") as f:
-        json.dump(build_logs_overview(), f, indent=2, sort_keys=False)
+def write_json(path, obj):
+    with open(path, "w") as f:
+        json.dump(obj, f, indent=2, sort_keys=False)
         f.write("\n")
-    print(f"wrote {logs_path}")
+    print(f"wrote {path}")
+
+
+def main(repo_root=REPO_ROOT):
+    """Write every generated file under `repo_root` (the repo itself by
+    default; scripts/test_gen_context_dashboards.py passes a temp dir and
+    diffs the result against the committed files)."""
+    out_dir = os.path.join(repo_root, "terraform", "dashboards", "contexts")
+    os.makedirs(out_dir, exist_ok=True)
+    for ctx in CONTEXTS:
+        write_json(os.path.join(out_dir, f"{ctx['key']}.json"), build_dashboard(ctx))
+
+    gateway_dir = os.path.join(repo_root, "terraform", "dashboards")
+    write_json(os.path.join(gateway_dir, "kong-gateway-overview.json"), build_gateway_overview())
+    write_json(os.path.join(gateway_dir, "logs-overview.json"), build_logs_overview())
+
+    alerting_dir = os.path.join(repo_root, "terraform", "alerting")
+    os.makedirs(alerting_dir, exist_ok=True)
+    write_json(os.path.join(alerting_dir, "warehouse-alert-rules.json"), build_alert_rules())
 
 
 if __name__ == "__main__":

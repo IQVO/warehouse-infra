@@ -132,7 +132,7 @@ Every bounded-context service's OLTP pod listens on container port `8080`
 
 | Service (`warehouse-systems` ns)         | Service port → target | What it is |
 |--------------------------------------------|------------------------|------------|
-| `<service>` (11 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master, inbound-receiving) | `80 → 8080` | OLTP REST API, routed by Kong |
+| `<service>` (12 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master, inbound-receiving, slotting-optimization) | `80 → 8080` | OLTP REST API, routed by Kong |
 | `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — the 13 contexts in `mcp.tf`'s `local.mcp_services` (the 11 above plus network-fulfillment and network-inventory-planning) |
 | `<service>-reports`                        | `80 → 8092`             | Analytics read-only REST API (only where `analytics.enabled`, see `locals.tf`'s `analytics_services`) |
 | `<service>-frontend`                       | `80 → 8080`             | Module Federation remote, proxied by the web gateway at `/mfes/<context>/` |
@@ -208,8 +208,29 @@ through `upstreams.inboundReceiving` (`ops-agent.tf`), and the console remote
 (`config.inboundReceiptConsumerGroup=inventory-storage-inbound-receipts`,
 `helm-values/inventory-storage.yaml`, inventory-storage ADR 0037) and books
 `StockReceived`, which leaves the service because inventory-storage runs
-`EVENT_PUBLISHER=kafka`. Nothing in the fleet depends on slotting-optimization
-from this change.
+`EVENT_PUBLISHER=kafka`.
+
+`slotting-optimization` (forward pick-slot plans by ABC velocity, human
+approval; gap fix D10) is a plain `local.services` member: OLTP API only, no
+analytics read side, no web remote, and its read-only MCP server stays off
+(no consumer is wired). Its role/database `slotting_optimization` and the
+`slotting-optimization-db` Secret derive from `local.services`; the Kong route
+`/api/slotting-optimization` is the chart's own `gatewayApi` HTTPRoute. The API
+runs with `EVENT_PUBLISHER=kafka` (topic `warehouse.slotting-optimization.events`)
+and three local copies, each with a stable group
+(`helm-values/slotting-optimization.yaml`): `DEMAND_MODE=kafka`
+(`slotting-optimization-demand`, from `warehouse.order-management.events`),
+`PRODUCT_MODE=kafka` (`slotting-optimization-product`, from
+`warehouse.product-master.events`) and `LAYOUT_MODE=kafka`
+(`slotting-optimization-layout`, from `warehouse.facility.events`). Nothing in
+the fleet consumes its events yet. Two things a first `terraform apply` will
+not do on its own: (1) initdb never re-runs on a populated Postgres, so create
+the role/database once by hand, mirroring `templates/init-databases.sql.tftpl`
+with the password from `random_password.service_db["slotting-optimization"]`;
+(2) its chart does not render the Kong plugins yet (no `kong-plugins.yaml`), so
+`scripts/test-exposure-policy.sh` section 11 flags its HTTPRoute and Kong
+exports no `kong_http_requests_total` series for it until that chart change
+lands in slotting-optimization.
 
 **A structural gotcha worth knowing before you `kubectl port-forward pod/…`:**
 every chart's `selectorLabels` helper emits only
@@ -425,6 +446,7 @@ collides head-on with the console shell's own client-side routes —
 | `http://localhost:8000/api/warehouse-planning/*`          | `/api/warehouse-planning` → `/*`     | `warehouse-planning.warehouse-systems.svc.cluster.local`    |
 | `http://localhost:8000/api/product-master/*`              | `/api/product-master` → `/*`         | `product-master.warehouse-systems.svc.cluster.local` (`/api/product-master/reports/*` is meant for `product-master-reports` but currently lands here and 404s, see the known issue above) |
 | `http://localhost:8000/api/inbound-receiving/*`           | `/api/inbound-receiving` → `/*`      | `inbound-receiving.warehouse-systems.svc.cluster.local` (`/api/inbound-receiving/reports/*` is meant for `inbound-receiving-reports`; same caveat as product-master) |
+| `http://localhost:8000/api/slotting-optimization/*`       | `/api/slotting-optimization` → `/*`  | `slotting-optimization.warehouse-systems.svc.cluster.local` |
 | `http://localhost:8000/api/network-inventory-planning/*`  | `/api/network-inventory-planning` → `/*` | `network-inventory-planning.warehouse-systems.svc.cluster.local` |
 | `http://localhost:8000/api/warehouse-ops-agent/*`         | `/api/warehouse-ops-agent` → `/*`    | `warehouse-ops-agent.warehouse-systems.svc.cluster.local`   |
 
@@ -699,6 +721,41 @@ kubectl get hpa -n warehouse-systems
 
 ---
 
+## Dashboards and alert rules (observability as code)
+
+Both are GENERATED by `scripts/gen-context-dashboards.py` from one
+per-context table (`CONTEXTS`); edit the table, re-run the script, commit
+the output. Never hand-edit the JSON.
+
+- `terraform/dashboards/contexts/<context>.json`: one Grafana dashboard per
+  bounded context (plus `kong-gateway-overview.json`, `logs-overview.json`).
+  5xx panels read Kong's `kong_http_requests_total` per route (API
+  `<context>`, MCP `<context>-mcp`, reports `<context>-reports`), because
+  otelchi records no status code. Contexts that export an outbox-lag gauge
+  get a "Transactional outbox" row.
+- `terraform/alerting/warehouse-alert-rules.json`: Prometheus alert rules,
+  loaded by `observability.tf` into the prometheus chart's
+  `serverFiles."alerting_rules.yml"`. Per context: `WarehouseKong5xxRatioHigh`
+  (more than 5 % 5xx on one Kong route for 5 m), `WarehouseOutboxLagHigh`
+  (outbox gauge above 60 s for 5 m; order-management, wes-work-planning,
+  workforce-management, labor-performance, process-path-management) and
+  `WarehousePodRestarting` (2 or more restarts in 15 m, from
+  kube-state-metrics, which the same release now enables). Every rule's
+  `runbook_url` annotation is that context's runbook page. There is no
+  outbox dead-row rule (no context exports an attempt-cap metric; it is a log
+  line and a SQL query) and no consumer-lag rule (no Kafka exporter runs).
+  Alertmanager is off: alerts show on Prometheus `/alerts`, in the `ALERTS`
+  series and in Grafana.
+
+Gates: `make observability-check` (committed JSON equals the generator
+output, valid JSON, no backslash escapes in PromQL, every context in
+`local.services` has a dashboard, every rule names its runbook) and
+`make alert-rules-check` (promtool `check rules` plus the unit tests in
+`terraform/alerting/tests/`; uses docker when `promtool` is not installed).
+Both run in the CI job `observability-as-code`.
+
+---
+
 ## Known gaps in the services (observed, deliberately not fixed here)
 
 This task is infra-only. These are real and worth a follow-up in the service
@@ -783,6 +840,7 @@ warehouse-infra/
 │   ├── _README.md
 │   ├── inventory-storage.yaml
 │   ├── inbound-receiving.yaml
+│   ├── slotting-optimization.yaml
 │   ├── product-master.yaml
 │   ├── wes-work-planning.yaml
 │   ├── workforce-management.yaml
