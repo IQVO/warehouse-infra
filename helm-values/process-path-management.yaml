@@ -38,10 +38,18 @@ livenessProbe:
   periodSeconds: 10
   failureThreshold: 6
 
+# Readiness on /readyz, not /healthz (gap fix D24): process-path-management's
+# readiness flips to not-ready as the FIRST step of a graceful SIGTERM drain
+# (its ADR-0012, cmd/pathmgmt/main.go), so the pod stops receiving new
+# traffic while it finishes in-flight requests. /healthz never flips, so the
+# old probe here overrode the chart's own /readyz default and hid the drain.
+# failureThreshold 3 (was 6): at periodSeconds 5 that is ~15 s to observe the
+# flip, inside the chart's 30 s terminationGracePeriodSeconds -- 6 x 5 s = 30 s
+# meant the flip could never be observed before the kill.
 readinessProbe:
   httpGet:
-    path: /healthz
+    path: /readyz
     port: http
   initialDelaySeconds: 3
   periodSeconds: 5
-  failureThreshold: 6
+  failureThreshold: 3

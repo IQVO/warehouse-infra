@@ -162,7 +162,21 @@ locals {
       # block, which never reaches NIP because it is not in local.services.
       mcp = {
         enabled = var.deploy_mcp_servers
+        # Kong exposure (chart's mcp-route.yaml): /api/mcp/<context> -> /mcp.
+        route = {
+          enabled = var.deploy_mcp_servers
+          path    = "${var.api_path_prefix}/mcp/network-inventory-planning"
+          parentRefs = [{
+            name        = local.gateway_name
+            namespace   = var.kong_namespace
+            sectionName = "http"
+          }]
+        }
       }
+      # Kong plugins (chart's kong-plugins.yaml; fleet decision 2026-10-13:
+      # ALL Kong config lives in the application charts, this repo only
+      # switches it on — kong-plugins.tf's header has the why).
+      kongPlugins = local.kong_chart_values.kongPlugins
 
       # Analytics read side (NIP ADR 0009): projector (only writer of the
       # SEPARATE analytical database) + read-only reports. Not in
@@ -177,6 +191,20 @@ locals {
         enabled = true
         database = {
           existingSecret = "network-inventory-planning-analytics-db"
+        }
+        # Kong exposure of the reports API (chart's reports-route.yaml),
+        # replacing the deleted Terraform-side route (fleet decision
+        # 2026-10-13: Kong config lives in the application charts).
+        reports = {
+          route = {
+            enabled = var.deploy_services
+            path    = "${var.api_path_prefix}/network-inventory-planning/reports"
+            parentRefs = [{
+              name        = local.gateway_name
+              namespace   = var.kong_namespace
+              sectionName = "http"
+            }]
+          }
         }
       }
 
@@ -341,109 +369,11 @@ output "network_inventory_planning_analytics_db_password" {
   value       = random_password.network_inventory_planning_analytics_db.result
   sensitive   = true
 }
-
-# ---------------------------------------------------------------------------
-# Reports route: a SECOND Kong route to the chart's `<release>-reports`
-# Service (analytics.reports.service.port = 80), next to the OLTP route.
-# Strips `${var.api_path_prefix}/network-inventory-planning/reports` down to
-# `/reports`, because cmd/nip-reports registers GET /reports/transfer-funnel
-# etc. Ingress when Gateway API is off, HTTPRoute when it is on, never both
-# (same rule as network-fulfillment.tf: a disabled-but-present route object is
-# one nothing removes).
-# ---------------------------------------------------------------------------
-resource "kubernetes_ingress_v1" "network_inventory_planning_reports" {
-  count = (!var.deploy_gateway_api && var.deploy_services) ? 1 : 0
-
-  metadata {
-    name      = "network-inventory-planning-reports"
-    namespace = var.apps_namespace
-    annotations = {
-      "konghq.com/strip-path"       = "true"
-      "kubernetes.io/ingress.class" = "kong"
-    }
-  }
-
-  spec {
-    ingress_class_name = "kong"
-
-    rule {
-      http {
-        path {
-          path      = "${var.api_path_prefix}/network-inventory-planning/reports"
-          path_type = "Prefix"
-          backend {
-            service {
-              # The chart's reportsFullname helper renders "<release>-reports";
-              # the release is "network-inventory-planning" (argocd-apps.tf).
-              name = "network-inventory-planning-reports"
-              port {
-                number = 80
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  depends_on = [kubernetes_namespace.apps]
-}
-
-# HTTPRoute variant: null_resource + kubectl apply (NOT kubernetes_manifest)
-# for the CRD-schema-at-plan-time chicken/egg documented in gateway-api.tf's
-# header; destroy-time counterpart so flipping deploy_gateway_api back does not
-# orphan the object.
-resource "null_resource" "network_inventory_planning_reports_httproute" {
-  count = (var.deploy_gateway_api && var.deploy_services) ? 1 : 0
-
-  depends_on = [null_resource.gateway]
-
-  triggers = {
-    cluster_id      = kind_cluster.warehouse.id
-    kubeconfig      = local.kubeconfig_path
-    name            = "network-inventory-planning-reports"
-    namespace       = var.apps_namespace
-    gateway_name    = local.gateway_name
-    kong_namespace  = var.kong_namespace
-    api_path_prefix = var.api_path_prefix
-  }
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      cat <<'MANIFEST' | kubectl --kubeconfig '${local.kubeconfig_path}' apply -f -
-      apiVersion: gateway.networking.k8s.io/v1
-      kind: HTTPRoute
-      metadata:
-        name: network-inventory-planning-reports
-        namespace: ${var.apps_namespace}
-      spec:
-        parentRefs:
-          - name: ${local.gateway_name}
-            namespace: ${var.kong_namespace}
-            sectionName: http
-        rules:
-          - matches:
-              - path:
-                  type: PathPrefix
-                  value: ${var.api_path_prefix}/network-inventory-planning/reports
-            filters:
-              - type: URLRewrite
-                urlRewrite:
-                  path:
-                    type: ReplacePrefixMatch
-                    replacePrefixMatch: /reports
-            backendRefs:
-              - name: network-inventory-planning-reports
-                port: 80
-      MANIFEST
-    EOT
-  }
-
-  provisioner "local-exec" {
-    when    = destroy
-    command = "kubectl --kubeconfig '${self.triggers.kubeconfig}' delete httproute '${self.triggers.name}' -n '${self.triggers.namespace}' --ignore-not-found=true || true"
-  }
-}
+# Reports route: DELETED (fleet decision 2026-10-13) — the chart's own
+# reports-route.yaml renders it (/api/<context>/reports -> /reports), switched
+# on by the analytics.reports.route values from services.tf's computed layer.
+# The old kubectl-applied Ingress/HTTPRoute here silently vanished on cluster
+# rebuild; chart-rendered routes are Helm/ArgoCD-reconciled forever.
 
 output "network_inventory_planning_reports_route" {
   description = "Kong/Gateway path this context's analytics reports Service is reachable on."
