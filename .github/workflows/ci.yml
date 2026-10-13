@@ -99,6 +99,11 @@ jobs:
           path: inbound-receiving
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/slotting-optimization
+          ref: develop
+          path: slotting-optimization
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/network-inventory-planning
           ref: develop
           path: network-inventory-planning
@@ -131,6 +136,27 @@ jobs:
       - name: terraform validate
         working-directory: warehouse-infra
         run: make tf-validate
+
+  # ============================================================
+  # CLASSIFICATION: STATIC VALIDATION (observability as code)
+  # The Grafana dashboards and Prometheus alert rules are generated
+  # (scripts/gen-context-dashboards.py); this asserts the committed JSON is
+  # the generator's output, every file is
+  # valid JSON, no PromQL expression carries a backslash escape (PromQL
+  # rejects `\.`, which silently broke every Kong panel before gap fix D20)
+  # and every 5xx panel reads Kong's request metrics.
+  # ============================================================
+  observability-as-code:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: generated dashboards and alert rules are current and PromQL-safe
+        run: make observability-check
+      # promtool from the same Prometheus image the cluster runs (docker is
+      # preinstalled on ubuntu runners): rule syntax + firing unit tests.
+      - name: alert rules (promtool check + unit tests)
+        run: make alert-rules-check
 
   # ============================================================
   # CLASSIFICATION: STATIC VALIDATION (shell scripts)
@@ -218,6 +244,11 @@ jobs:
           repository: IQVO/inbound-receiving
           ref: develop
           path: inbound-receiving
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/slotting-optimization
+          ref: develop
+          path: slotting-optimization
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: IQVO/network-inventory-planning
@@ -315,6 +346,11 @@ jobs:
           repository: IQVO/inbound-receiving
           ref: develop
           path: inbound-receiving
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/slotting-optimization
+          ref: develop
+          path: slotting-optimization
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: IQVO/network-inventory-planning

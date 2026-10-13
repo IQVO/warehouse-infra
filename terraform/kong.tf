@@ -44,6 +44,18 @@ resource "helm_release" "kong" {
   values = [yamlencode({
     env = {
       database = "off"
+      # Tracing instrumentation is a PREREQUISITE for the opentelemetry
+      # plugin the application charts now render (their kong-plugins.yaml,
+      # switched on by kong-plugins.tf's values): without it the plugin
+      # accepts its config, pushes cleanly, and exports ZERO spans --
+      # verified live by watching the collector's
+      # otelcol_receiver_accepted_spans{transport="http"} counter stay flat
+      # until this env landed. `request` instruments the proxy request path
+      # only, the right cost/coverage point for this edge: one span per
+      # proxied request with route/service labels. sampling_rate 1.0
+      # because this is a single-user laptop cluster.
+      tracing_instrumentations = "request"
+      tracing_sampling_rate    = 1.0
     }
 
     proxy = {

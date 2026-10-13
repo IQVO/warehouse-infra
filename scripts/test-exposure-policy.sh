@@ -118,12 +118,16 @@ for ctx in order-management inventory-storage wes-work-planning fulfillment-exec
 done
 
 echo "==> 6. Every API answers on the API origin"
+# network-inventory-planning's healthz deliberately returns 204 No Content
+# (no body by design) — that is a healthy answer, not a failure.
+# slotting-optimization has no web remote, so it is in this list only (not 5).
 for ctx in order-management inventory-storage wes-work-planning fulfillment-execution \
            workforce-management facility-layout labor-performance process-path-management \
-           warehouse-planning product-master inbound-receiving network-inventory-planning; do
+           warehouse-planning product-master inbound-receiving slotting-optimization \
+           network-inventory-planning; do
   CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${API_URL}/api/${ctx}/healthz" || echo 000)"
-  if [[ "${CODE}" == "200" ]]; then
-    pass "${ctx} /healthz -> 200"
+  if [[ "${CODE}" == "200" || ( "${CODE}" == "204" && "${ctx}" == "network-inventory-planning" ) ]]; then
+    pass "${ctx} /healthz -> ${CODE}"
   else
     fail "${ctx} /healthz -> ${CODE}"
   fi
@@ -249,6 +253,93 @@ if [[ -n "${KONG_POD}" ]]; then
   else
     pass "Kong refused every frontend asset request it saw"
   fi
+fi
+
+echo "==> 11. Kong plugins: chart-owned, observability on, auth off"
+# Fleet decision 2026-10-13: ALL Kong configuration — routes AND plugins —
+# lives in each application's Helm chart (namespace-scoped KongPlugin CRs
+# attached via konghq.com/plugins), switched on by warehouse-infra's values
+# (terraform/kong-plugins.tf). Terraform no longer kubectl-applies any Kong
+# object. These checks are the sensor for both halves of that decision:
+# the plugins must EXIST and be attached, and no authentication or
+# authorization plugin may ever appear at the gateway (removed fleet-wide).
+PLUGIN_LIST="$("${KUBECTL[@]}" -n "${NAMESPACE}" get kongplugin -o jsonpath='{range .items[*]}{.metadata.name}{"="}{.plugin}{"\n"}{end}' 2>/dev/null || true)"
+if [[ -z "${PLUGIN_LIST}" ]]; then
+  fail "no KongPlugin objects in ${NAMESPACE} — every chart must render cors/prometheus/opentelemetry and receive kongPlugins.* values from warehouse-infra"
+else
+  CORS_COUNT=$(grep -c '=cors$' <<<"${PLUGIN_LIST}" || true)
+  PROM_COUNT=$(grep -c '=prometheus$' <<<"${PLUGIN_LIST}" || true)
+  OTEL_COUNT=$(grep -c '=opentelemetry$' <<<"${PLUGIN_LIST}" || true)
+  if [[ "${CORS_COUNT}" -ge 1 && "${PROM_COUNT}" -ge 1 && "${OTEL_COUNT}" -ge 1 ]]; then
+    pass "chart-owned KongPlugins present: cors=${CORS_COUNT} prometheus=${PROM_COUNT} opentelemetry=${OTEL_COUNT}"
+  else
+    fail "chart-owned KongPlugins incomplete in ${NAMESPACE}: cors=${CORS_COUNT} prometheus=${PROM_COUNT} opentelemetry=${OTEL_COUNT} (all must be >= 1)"
+  fi
+fi
+# Authentication/authorization plugins are FORBIDDEN at the gateway.
+AUTH_PLUGINS="$(grep -iE '=(basic-auth|key-auth|jwt|oauth2|oidc|acl|hmac-auth|ldap-auth|mtls|session|request-termination)$' <<<"${PLUGIN_LIST}" || true)"
+if [[ -n "${AUTH_PLUGINS}" ]]; then
+  fail "auth/authorization plugin(s) present, forbidden by the fleet-wide no-auth decision: ${AUTH_PLUGINS//$'\n'/ }"
+else
+  pass "no authentication/authorization plugin exists at the gateway"
+fi
+# Every Kong route in the product namespace must carry the plugins annotation
+# (a route without it is invisible to cors/prometheus/otel — the exact drift
+# the 2026-10-13 incident found live).
+UNANNOTATED="$("${KUBECTL[@]}" -n "${NAMESPACE}" get httproute -o json | python3 -c '
+import json,sys
+routes=json.load(sys.stdin)["items"]
+bad=[r["metadata"]["name"] for r in routes if not (r.get("metadata",{}).get("annotations") or {}).get("konghq.com/plugins")]
+print(" ".join(bad))
+' 2>/dev/null || true)"
+if [[ -n "${UNANNOTATED}" ]]; then
+  fail "HTTPRoute(s) without konghq.com/plugins annotation: ${UNANNOTATED}"
+else
+  ROUTE_COUNT="$("${KUBECTL[@]}" -n "${NAMESPACE}" get httproute --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+  pass "every HTTPRoute (${ROUTE_COUNT}) carries the konghq.com/plugins annotation"
+fi
+
+echo "==> 12. Every MCP server is exposed through Kong"
+# Host contract (mcp.tf + each chart's mcp-route.yaml): /api/mcp/<context>
+# rewritten to /mcp. A real initialize — not a TCP probe — is the proof:
+# routing, rewrite, SSE streaming and the SDK handshake in one round trip.
+# NOTE: probe the ROUTE ROOT (/api/mcp/<ctx>), which rewrites to exactly
+# /mcp. Appending another /mcp works only on charts whose router also
+# mounts the handler at / and silently 404s on three of them.
+for ctx in $("${KUBECTL[@]}" -n "${NAMESPACE}" get deploy -o name | sed 's|deployment.apps/||' | grep -- '-mcp$' | sed 's/-mcp$//' | sort); do
+  INIT_RESPONSE="$(curl -s --max-time 15 -X POST "${API_URL}/api/mcp/${ctx}" \
+    -H 'Content-Type: application/json' \
+    -H 'Accept: application/json, text/event-stream' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"exposure-policy","version":"1"}}}' || true)"
+  if grep -q '"protocolVersion"' <<<"${INIT_RESPONSE}"; then
+    pass "MCP ${ctx}: initialize through ${API_URL}/api/mcp/${ctx}"
+  else
+    fail "MCP ${ctx}: initialize at /api/mcp/${ctx} returned no protocolVersion (${INIT_RESPONSE:0:80})"
+  fi
+done
+
+echo "==> 13. Kong telemetry is actually flowing"
+# Plugins existing is necessary but not sufficient (2026-10-13 finding #2:
+# the otel plugin was configured but exported ZERO spans because
+# KONG_TRACING_INSTRUMENTATIONS was unset). Assert on the live signals.
+if "${KUBECTL[@]}" -n kong get deploy kong-kong -o jsonpath='{.spec.template.spec.containers[?(@.name=="proxy")].env}' 2>/dev/null | grep -q 'TRACING_INSTRUMENTATIONS'; then
+  pass "Kong proxy has tracing instrumentation enabled (KONG_TRACING_INSTRUMENTATIONS)"
+else
+  fail "Kong proxy lacks KONG_TRACING_INSTRUMENTATIONS — the otel plugins will export zero spans"
+fi
+# Prometheus pipeline: Kong's :8100 status listener has no curl/wget in the
+# container, so prove it the real way — Prometheus itself scraped kong_*
+# metrics (plugin -> :8100 -> prometheus scrape). The Prometheus UI is
+# already host-reachable at the observability NodePort (exposure.tf);
+# query it directly, no port-forward needed. KUBECONFIG's prometheus
+# port-forward in an earlier draft targeted :80 while the Service listens
+# on 9090 — that mismatch made this check always fail.
+PROM_URL="http://localhost:9090"
+KONG_METRICS="$(curl -s --max-time 10 "${PROM_URL}/api/v1/query?query=kong_http_requests_total" 2>/dev/null || true)"
+if grep -q '"result":\[{' <<<"${KONG_METRICS}"; then
+  pass "Prometheus is scraping Kong's prometheus-plugin metrics (kong_http_requests_total present)"
+else
+  fail "kong_http_requests_total absent from Prometheus at ${PROM_URL} — the prometheus plugins or the :8100 scrape path is broken"
 fi
 
 echo
