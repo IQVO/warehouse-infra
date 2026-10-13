@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Sensor for the generated Grafana dashboards (gap fix D20).
+"""Sensor for the generated Grafana dashboards (gap fix D20) and alert rules
+(gap fix D30).
 
 Run from the repo root (stdlib only, no cluster needed):
 
@@ -23,6 +24,12 @@ What it pins, and why each one exists:
 - Every context deployed through terraform/locals.tf's local.services map has
   a dashboard, so a newly wired context cannot ship without one.
 - process-path-management has an outbox-lag panel on its real gauge.
+- Alert rules (terraform/alerting/warehouse-alert-rules.json): every context
+  has a Kong 5xx rule and a pod-restart rule, an outbox-lag rule exactly when
+  it exports a gauge, and every rule names its context's runbook
+  (https://iqvo.github.io/<context>/docs/operations/runbook, or the GitHub
+  file for a context without a docs site). PromQL validity and firing
+  behaviour are promtool's job: make alert-rules-check.
 """
 import importlib.util
 import json
@@ -34,7 +41,7 @@ import unittest
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DASHBOARDS = os.path.join(REPO_ROOT, "terraform", "dashboards")
-CONTEXT_DIR = os.path.join(DASHBOARDS, "contexts")
+ALERT_RULES = os.path.join(REPO_ROOT, "terraform", "alerting", "warehouse-alert-rules.json")
 
 
 def load_generator():
@@ -50,12 +57,17 @@ GEN = load_generator()
 
 
 def committed_json_files():
-    out = []
+    out = [os.path.relpath(ALERT_RULES, REPO_ROOT)]
     for root, _, files in os.walk(DASHBOARDS):
         for name in files:
             if name.endswith(".json"):
                 out.append(os.path.relpath(os.path.join(root, name), REPO_ROOT))
     return sorted(out)
+
+
+def committed_alert_rules():
+    with open(ALERT_RULES) as f:
+        return json.load(f)
 
 
 def prometheus_exprs(dashboard):
@@ -76,7 +88,6 @@ def local_services_keys():
 class GeneratedDashboardsTest(unittest.TestCase):
     def test_committed_json_matches_the_generator(self):
         with tempfile.TemporaryDirectory() as tmp:
-            # The generator writes only these two directories.
             os.makedirs(os.path.join(tmp, "terraform", "dashboards", "contexts"))
             GEN.main(repo_root=tmp)
             generated = sorted(
@@ -103,10 +114,15 @@ class GeneratedDashboardsTest(unittest.TestCase):
 
     def test_no_prometheus_expression_contains_a_backslash(self):
         for rel in committed_json_files():
+            if rel == os.path.relpath(ALERT_RULES, REPO_ROOT):
+                continue
             with open(os.path.join(REPO_ROOT, rel)) as f:
                 dashboard = json.load(f)
             for title, expr in prometheus_exprs(dashboard):
                 self.assertNotIn("\\", expr, f"{rel} / {title}: PromQL rejects backslash escapes like \\. -- use [.]")
+        for group in committed_alert_rules()["groups"]:
+            for rule in group["rules"]:
+                self.assertNotIn("\\", rule["expr"], f"{group['name']} / {rule['alert']}")
 
     def test_five_xx_panels_read_kong_not_otelchi_status_codes(self):
         for ctx in GEN.CONTEXTS:
@@ -144,6 +160,55 @@ class GeneratedDashboardsTest(unittest.TestCase):
         ctx = next(c for c in GEN.CONTEXTS if c["key"] == "process-path-management")
         exprs = [e for _, e in prometheus_exprs(GEN.build_dashboard(ctx))]
         self.assertTrue(any("process_path_management_outbox_lag_seconds" in e for e in exprs))
+
+
+
+class AlertRulesTest(unittest.TestCase):
+    def rules_by_context(self):
+        out = {}
+        for group in committed_alert_rules()["groups"]:
+            for rule in group["rules"]:
+                out.setdefault(rule["labels"]["context"], []).append(rule)
+        return out
+
+    def test_every_context_has_kong_5xx_and_restart_rules_and_outbox_where_a_gauge_exists(self):
+        by_context = self.rules_by_context()
+        for ctx in GEN.CONTEXTS:
+            names = sorted(r["alert"] for r in by_context.get(ctx["key"], []))
+            expected = ["WarehouseKong5xxRatioHigh", "WarehousePodRestarting"]
+            if ctx.get("outbox_lag_metric"):
+                expected.append("WarehouseOutboxLagHigh")
+            self.assertEqual(names, sorted(expected), ctx["key"])
+
+    def test_every_rule_names_its_contexts_runbook(self):
+        for context, rules in self.rules_by_context().items():
+            for rule in rules:
+                url = rule["annotations"]["runbook_url"]
+                self.assertIn(
+                    url,
+                    (
+                        f"https://iqvo.github.io/{context}/docs/operations/runbook",
+                        f"https://github.com/IQVO/{context}/blob/develop/docs/operations/runbook.md",
+                    ),
+                    f"{context} / {rule['alert']}",
+                )
+
+    def test_kong_rule_reads_kong_and_outbox_rule_reads_the_contexts_gauge(self):
+        for ctx in GEN.CONTEXTS:
+            rules = {r["alert"]: r for r in self.rules_by_context()[ctx["key"]]}
+            self.assertIn("kong_http_requests_total", rules["WarehouseKong5xxRatioHigh"]["expr"])
+            self.assertIn(GEN.kong_service_regex(ctx["key"]), rules["WarehouseKong5xxRatioHigh"]["expr"])
+            if ctx.get("outbox_lag_metric"):
+                self.assertIn(ctx["outbox_lag_metric"], rules["WarehouseOutboxLagHigh"]["expr"])
+
+    def test_pod_regexes_do_not_overlap_between_contexts(self):
+        keys = [c["key"] for c in GEN.CONTEXTS]
+        for key in keys:
+            regex = re.compile(GEN.pod_regex(key))
+            for other in keys:
+                if other != key:
+                    self.assertIsNone(regex.fullmatch(f"{other}-6c8d7f5b9-k4l2m"), f"{key} pod regex matches {other}'s pods")
+            self.assertTrue(regex.fullmatch(f"{key}-mcp-6c8d7f5b9-k4l2m"))
 
 
 if __name__ == "__main__":

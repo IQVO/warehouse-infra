@@ -28,7 +28,7 @@ CHARTS := \
 	../warehouse-ops-agent/charts/warehouse-ops-agent \
 	../warehouse-console/charts/warehouse-console
 
-.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check check check-all
+.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check check check-all
 
 help:
 	@echo "warehouse-infra — local quality gate (no CI workflow yet; this IS the gate)"
@@ -44,8 +44,10 @@ help:
 	@echo "                  (scripts/check-chart-selectors.py; needs PyYAML)"
 	@echo "  observability-check  generated Grafana dashboards are current, valid"
 	@echo "                  and parse as PromQL-safe (scripts/test_gen_context_dashboards.py)"
+	@echo "  alert-rules-check  promtool check + unit tests of the generated alert rules"
+	@echo "                  (promtool if installed, else docker $(PROMETHEUS_IMAGE))"
 	@echo ""
-	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check"
+	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check"
 	@echo "  check-all       alias for check — no deeper local gate exists yet"
 	@echo "                  (see scripts/test-exposure-policy.sh and smoke-test.sh for"
 	@echo "                  cluster-dependent checks that need a live kind cluster —"
@@ -98,8 +100,22 @@ chart-selector-check:
 observability-check:
 	python3 scripts/test_gen_context_dashboards.py
 
+# Generated alert rules (gap fix D30): promtool syntax check plus the unit
+# tests in terraform/alerting/tests/. The image tag matches the server the
+# pinned prometheus chart (var.prometheus_chart_version) deploys.
+PROMETHEUS_IMAGE := quay.io/prometheus/prometheus:v3.14.0
+ALERTING_DIR := terraform/alerting
+alert-rules-check:
+	@if command -v promtool >/dev/null 2>&1; then \
+		promtool check rules $(ALERTING_DIR)/warehouse-alert-rules.json && \
+		promtool test rules $(ALERTING_DIR)/tests/warehouse-alert-rules.test.yml; \
+	else \
+		docker run --rm -v "$(CURDIR)/$(ALERTING_DIR):/w:ro" --entrypoint promtool $(PROMETHEUS_IMAGE) check rules /w/warehouse-alert-rules.json && \
+		docker run --rm -v "$(CURDIR)/$(ALERTING_DIR):/w:ro" --entrypoint promtool $(PROMETHEUS_IMAGE) test rules /w/tests/warehouse-alert-rules.test.yml; \
+	fi
+
 # The fast self-correction loop: run this after every change, before committing.
-check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check
+check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check
 
 # No deeper local gate exists yet — see the help text above for the
 # cluster-dependent scripts that are NOT part of this target.

@@ -1,0 +1,76 @@
+# promtool unit tests for the generated alert rules (gap fix D30).
+#
+#   promtool test rules terraform/alerting/tests/warehouse-alert-rules.test.yml
+#   (make alert-rules-check runs it, through docker when promtool is absent)
+#
+# process-path-management is the fixture context because it has all three
+# rule kinds (Kong 5xx ratio, outbox lag, pod restarts). The negative cases
+# pin the scoping: a healthy MCP route of the same context, and another
+# context's pod, must not fire.
+rule_files:
+  - ../warehouse-alert-rules.json
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      # API route: 6 x 5xx and 54 x 2xx per minute -> 10% 5xx.
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.process-path-management.0", code="500"}'
+        values: '0+6x10'
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.process-path-management.0", code="200"}'
+        values: '0+54x10'
+      # MCP route of the same context: healthy, must not fire.
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.process-path-management-mcp.0", code="200"}'
+        values: '0+60x10'
+      # Outbox lag above 60 s from minute 2 on.
+      - series: 'process_path_management_outbox_lag_seconds{service_name="process-path-management"}'
+        values: '0 30 90 150 210 270 330 390 450 510 570'
+      # Three restarts of a process-path-management container.
+      - series: 'kube_pod_container_status_restarts_total{namespace="warehouse-systems", pod="process-path-management-7d9f8b6c4-x2x9q", container="process-path-management"}'
+        values: '0 0 1 2 3 3 3 3 3 3 3'
+      # Another context's pod, never restarting.
+      - series: 'kube_pod_container_status_restarts_total{namespace="warehouse-systems", pod="order-management-6c8d7f5b9-k4l2m", container="order-management"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: WarehouseKong5xxRatioHigh
+        exp_alerts:
+          - exp_labels:
+              context: process-path-management
+              severity: warning
+              service: httproute.warehouse-systems.process-path-management.0
+            exp_annotations:
+              summary: "Process Path Management: more than 5% of requests on a Kong route answer 5xx"
+              description: "Kong route httproute.warehouse-systems.process-path-management.0 answered 5xx for 10% of its requests over the last 5 minutes (API route = <context>.N, MCP = <context>-mcp.N, reports = <context>-reports.N)."
+              runbook_url: https://iqvo.github.io/process-path-management/docs/operations/runbook
+              dashboard_url: http://localhost:3000/d/warehouse-process-path-management
+      - eval_time: 10m
+        alertname: WarehouseOutboxLagHigh
+        exp_alerts:
+          - exp_labels:
+              context: process-path-management
+              severity: warning
+              service_name: process-path-management
+            exp_annotations:
+              summary: "Process Path Management: the transactional outbox is not draining"
+              description: "The oldest unpublished outbox_events row of process-path-management is 9m 30s old. Kafka is unreachable or a head row keeps failing until OUTBOX_MAX_ATTEMPTS parks it; downstream contexts stop seeing this context's events. The runbook has the re-arm SQL."
+              runbook_url: https://iqvo.github.io/process-path-management/docs/operations/runbook
+              dashboard_url: http://localhost:3000/d/warehouse-process-path-management
+      # Not yet: the lag crossed 60 s at minute 2, `for: 5m` is not over at 4m.
+      - eval_time: 4m
+        alertname: WarehouseOutboxLagHigh
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: WarehousePodRestarting
+        exp_alerts:
+          - exp_labels:
+              context: process-path-management
+              severity: warning
+              pod: process-path-management-7d9f8b6c4-x2x9q
+              container: process-path-management
+            exp_annotations:
+              summary: "Process Path Management: a container is restarting"
+              description: "process-path-management-7d9f8b6c4-x2x9q/process-path-management restarted 3 times in 15 minutes (boot-retry exhaustion, a failed migration, a stopped consumer that exits on purpose, or an OOM kill). Read the previous container's last log lines first."
+              runbook_url: https://iqvo.github.io/process-path-management/docs/operations/runbook
+              dashboard_url: http://localhost:3000/d/warehouse-process-path-management

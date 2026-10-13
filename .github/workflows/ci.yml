@@ -139,8 +139,9 @@ jobs:
 
   # ============================================================
   # CLASSIFICATION: STATIC VALIDATION (observability as code)
-  # The Grafana dashboards are generated (scripts/gen-context-dashboards.py);
-  # this asserts the committed JSON is the generator's output, every file is
+  # The Grafana dashboards and Prometheus alert rules are generated
+  # (scripts/gen-context-dashboards.py); this asserts the committed JSON is
+  # the generator's output, every file is
   # valid JSON, no PromQL expression carries a backslash escape (PromQL
   # rejects `\.`, which silently broke every Kong panel before gap fix D20)
   # and every 5xx panel reads Kong's request metrics.
@@ -150,8 +151,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: generated dashboards are current and PromQL-safe
+      - name: generated dashboards and alert rules are current and PromQL-safe
         run: make observability-check
+      # promtool from the same Prometheus image the cluster runs (docker is
+      # preinstalled on ubuntu runners): rule syntax + firing unit tests.
+      - name: alert rules (promtool check + unit tests)
+        run: make alert-rules-check
 
   # ============================================================
   # CLASSIFICATION: STATIC VALIDATION (shell scripts)
