@@ -28,7 +28,7 @@ CHARTS := \
 	../warehouse-ops-agent/charts/warehouse-ops-agent \
 	../warehouse-console/charts/warehouse-console
 
-.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check check check-all
+.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check check check-all
 
 help:
 	@echo "warehouse-infra — local quality gate (no CI workflow yet; this IS the gate)"
@@ -42,8 +42,10 @@ help:
 	@echo "  chart-selector-check  render every chart with all components enabled,"
 	@echo "                  assert every Service selects exactly one Deployment"
 	@echo "                  (scripts/check-chart-selectors.py; needs PyYAML)"
+	@echo "  observability-check  generated Grafana dashboards are current, valid"
+	@echo "                  and parse as PromQL-safe (scripts/test_gen_context_dashboards.py)"
 	@echo ""
-	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check"
+	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check"
 	@echo "  check-all       alias for check — no deeper local gate exists yet"
 	@echo "                  (see scripts/test-exposure-policy.sh and smoke-test.sh for"
 	@echo "                  cluster-dependent checks that need a live kind cluster —"
@@ -91,8 +93,13 @@ chart-selector-check:
 	}
 	cd $(TF_DIR) && python3 ../scripts/check-chart-selectors.py
 
+# Generated dashboards: committed JSON == generator output, valid JSON, no
+# backslash escapes in PromQL, 5xx panels on Kong metrics (gap fix D20).
+observability-check:
+	python3 scripts/test_gen_context_dashboards.py
+
 # The fast self-correction loop: run this after every change, before committing.
-check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check
+check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check
 
 # No deeper local gate exists yet — see the help text above for the
 # cluster-dependent scripts that are NOT part of this target.
@@ -101,7 +108,7 @@ check-all: check
 # --- agent harness (harness-template v3) -----------------------------------
 .PHONY: check-fast guide-lint harness-test
 # Fast local gate used by the agent Stop hook (this repo's own quick checks).
-check-fast: tf-fmt-check shellcheck chart-selector-check
+check-fast: tf-fmt-check shellcheck chart-selector-check observability-check
 
 guide-lint: ## lint agent guides: skills load, references resolve, context budget
 	python3 scripts/harness/guide_lint.py
