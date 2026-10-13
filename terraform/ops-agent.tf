@@ -256,7 +256,10 @@ locals {
         }]
         stripPath = true
       }
-    } : {}
+    } : {},
+    # Kong plugins (chart's kong-plugins.yaml; fleet decision 2026-10-13) —
+    # same values every bounded context gets via local.kong_chart_values.
+    local.kong_chart_values,
   )
 }
 
