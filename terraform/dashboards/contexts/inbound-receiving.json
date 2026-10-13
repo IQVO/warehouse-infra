@@ -34,7 +34,7 @@
     {
       "type": "timeseries",
       "title": "Request rate (Kong)",
-      "description": "Requests/sec Kong forwarded to this context's Service, by HTTP status code. Kong sees a request even when the upstream pod never got instrumented (e.g. crashed before otelchi ran).",
+      "description": "Requests/sec Kong forwarded to this context's routes (API, MCP and reports), by HTTP status code. Kong sees a request even when the upstream pod never got instrumented (e.g. crashed before otelchi ran).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -58,7 +58,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (code) (rate(kong_http_requests_total{service=~\"httproute\\.warehouse-systems\\.inbound-receiving\\..*\"}[5m]))",
+          "expr": "sum by (code) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]inbound-receiving(-mcp|-reports)?[.][0-9]+\"}[5m]))",
           "legendFormat": "{{code}}"
         }
       ]
@@ -90,7 +90,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(kong_http_requests_total{service=~\"httproute\\.warehouse-systems\\.inbound-receiving\\..*\", code=~\"5..\"}[5m])) / clamp_min(sum(rate(kong_http_requests_total{service=~\"httproute\\.warehouse-systems\\.inbound-receiving\\..*\"}[5m])), 1e-9)",
+          "expr": "(sum(rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]inbound-receiving(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[5m])) or vector(0)) / clamp_min(sum(rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]inbound-receiving(-mcp|-reports)?[.][0-9]+\"}[5m])), 1e-9)",
           "legendFormat": "5xx ratio"
         }
       ]
@@ -122,7 +122,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(kong_request_latency_ms_bucket{service=~\"httproute\\.warehouse-systems\\.inbound-receiving\\..*\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(kong_request_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]inbound-receiving(-mcp|-reports)?[.][0-9]+\"}[5m])))",
           "legendFormat": "request (Kong total) p95"
         },
         {
@@ -131,7 +131,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute\\.warehouse-systems\\.inbound-receiving\\..*\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]inbound-receiving(-mcp|-reports)?[.][0-9]+\"}[5m])))",
           "legendFormat": "upstream (service) p95"
         }
       ]
@@ -182,8 +182,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Error rate (HTTP 5xx, by process)",
-      "description": "5xx responses this context's own processes returned, split by which process (OLTP vs. reports vs. MCP) so a reports-only outage doesn't get hidden inside a healthy OLTP average. Two label variants are unioned: newer otelchi/semconv releases in this fleet use http_response_status_code, older ones (riandyrn/otelchi metric package pre-dating the semconv bump) use http_status_code.",
+      "title": "5xx rate by Kong route (API / MCP / reports)",
+      "description": "5xx responses per second for each of this context's Kong routes (httproute.warehouse-systems.<context>.N is the REST API, <context>-mcp.N the MCP server, <context>-reports.N the analytics reports), so a reports-only or MCP-only outage is not hidden inside a healthy API average. Read from Kong's prometheus plugin, not from the service: otelchi's http.server.request.duration carries no status-code attribute in this fleet (gap fix D20), so the service's own histogram cannot tell a 5xx from a 200.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -207,8 +207,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (service_name) (rate(http_server_request_duration_seconds_count{service_name=~\"inbound-receiving.*\", http_response_status_code=~\"5..\"}[5m])) or sum by (service_name) (rate(http_server_request_duration_seconds_count{service_name=~\"inbound-receiving.*\", http_status_code=~\"5..\"}[5m]))",
-          "legendFormat": "{{service_name}}"
+          "expr": "sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]inbound-receiving(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[5m]))",
+          "legendFormat": "{{service}}"
         }
       ]
     },

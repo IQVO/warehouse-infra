@@ -219,6 +219,22 @@ locals {
         mode = "shadow"
       }
 
+      # Runtime-signal readers for GET /runtime-signals (gap fix D24). The
+      # chart's own defaults are empty, which the agent treats as "no
+      # source": a stub Prometheus reader that reports every metric as 0
+      # and no Loki reader at all (`loki` listed in unavailableSources) --
+      # so the endpoint looked healthy while measuring nothing. Point both
+      # at the in-cluster Services this repo deploys (observability.tf's
+      # prometheus-server on 9090, logging.tf's loki on 3100). Each is empty
+      # when its stack is not deployed, which keeps the agent's documented
+      # safe degrade instead of a URL to a Service that does not exist.
+      prometheus = {
+        url = var.deploy_observability ? "http://${local.observability_dns.prometheus}:${local.prometheus_port}" : ""
+      }
+      runtimeSignals = {
+        lokiUrl = var.deploy_observability && var.deploy_logging ? "http://${local.loki_release}.${var.observability_namespace}.svc.cluster.local:3100" : ""
+      }
+
       # Kong route. NO Ingress at all once Gateway API is on (see the
       # gatewayApi block below) -- disabled-but-present would otherwise
       # still create a Kong route object nothing removes.
