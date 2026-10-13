@@ -101,6 +101,13 @@ CHARTS: dict[str, dict[str, str]] = {
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
         "database.url": "postgres://u@example.invalid:5432/db",
     },
+    # slotting-optimization: OLTP api + the optional mcp component (no
+    # frontend, no analytics). The chart refuses to render without a database
+    # source, so give it a dummy (no password).
+    "../../slotting-optimization/charts/slotting-optimization": {
+        "mcp.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+    },
     # network-inventory-planning: OLTP api + the optional mcp, frontend
     # (nip_mfe) and analytics (projector/reports) components. The chart needs a
     # database source and refuses analytics without a DSN source and kafka, so

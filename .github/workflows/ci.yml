@@ -99,6 +99,11 @@ jobs:
           path: inbound-receiving
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/slotting-optimization
+          ref: develop
+          path: slotting-optimization
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/network-inventory-planning
           ref: develop
           path: network-inventory-planning
@@ -220,6 +225,11 @@ jobs:
           path: inbound-receiving
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/slotting-optimization
+          ref: develop
+          path: slotting-optimization
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/network-inventory-planning
           ref: develop
           path: network-inventory-planning
@@ -315,6 +325,11 @@ jobs:
           repository: IQVO/inbound-receiving
           ref: develop
           path: inbound-receiving
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/slotting-optimization
+          ref: develop
+          path: slotting-optimization
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: IQVO/network-inventory-planning
