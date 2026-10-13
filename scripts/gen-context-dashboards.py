@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Generate the per-bounded-context Grafana dashboards, plus the fleet-wide
-Kong API Gateway dashboard, as committed JSON under terraform/dashboards/.
+Kong API Gateway dashboard, as committed JSON under terraform/dashboards/,
+and the per-context Prometheus alert rules as
+terraform/alerting/warehouse-alert-rules.json (see build_alert_rules).
 
 This is the SOURCE for those dashboards -- edit the CONTEXTS table (or the
 panel builders) below and re-run this script, never hand-edit the generated
@@ -318,6 +320,10 @@ CONTEXTS = [
         # /metrics with no scrape target, hence business_metrics stays empty.
         "service_regex": "(network-fulfillment|netfulfil).*",
         "loki_app": "network-fulfillment",
+        # network-fulfillment publishes no docs site (no Docusaurus config,
+        # https://iqvo.github.io/network-fulfillment/ is 404), so its alert
+        # rules link the runbook file on GitHub instead.
+        "runbook_url": "https://github.com/IQVO/network-fulfillment/blob/develop/docs/operations/runbook.md",
         "business_metrics": [],
     },
     {
@@ -880,6 +886,101 @@ def build_logs_overview():
     }
 
 
+# ---------------------------------------------------------------------------
+# Alert rules (gap fix D30), generated from the same CONTEXTS table so every
+# context's alerts, dashboard and Kong/outbox metric names can never disagree.
+# Written as JSON (valid YAML) to terraform/alerting/warehouse-alert-rules.json
+# and loaded by observability.tf into the prometheus-community/prometheus
+# chart's serverFiles."alerting_rules.yml" (this cluster runs the plain chart,
+# no Prometheus Operator, so a PrometheusRule CRD would be watched by nothing).
+#
+# Per context, only where the signal exists:
+#   - WarehouseKong5xxRatioHigh: Kong's 5xx share per route (API/MCP/reports),
+#     the only 5xx source (otelchi records no status code).
+#   - WarehouseOutboxLagHigh: the context's outbox-lag gauge > 60 s for 5 m,
+#     the threshold its own observability page suggests. Only contexts that
+#     export a gauge; no context exports an outbox dead-row (attempt-cap)
+#     metric -- that signal is a log line / SQL query only, so no rule.
+#   - WarehousePodRestarting: kube-state-metrics'
+#     kube_pod_container_status_restarts_total (enabled in observability.tf
+#     by the same change).
+# No consumer-lag rule: no Kafka exporter runs in this cluster, so no
+# consumer-group lag metric exists to alert on.
+# Every rule carries annotations.runbook_url: the context's own runbook page.
+# ---------------------------------------------------------------------------
+APPS_NAMESPACE = "warehouse-systems"
+GRAFANA_URL = "http://localhost:3000"
+KONG_5XX_RATIO_THRESHOLD = 0.05
+OUTBOX_LAG_THRESHOLD_SECONDS = 60
+POD_RESTARTS_THRESHOLD = 2
+
+
+def runbook_url(ctx):
+    return ctx.get("runbook_url", f"https://iqvo.github.io/{ctx['key']}/docs/operations/runbook")
+
+
+def pod_regex(key):
+    """Every pod of one context: the chart's Deployments are all named
+    `<release>` or `<release>-<component>` and the release is the context key
+    (no context key is a `<other key>-` prefix of another; the test pins it)."""
+    return f"{key}-.+"
+
+
+def build_alert_rules():
+    groups = []
+    for ctx in CONTEXTS:
+        key = ctx["key"]
+        labels = {"context": key, "severity": "warning"}
+        common = {
+            "runbook_url": runbook_url(ctx),
+            "dashboard_url": f"{GRAFANA_URL}/d/{ctx['uid']}",
+        }
+        kong_re = kong_service_regex(key)
+        rules = [{
+            "alert": "WarehouseKong5xxRatioHigh",
+            "expr": (
+                f'sum by (service) (rate(kong_http_requests_total{{service=~"{kong_re}", code=~"5.."}}[5m])) '
+                f'/ sum by (service) (rate(kong_http_requests_total{{service=~"{kong_re}"}}[5m])) '
+                f"> {KONG_5XX_RATIO_THRESHOLD}"
+            ),
+            "for": "5m",
+            "labels": labels,
+            "annotations": {
+                "summary": f"{ctx['title']}: more than {int(KONG_5XX_RATIO_THRESHOLD * 100)}% of requests on a Kong route answer 5xx",
+                "description": "Kong route {{ $labels.service }} answered 5xx for {{ $value | humanizePercentage }} of its requests over the last 5 minutes (API route = <context>.N, MCP = <context>-mcp.N, reports = <context>-reports.N).",
+                **common,
+            },
+        }]
+        if ctx.get("outbox_lag_metric"):
+            rules.append({
+                "alert": "WarehouseOutboxLagHigh",
+                "expr": f'max by (service_name) ({ctx["outbox_lag_metric"]}{{service_name=~"{ctx["service_regex"]}"}}) > {OUTBOX_LAG_THRESHOLD_SECONDS}',
+                "for": "5m",
+                "labels": labels,
+                "annotations": {
+                    "summary": f"{ctx['title']}: the transactional outbox is not draining",
+                    "description": "The oldest unpublished outbox_events row of {{ $labels.service_name }} is {{ $value | humanizeDuration }} old. Kafka is unreachable or a head row keeps failing until OUTBOX_MAX_ATTEMPTS parks it; downstream contexts stop seeing this context's events. The runbook has the re-arm SQL.",
+                    **common,
+                },
+            })
+        rules.append({
+            "alert": "WarehousePodRestarting",
+            "expr": (
+                f'sum by (pod, container) (increase(kube_pod_container_status_restarts_total{{namespace="{APPS_NAMESPACE}", pod=~"{pod_regex(key)}"}}[15m])) '
+                f">= {POD_RESTARTS_THRESHOLD}"
+            ),
+            "for": "0m",
+            "labels": labels,
+            "annotations": {
+                "summary": f"{ctx['title']}: a container is restarting",
+                "description": "{{ $labels.pod }}/{{ $labels.container }} restarted {{ $value | humanize }} times in 15 minutes (boot-retry exhaustion, a failed migration, a stopped consumer that exits on purpose, or an OOM kill). Read the previous container's last log lines first.",
+                **common,
+            },
+        })
+        groups.append({"name": f"warehouse-{key}", "rules": rules})
+    return {"groups": groups}
+
+
 def write_json(path, obj):
     with open(path, "w") as f:
         json.dump(obj, f, indent=2, sort_keys=False)
@@ -899,6 +1000,10 @@ def main(repo_root=REPO_ROOT):
     gateway_dir = os.path.join(repo_root, "terraform", "dashboards")
     write_json(os.path.join(gateway_dir, "kong-gateway-overview.json"), build_gateway_overview())
     write_json(os.path.join(gateway_dir, "logs-overview.json"), build_logs_overview())
+
+    alerting_dir = os.path.join(repo_root, "terraform", "alerting")
+    os.makedirs(alerting_dir, exist_ok=True)
+    write_json(os.path.join(alerting_dir, "warehouse-alert-rules.json"), build_alert_rules())
 
 
 if __name__ == "__main__":
