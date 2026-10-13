@@ -69,6 +69,14 @@ locals {
     # consumes it via the `inboundReceiving` endpoint in ops-agent.tf
     # (warehouse-ops-agent #125: upstreams.inboundReceiving.endpoint).
     "inbound-receiving",
+    # Added for slotting-optimization's own MCP server (read-only cmd/mcp,
+    # chart PR #20): exposure at /api/mcp/<context> is the platform's HOST
+    # CONTRACT (every context's MCP server reachable through Kong) and is
+    # deliberately decoupled from warehouse-ops-agent consumption — no
+    # ops-agent upstream is wired yet, and none is needed for the route to
+    # exist. Membership here switches on mcp.enabled + mcp.route via
+    # services.tf, exactly like the other contexts.
+    "slotting-optimization",
     # network-inventory-planning: cmd/mcp merged (NIP ADR 0008) -- READ-ONLY
     # (get_transfer, list_transfers, find_stuck_transfers,
     # simulate_transfer_options). It is NOT in local.services (see
