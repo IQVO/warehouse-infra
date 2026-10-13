@@ -137,6 +137,30 @@ locals {
       path       = "${var.api_path_prefix}/inbound-receiving"
       chart_path = "${path.module}/../../inbound-receiving/charts/inbound-receiving"
     }
+    # slotting-optimization: the slotting context (forward pick-slot plans by
+    # ABC velocity with stickiness and human approval; slotting-optimization
+    # docs/adr). Gap fix D10 (2026-10-12): the repo already ships its
+    # Dockerfile and charts/slotting-optimization, so this entry is the whole
+    # registration -- the initdb role/database (templates/init-databases.sql.tftpl),
+    # the <name>-db Secret and PgBouncer entry (postgres.tf, pgbouncer.tf), the
+    # image build (services.tf), the ArgoCD Application (argocd-apps.tf) and the
+    # Kong route ${var.api_path_prefix}/slotting-optimization (the chart's own
+    # gatewayApi HTTPRoute, switched on by services.tf) all derive from it.
+    # Its env (EVENT_PUBLISHER, KAFKA_BROKERS, DEMAND/PRODUCT/LAYOUT_MODE + their
+    # consumer groups) all have DEDICATED chart values, so they live in
+    # helm-values/slotting-optimization.yaml, NOT in local.sync_edge_env. Its
+    # migrations live under internal/ (matched by services.tf's
+    # internal/**/migrations/** term). NOT in mcp_services (its read-only
+    # cmd/mcp ships in the chart but no consumer is wired yet), NOT in
+    # analytics_services (no analytics read side) and NOT in frontend_remotes
+    # (no web/ remote).
+    "slotting-optimization" = {
+      db         = "slotting_optimization"
+      user       = "slotting_optimization"
+      port       = 8080
+      path       = "${var.api_path_prefix}/slotting-optimization"
+      chart_path = "${path.module}/../../slotting-optimization/charts/slotting-optimization"
+    }
   }
 
   # GitHub owner of the repo ArgoCD clones per service (argocd-apps.tf). The
@@ -145,11 +169,12 @@ locals {
   # github.com/IQVO/<name>. warehouse-planning was created directly under
   # IQVO, so github.com/IQVO/warehouse-planning does NOT exist (404) and
   # must be addressed by its real owner. product-master was likewise created
-  # directly under IQVO, as was inbound-receiving.
+  # directly under IQVO, as were inbound-receiving and slotting-optimization.
   argocd_repo_owner = {
-    "warehouse-planning" = "IQVO"
-    "product-master"     = "IQVO"
-    "inbound-receiving"  = "IQVO"
+    "warehouse-planning"    = "IQVO"
+    "product-master"        = "IQVO"
+    "inbound-receiving"     = "IQVO"
+    "slotting-optimization" = "IQVO"
   }
 
   # Per-service database passwords are GENERATED, never committed. Each service
