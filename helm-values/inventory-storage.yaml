@@ -44,6 +44,21 @@ config:
   # consumer off. StockReceived leaves the service through the outbox relay,
   # which needs config.eventPublisher=kafka (set above).
   inboundReceiptConsumerGroup: "inventory-storage-inbound-receipts"
+  # TaskCompleted consumer (inventory-storage ADR-0035 confirm-pick + ADR 0039
+  # relocation): consumes fulfillment-execution's TaskCompleted from
+  # warehouse.fulfillment.events. A PICK completion counts toward its order and
+  # the order's LAST pick confirms its reservations (StockPicked); a RELOCATE
+  # completion runs RelocateStock (the same use case as POST /relocations) and
+  # raises StockRelocated, which slotting-optimization consumes for plan
+  # progress (RELOCATION_MODE=kafka in slotting-optimization.yaml). Without
+  # this, completed slot-plan moves never reach the stock ledger (the chart
+  # default is "off"). Needs database.* + kafka.enabled (set) and
+  # EVENT_PUBLISHER=kafka (set above). A DEDICATED chart value (rendered to
+  # TASK_COMPLETED_CONSUMER_MODE/GROUP), never extraEnv; the group is the
+  # binary's own documented default, set explicitly so the Deployment's env
+  # is self-describing. Poison messages go to warehouse.fulfillment.events.dlq.
+  taskCompletedConsumerMode: "kafka"
+  taskCompletedConsumerGroup: "inventory-storage-confirm-pick"
 
 kafka:
   enabled: true
