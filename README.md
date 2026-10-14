@@ -319,6 +319,67 @@ schema and rationale.
 
 ---
 
+## Post-deploy seeds
+
+### Site transfer capability (`scripts/seed-transfer-capability.py`)
+
+Inter-site transfers (network-inventory-planning) only run between sites whose
+transfer capability allows them, and facility-layout keeps that capability an
+explicit, revisioned per-site command (its ADR-0035): nothing sets it
+automatically and a site-role change never flips it (ADR-0037). The fleet decision
+is that capability follows the site's role in the network; facility-layout
+publishes that table as `GET /site-roles/transfer-defaults` and this seed applies it
+once:
+
+| Role (facility-layout `siteRole`)                                                                   | origin | destination |
+|-----------------------------------------------------------------------------------------------------|--------|-------------|
+| Robotics/Non-/Traditional/Soft-Lines Sortable FC, Sub-Same-Day FC, XL FC, Simulated FC              | yes    | yes         |
+| Micro-FC                                                                                            | no     | yes         |
+| Inbound Cross-Dock, National Inbound Cross-Dock, Returns Center                                     | yes    | no          |
+| Fresh Grocery FC, Sortation Center, Delivery Station, Air Hub Gateway                               | no     | no          |
+
+(The table above is for reading only: the script never hard-codes it, it reads the
+endpoint, so facility-layout stays the single source of truth.)
+
+```bash
+# through Kong (default base URL http://localhost:8000/api/facility-layout,
+# overridable with --base-url or $FACILITY_LAYOUT_BASE_URL)
+python3 scripts/seed-transfer-capability.py --dry-run   # prints the plan, writes nothing
+python3 scripts/seed-transfer-capability.py
+```
+
+For every **Active** site it reads `GET /sites/{siteCode}/transfer-capability` and
+compares it with its role's default:
+
+| Site state                                            | Action                                                              |
+|-------------------------------------------------------|---------------------------------------------------------------------|
+| already at the role's default                         | nothing (no PUT, so no revision and no `SiteCapabilityChanged`)     |
+| differs from the role's default                       | `PUT /sites/{siteCode}/transfer-capability` (full snapshot) → revision + 1, `SiteCapabilityChanged` |
+| `siteRole` `UNSPECIFIED`, or a role with no default row | **never touched**; listed under "sites needing an operator decision" |
+| not Active (Decommissioned)                           | never touched (its capability is frozen)                            |
+
+A never-set site reads as capable of nothing at revision 0; if its role's default is
+also "neither" it is already at the target and is not written. The PUT carries no
+version: a concurrent writer makes it lose with 409 `concurrent-modification`, after
+which the script re-reads and re-PUTs (`--retries`, default 3) — or stops if the other
+writer already set the target. A second run against an unchanged facility-layout
+makes zero writes.
+
+Exit codes: `0` every Active, classified site is at its default (or would be, with
+`--dry-run`); `1` at least one site's read or PUT failed (the others are still
+reconciled — re-run after fixing); `2` the defaults table or the site list could not
+be read (nothing written). An `UNSPECIFIED` site is not a failure: classify it with
+`PUT /sites/{siteCode}/role` and re-run. Unit tests: `make seed-scripts-test` (CI job
+`seed-scripts`), against a stdlib fake of the facility-layout contract.
+
+Verify a site afterwards:
+
+```bash
+curl -s http://localhost:8000/api/facility-layout/sites/ABE8/transfer-capability
+```
+
+---
+
 ## Prerequisites
 
 Versions this was actually built and verified against, on `darwin/arm64`:
@@ -849,7 +910,8 @@ warehouse-infra/
 │   ├── up.sh                    # single entrypoint: init + apply + next steps
 │   ├── down.sh                  # destroy + fallback cluster delete
 │   ├── build-and-load.sh        # docker build + kind load, called by Terraform
-│   └── smoke-test.sh            # curls all four /healthz through Kong
+│   ├── smoke-test.sh            # curls all four /healthz through Kong
+│   └── seed-transfer-capability.py  # post-deploy: site transfer capability from role defaults
 └── terraform/
     ├── versions.tf              # Terraform + provider pins
     ├── providers.tf             # kind / kubernetes / helm wiring
