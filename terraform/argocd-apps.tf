@@ -31,10 +31,7 @@ resource "kubectl_manifest" "application" {
         targetRevision = "develop"
         path           = "charts/${each.key}"
         helm = {
-          valuesObject = local.service_full_values[each.key]
-          # kind CPU-request overlay (helm-values/kind-resources/README.md): layered by
-          # ArgoCD under valuesObject and over the chart defaults.
-          values = file("${path.module}/../helm-values/kind-resources/${each.key}.yaml")
+          valuesObject = local.argocd_service_values[each.key]
         }
       }
       destination = {
@@ -86,10 +83,7 @@ resource "kubectl_manifest" "ops_agent_application" {
         targetRevision = "develop"
         path           = "charts/warehouse-ops-agent"
         helm = {
-          valuesObject = local.ops_agent_helm_values
-          # kind CPU-request overlay (helm-values/kind-resources/README.md): layered by
-          # ArgoCD under valuesObject and over the chart defaults.
-          values = file("${path.module}/../helm-values/kind-resources/warehouse-ops-agent.yaml")
+          valuesObject = local.argocd_ops_agent_values
         }
       }
       destination = {
@@ -128,10 +122,7 @@ resource "kubectl_manifest" "network_fulfillment_application" {
         targetRevision = "develop"
         path           = "charts/network-fulfillment"
         helm = {
-          valuesObject = local.network_fulfillment_helm_values
-          # kind CPU-request overlay (helm-values/kind-resources/README.md): layered by
-          # ArgoCD under valuesObject and over the chart defaults.
-          values = file("${path.module}/../helm-values/kind-resources/network-fulfillment.yaml")
+          valuesObject = local.argocd_network_fulfillment_values
         }
       }
       destination = {
@@ -176,10 +167,7 @@ resource "kubectl_manifest" "network_inventory_planning_application" {
         targetRevision = "develop"
         path           = "charts/network-inventory-planning"
         helm = {
-          valuesObject = local.network_inventory_planning_helm_values
-          # kind CPU-request overlay (helm-values/kind-resources/README.md): layered by
-          # ArgoCD under valuesObject and over the chart defaults.
-          values = file("${path.module}/../helm-values/kind-resources/network-inventory-planning.yaml")
+          valuesObject = local.argocd_network_inventory_planning_values
         }
       }
       destination = {
@@ -217,10 +205,7 @@ resource "kubectl_manifest" "console_application" {
         targetRevision = "develop"
         path           = "charts/warehouse-console"
         helm = {
-          valuesObject = local.console_helm_values
-          # kind CPU-request overlay (helm-values/kind-resources/README.md): layered by
-          # ArgoCD under valuesObject and over the chart defaults.
-          values = file("${path.module}/../helm-values/kind-resources/warehouse-console.yaml")
+          valuesObject = local.argocd_console_values
         }
       }
       destination = {
