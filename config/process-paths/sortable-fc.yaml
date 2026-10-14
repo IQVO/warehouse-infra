@@ -17,6 +17,17 @@
 # To add/change/retire a path, use process-path-management's REST API.
 # Editing this file changes nothing while the flag is true.
 #
+# The DECLARED catalogue every environment must define now lives in
+# process-path-management itself: catalogue/paths.json (PICK, PACK, REBIN,
+# SLAM and RELOCATE, each with its `intake` — the demand sources allowed to
+# route work onto it, process-path-management ADR 0033/0034), applied after
+# every deploy by its scripts/seed_catalogue.py (warehouse-infra README,
+# "Post-deploy seeds", step 1). This file deliberately does NOT mirror it: the
+# file schema below has no `intake` (the services' filecatalog loaders read
+# only id/matchPrefix/direct/requiredCapabilities) and no RELOCATE, so a
+# rollback to it is a rollback to the pre-RELOCATE, pre-intake catalogue
+# (slot-plan relocation work cannot be planned while it is in force).
+#
 # This file is retained for exactly one reason: it is the rollback target.
 # Setting var.deploy_process_path_kafka_source = false restores the file
 # mount and the boot-time loader, so the content below must stay a valid,
