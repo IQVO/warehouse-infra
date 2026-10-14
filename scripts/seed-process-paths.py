@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """Seed process-path-management from the (superseded) static YAML catalogue.
 
+SUPERSEDED: the declared catalogue is process-path-management's own
+catalogue/paths.json, applied by its scripts/seed_catalogue.py (see the
+warehouse-infra README, "Post-deploy seeds"). This script only knows the four
+pre-RELOCATE paths and compares matchPrefix/requiredCapabilities only; it is
+kept as the record of the one-time YAML migration and for a rollback to the
+file catalogue. Do not use it to converge a cluster seeded from paths.json.
+
 WHY THIS EXISTS
 ---------------
 config/process-paths/sortable-fc.yaml was, before process-path-management
