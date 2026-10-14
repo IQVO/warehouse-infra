@@ -172,6 +172,21 @@ jobs:
         run: make shellcheck
 
   # ============================================================
+  # CLASSIFICATION: UNIT TESTS (post-deploy seed scripts)
+  # scripts/seed-transfer-capability.py against a stdlib fake of
+  # facility-layout's REST contract (idempotency, dry run, UNSPECIFIED
+  # never written, 409 concurrent-modification retry, non-zero exit).
+  # Stdlib only: the runner's preinstalled python3 is enough.
+  # ============================================================
+  seed-scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: seed script unit tests
+        run: make seed-scripts-test
+
+  # ============================================================
   # CLASSIFICATION: PACKAGING VALIDATION (Helm charts)
   # Every chart this repo deploys lives in a SIBLING repo, so this job
   # checks out all eleven (ten service repos + warehouse-console) next to
