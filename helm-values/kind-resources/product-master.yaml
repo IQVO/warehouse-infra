@@ -1,0 +1,26 @@
+# kind CPU-request overlay for product-master (generated from product-master/charts/product-master/values.yaml on develop).
+# The local kind cluster is ONE worker with the Docker VM's 10 CPUs; chart defaults request
+# 50-100m per container (~10 cores for 76 app containers) while real use is ~10% of that, so
+# rolling updates (maxSurge 1 per Deployment) could not schedule. Only requests.cpu is lowered;
+# limits and memory keep the chart defaults. Passed as the Application's helm.values string,
+# which ArgoCD layers under valuesObject (which never sets resources) and over the chart defaults.
+analytics:
+  projector:
+    resources:
+      requests:
+        cpu: 25m
+  reports:
+    resources:
+      requests:
+        cpu: 25m
+frontend:
+  resources:
+    requests:
+      cpu: 25m
+mcp:
+  resources:
+    requests:
+      cpu: 25m
+resources:
+  requests:
+    cpu: 25m
