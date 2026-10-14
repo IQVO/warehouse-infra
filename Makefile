@@ -28,7 +28,7 @@ CHARTS := \
 	../warehouse-ops-agent/charts/warehouse-ops-agent \
 	../warehouse-console/charts/warehouse-console
 
-.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check check check-all
+.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test check check-all
 
 help:
 	@echo "warehouse-infra — local quality gate (no CI workflow yet; this IS the gate)"
@@ -46,8 +46,10 @@ help:
 	@echo "                  and parse as PromQL-safe (scripts/test_gen_context_dashboards.py)"
 	@echo "  alert-rules-check  promtool check + unit tests of the generated alert rules"
 	@echo "                  (promtool if installed, else docker $(PROMETHEUS_IMAGE))"
+	@echo "  seed-scripts-test  unit tests of the post-deploy seed scripts against a fake"
+	@echo "                  facility-layout (scripts/test_seed_transfer_capability.py)"
 	@echo ""
-	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check"
+	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test"
 	@echo "  check-all       alias for check — no deeper local gate exists yet"
 	@echo "                  (see scripts/test-exposure-policy.sh and smoke-test.sh for"
 	@echo "                  cluster-dependent checks that need a live kind cluster —"
@@ -114,8 +116,13 @@ alert-rules-check:
 		docker run --rm -v "$(CURDIR)/$(ALERTING_DIR):/w:ro" --entrypoint promtool $(PROMETHEUS_IMAGE) test rules /w/tests/warehouse-alert-rules.test.yml; \
 	fi
 
+# Post-deploy seed scripts (final-gaps E2): stdlib unit tests against a real
+# HTTP fake of facility-layout, so no cluster is needed.
+seed-scripts-test:
+	python3 scripts/test_seed_transfer_capability.py
+
 # The fast self-correction loop: run this after every change, before committing.
-check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check
+check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test
 
 # No deeper local gate exists yet — see the help text above for the
 # cluster-dependent scripts that are NOT part of this target.

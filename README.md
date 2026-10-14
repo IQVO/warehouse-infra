@@ -217,13 +217,21 @@ analytics read side, no web remote, and its read-only MCP server stays off
 `slotting-optimization-db` Secret derive from `local.services`; the Kong route
 `/api/slotting-optimization` is the chart's own `gatewayApi` HTTPRoute. The API
 runs with `EVENT_PUBLISHER=kafka` (topic `warehouse.slotting-optimization.events`)
-and three local copies, each with a stable group
+and four consumers, each with a stable group
 (`helm-values/slotting-optimization.yaml`): `DEMAND_MODE=kafka`
 (`slotting-optimization-demand`, from `warehouse.order-management.events`),
 `PRODUCT_MODE=kafka` (`slotting-optimization-product`, from
-`warehouse.product-master.events`) and `LAYOUT_MODE=kafka`
-(`slotting-optimization-layout`, from `warehouse.facility.events`). Nothing in
-the fleet consumes its events yet. Two things a first `terraform apply` will
+`warehouse.product-master.events`), `LAYOUT_MODE=kafka`
+(`slotting-optimization-layout`, from `warehouse.facility.events`) and
+`RELOCATION_MODE=kafka` (`slotting-optimization-relocation`, inventory-storage's
+`StockRelocated` from `warehouse.inventory.events`: per-plan execution progress,
+slotting ADR 0010). Approved plans are executed as WES relocation work: the chain
+is `SlotPlanApproved` → wes-work-planning (its inbound consumer, on whenever its
+`kafka.enabled`, plans one `RELOCATE` work unit per move) → fulfillment-execution
+`RELOCATE` task → `TaskCompleted` → inventory-storage's TaskCompleted consumer
+(`config.taskCompletedConsumerMode=kafka`) relocates the stock and raises
+`StockRelocated` → slotting-optimization. It needs the `RELOCATE` process path
+(post-deploy seed step 1). Two things a first `terraform apply` will
 not do on its own: (1) initdb never re-runs on a populated Postgres, so create
 the role/database once by hand, mirroring `templates/init-databases.sql.tftpl`
 with the password from `random_password.service_db["slotting-optimization"]`;
@@ -269,15 +277,23 @@ reached directly, and only via port-forward.
 
 ## Process-path catalogue
 
-`config/process-paths/sortable-fc.yaml` is the published-language source of
-truth for this fleet's process paths (`PICK`, `PACK`, `REBIN`, `SLAM`) —
-their ids, and the capability vocabulary each one requires. It is read by
-three services (fulfillment-execution, wes-work-planning,
-workforce-management), none of which owns it individually, for the same
-reason `terraform/locals.tf`'s `services` map lives in this repo: it is a
-fact about what exists in this deployment, not business logic belonging to
-any one bounded context. See the file's own header comment for the full
-schema and rationale.
+process-path-management owns the process-path catalogue. The paths every
+environment must define are declared in its repository
+(`catalogue/paths.json`: `PICK`, `PACK`, `REBIN`, `SLAM`, `RELOCATE`, each with
+its `intake`) and applied by its `scripts/seed_catalogue.py` — step 1 of the
+[post-deploy seeds](#post-deploy-seeds). fulfillment-execution,
+wes-work-planning, workforce-management and order-management read the catalogue
+from `warehouse.process-path-management.events`
+(`var.deploy_process_path_kafka_source = true`), not from a file.
+
+`config/process-paths/sortable-fc.yaml` is the **frozen rollback target** of the
+retired file-based catalogue: four paths, no `RELOCATE`, no `intake` (the file
+schema the services' `filecatalog` loaders read is id / matchPrefix / direct /
+requiredCapabilities only, so an `intake` there would be ignored). Do not edit it
+to change paths; see its header and
+`scripts/README-process-path-seed.md` (whose `seed-process-paths.py` was the
+one-time YAML → process-path-management migration and is superseded by
+`seed_catalogue.py`).
 
 ---
 
@@ -316,6 +332,106 @@ schema and rationale.
    create the path there once: id `TRANSFER_DISPATCH`, matchPrefix `transfer-dispatch`,
    direct, with the capability the dispatch crew carries. Until it exists the dispatch
    leg is fail-closed (the saga stops after the pick).
+
+---
+
+## Post-deploy seeds
+
+Two idempotent seeds converge data the services own but no deploy step creates.
+Run them after every deploy that changes their inputs (and once on a fresh
+cluster), **in this order**, both through Kong; each has a `--dry-run` and each is a
+no-op when nothing changed:
+
+| # | Seed                                                                 | Owner / source of truth                                        | Why this position |
+|---|----------------------------------------------------------------------|----------------------------------------------------------------|-------------------|
+| 1 | process-path catalogue: `../process-path-management/scripts/seed_catalogue.py` | process-path-management `catalogue/paths.json` (its ADR 0033/0034) | adds `RELOCATE` (intake `SLOT_RELOCATION`) and sets every path's `intake` (`PICK` = `CUSTOMER_ORDER`; `PACK`/`REBIN`/`SLAM` = `[]`). Every consumer (wes-work-planning, fulfillment-execution, workforce-management, order-management) gets it live from `warehouse.process-path-management.events`. It must run before anything routes work: before slotting-optimization approves a plan (wes-work-planning plans each move on `RELOCATE`) and before stock-transfer work is released |
+| 2 | site transfer capability: `scripts/seed-transfer-capability.py`      | facility-layout `GET /site-roles/transfer-defaults` (its ADR-0035/0037) | turns on inter-site transfers between the sites whose role allows them; network-inventory-planning starts proposing transfers (and releasing their legs onto process paths) as soon as capabilities land, so the catalogue must already be converged |
+
+```bash
+# 1. process-path catalogue (sibling checkout, the same layout the Makefile's CHARTS assume)
+python3 ../process-path-management/scripts/seed_catalogue.py \
+  --base-url http://localhost:8000/api/process-path-management --dry-run
+python3 ../process-path-management/scripts/seed_catalogue.py \
+  --base-url http://localhost:8000/api/process-path-management
+
+# 2. site transfer capability
+python3 scripts/seed-transfer-capability.py --dry-run
+python3 scripts/seed-transfer-capability.py
+```
+
+`seed_catalogue.py` exits 1 if any declared path is not converged (a DEACTIVATED id
+or a changed immutable field such as `direct`: declare a new `pathId` in
+`paths.json` instead); fix that before step 2. The first run after
+process-path-management's `0009_intake` migration writes at most a `POST` for
+`RELOCATE` (if it is absent) and one `PUT` per path whose stored `intake` differs
+from the declaration (`PICK`, and `RELOCATE` if it was created before intake
+existed); every later run writes nothing. Check the result through Kong:
+
+```bash
+curl -s http://localhost:8000/api/process-path-management/process-paths/RELOCATE
+curl -s http://localhost:8000/api/process-path-management/process-paths/PICK   # intake ["CUSTOMER_ORDER"]
+```
+
+`TRANSFER_DISPATCH` (NIP's dispatch leg, see the NIP runbook above) is not in
+`paths.json` yet, so it is still created by hand once; the catalogue seed never
+touches paths it does not declare.
+
+### Site transfer capability (`scripts/seed-transfer-capability.py`)
+
+Inter-site transfers (network-inventory-planning) only run between sites whose
+transfer capability allows them, and facility-layout keeps that capability an
+explicit, revisioned per-site command (its ADR-0035): nothing sets it
+automatically and a site-role change never flips it (ADR-0037). The fleet decision
+is that capability follows the site's role in the network; facility-layout
+publishes that table as `GET /site-roles/transfer-defaults` and this seed applies it
+once:
+
+| Role (facility-layout `siteRole`)                                                                   | origin | destination |
+|-----------------------------------------------------------------------------------------------------|--------|-------------|
+| Robotics/Non-/Traditional/Soft-Lines Sortable FC, Sub-Same-Day FC, XL FC, Simulated FC              | yes    | yes         |
+| Micro-FC                                                                                            | no     | yes         |
+| Inbound Cross-Dock, National Inbound Cross-Dock, Returns Center                                     | yes    | no          |
+| Fresh Grocery FC, Sortation Center, Delivery Station, Air Hub Gateway                               | no     | no          |
+
+(The table above is for reading only: the script never hard-codes it, it reads the
+endpoint, so facility-layout stays the single source of truth.)
+
+```bash
+# through Kong (default base URL http://localhost:8000/api/facility-layout,
+# overridable with --base-url or $FACILITY_LAYOUT_BASE_URL)
+python3 scripts/seed-transfer-capability.py --dry-run   # prints the plan, writes nothing
+python3 scripts/seed-transfer-capability.py
+```
+
+For every **Active** site it reads `GET /sites/{siteCode}/transfer-capability` and
+compares it with its role's default:
+
+| Site state                                            | Action                                                              |
+|-------------------------------------------------------|---------------------------------------------------------------------|
+| already at the role's default                         | nothing (no PUT, so no revision and no `SiteCapabilityChanged`)     |
+| differs from the role's default                       | `PUT /sites/{siteCode}/transfer-capability` (full snapshot) → revision + 1, `SiteCapabilityChanged` |
+| `siteRole` `UNSPECIFIED`, or a role with no default row | **never touched**; listed under "sites needing an operator decision" |
+| not Active (Decommissioned)                           | never touched (its capability is frozen)                            |
+
+A never-set site reads as capable of nothing at revision 0; if its role's default is
+also "neither" it is already at the target and is not written. The PUT carries no
+version: a concurrent writer makes it lose with 409 `concurrent-modification`, after
+which the script re-reads and re-PUTs (`--retries`, default 3) — or stops if the other
+writer already set the target. A second run against an unchanged facility-layout
+makes zero writes.
+
+Exit codes: `0` every Active, classified site is at its default (or would be, with
+`--dry-run`); `1` at least one site's read or PUT failed (the others are still
+reconciled — re-run after fixing); `2` the defaults table or the site list could not
+be read (nothing written). An `UNSPECIFIED` site is not a failure: classify it with
+`PUT /sites/{siteCode}/role` and re-run. Unit tests: `make seed-scripts-test` (CI job
+`seed-scripts`), against a stdlib fake of the facility-layout contract.
+
+Verify a site afterwards:
+
+```bash
+curl -s http://localhost:8000/api/facility-layout/sites/ABE8/transfer-capability
+```
 
 ---
 
@@ -849,7 +965,8 @@ warehouse-infra/
 │   ├── up.sh                    # single entrypoint: init + apply + next steps
 │   ├── down.sh                  # destroy + fallback cluster delete
 │   ├── build-and-load.sh        # docker build + kind load, called by Terraform
-│   └── smoke-test.sh            # curls all four /healthz through Kong
+│   ├── smoke-test.sh            # curls all four /healthz through Kong
+│   └── seed-transfer-capability.py  # post-deploy: site transfer capability from role defaults
 └── terraform/
     ├── versions.tf              # Terraform + provider pins
     ├── providers.tf             # kind / kubernetes / helm wiring
