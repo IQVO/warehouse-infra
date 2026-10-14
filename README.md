@@ -217,13 +217,21 @@ analytics read side, no web remote, and its read-only MCP server stays off
 `slotting-optimization-db` Secret derive from `local.services`; the Kong route
 `/api/slotting-optimization` is the chart's own `gatewayApi` HTTPRoute. The API
 runs with `EVENT_PUBLISHER=kafka` (topic `warehouse.slotting-optimization.events`)
-and three local copies, each with a stable group
+and four consumers, each with a stable group
 (`helm-values/slotting-optimization.yaml`): `DEMAND_MODE=kafka`
 (`slotting-optimization-demand`, from `warehouse.order-management.events`),
 `PRODUCT_MODE=kafka` (`slotting-optimization-product`, from
-`warehouse.product-master.events`) and `LAYOUT_MODE=kafka`
-(`slotting-optimization-layout`, from `warehouse.facility.events`). Nothing in
-the fleet consumes its events yet. Two things a first `terraform apply` will
+`warehouse.product-master.events`), `LAYOUT_MODE=kafka`
+(`slotting-optimization-layout`, from `warehouse.facility.events`) and
+`RELOCATION_MODE=kafka` (`slotting-optimization-relocation`, inventory-storage's
+`StockRelocated` from `warehouse.inventory.events`: per-plan execution progress,
+slotting ADR 0010). Approved plans are executed as WES relocation work: the chain
+is `SlotPlanApproved` → wes-work-planning (its inbound consumer, on whenever its
+`kafka.enabled`, plans one `RELOCATE` work unit per move) → fulfillment-execution
+`RELOCATE` task → `TaskCompleted` → inventory-storage's TaskCompleted consumer
+(`config.taskCompletedConsumerMode=kafka`) relocates the stock and raises
+`StockRelocated` → slotting-optimization. It needs the `RELOCATE` process path
+(post-deploy seed step 1). Two things a first `terraform apply` will
 not do on its own: (1) initdb never re-runs on a populated Postgres, so create
 the role/database once by hand, mirroring `templates/init-databases.sql.tftpl`
 with the password from `random_password.service_db["slotting-optimization"]`;
