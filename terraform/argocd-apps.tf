@@ -32,6 +32,9 @@ resource "kubectl_manifest" "application" {
         path           = "charts/${each.key}"
         helm = {
           valuesObject = local.service_full_values[each.key]
+          # kind CPU-request overlay (helm-values/kind-resources/README.md): layered by
+          # ArgoCD under valuesObject and over the chart defaults.
+          values = file("${path.module}/../helm-values/kind-resources/${each.key}.yaml")
         }
       }
       destination = {
@@ -84,6 +87,9 @@ resource "kubectl_manifest" "ops_agent_application" {
         path           = "charts/warehouse-ops-agent"
         helm = {
           valuesObject = local.ops_agent_helm_values
+          # kind CPU-request overlay (helm-values/kind-resources/README.md): layered by
+          # ArgoCD under valuesObject and over the chart defaults.
+          values = file("${path.module}/../helm-values/kind-resources/warehouse-ops-agent.yaml")
         }
       }
       destination = {
@@ -123,6 +129,9 @@ resource "kubectl_manifest" "network_fulfillment_application" {
         path           = "charts/network-fulfillment"
         helm = {
           valuesObject = local.network_fulfillment_helm_values
+          # kind CPU-request overlay (helm-values/kind-resources/README.md): layered by
+          # ArgoCD under valuesObject and over the chart defaults.
+          values = file("${path.module}/../helm-values/kind-resources/network-fulfillment.yaml")
         }
       }
       destination = {
@@ -168,6 +177,9 @@ resource "kubectl_manifest" "network_inventory_planning_application" {
         path           = "charts/network-inventory-planning"
         helm = {
           valuesObject = local.network_inventory_planning_helm_values
+          # kind CPU-request overlay (helm-values/kind-resources/README.md): layered by
+          # ArgoCD under valuesObject and over the chart defaults.
+          values = file("${path.module}/../helm-values/kind-resources/network-inventory-planning.yaml")
         }
       }
       destination = {
@@ -206,6 +218,9 @@ resource "kubectl_manifest" "console_application" {
         path           = "charts/warehouse-console"
         helm = {
           valuesObject = local.console_helm_values
+          # kind CPU-request overlay (helm-values/kind-resources/README.md): layered by
+          # ArgoCD under valuesObject and over the chart defaults.
+          values = file("${path.module}/../helm-values/kind-resources/warehouse-console.yaml")
         }
       }
       destination = {
