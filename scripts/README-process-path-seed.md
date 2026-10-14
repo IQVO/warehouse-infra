@@ -1,5 +1,14 @@
 # Seeding process-path-management from the retired YAML catalogue
 
+> **Superseded.** The catalogue every environment must define is declared in
+> process-path-management's `catalogue/paths.json` (`PICK`, `PACK`, `REBIN`,
+> `SLAM`, `RELOCATE`, each with its `intake`) and converged by its
+> `scripts/seed_catalogue.py` — step 1 of the warehouse-infra README's
+> "Post-deploy seeds". This page and `seed-process-paths.py` record the one-time
+> YAML → process-path-management migration; the script knows only the four
+> pre-`RELOCATE` paths and never looks at `intake`, so do not use it to converge a
+> cluster.
+
 `scripts/seed-process-paths.py` performs the one-way migration of
 `config/process-paths/sortable-fc.yaml` into **process-path-management**
 via that service's public REST API.

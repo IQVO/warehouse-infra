@@ -1,20 +1,25 @@
 # slotting-optimization -- the slotting bounded context (forward pick-slot
 # plans by ABC velocity with stickiness and human approval). OLTP REST on
-# :8080 plus, in the SAME process, a transactional-outbox relay and three
-# Kafka local-copy consumers (slotting-optimization ADR 0003):
+# :8080 plus, in the SAME process, a transactional-outbox relay and four
+# Kafka consumers (slotting-optimization ADR 0003 and ADR 0010):
 #   - publishes warehouse.slotting-optimization.events (CloudEvents) through
-#     the outbox. Nothing in the fleet consumes it yet (who executes an
-#     approved plan is a Proposed ADR in that repo, gap decision D11).
+#     the outbox. wes-work-planning consumes SlotPlanApproved from it and plans
+#     each move as RELOCATE work (slotting ADR 0010, wes-work-planning
+#     ADR-0040; its inbound consumer runs whenever kafka.enabled, under its
+#     existing group, so nothing is set for it in wes-work-planning.yaml).
 #   - demand copy  <- warehouse.order-management.events (DEMAND_MODE=kafka,
 #                     SiteSkuDemandChanged)
 #   - product copy <- warehouse.product-master.events   (PRODUCT_MODE=kafka,
 #                     ABC class + physical profile)
 #   - layout copy  <- warehouse.facility.events         (LAYOUT_MODE=kafka,
 #                     forward slot catalogue)
+#   - execution progress <- warehouse.inventory.events  (RELOCATION_MODE=kafka,
+#                     inventory-storage's StockRelocated: executed moves /
+#                     total on GET /slot-plans/{planId} and the MCP plan tool)
 # Topics are auto-created by the first writer with the broker's
 # num.partitions / replication-factor-1 overrides (kafka.tf has no topic
 # resources -- the fleet norm), so warehouse.slotting-optimization.events and
-# the three <topic>.dlq need no declaration here.
+# the four <topic>.dlq need no declaration here.
 #
 # Every key below is a DEDICATED chart value
 # (charts/slotting-optimization/values.yaml renders each one to its env var),
@@ -54,6 +59,12 @@ config:
   productConsumerGroup: "slotting-optimization-product"
   layoutMode: "kafka"
   layoutConsumerGroup: "slotting-optimization-layout"
+  # StockRelocated (inventory-storage, warehouse.inventory.events) -> per-plan
+  # execution progress (slotting ADR 0010). inventory-storage raises it for
+  # POST /relocations and for completed RELOCATE tasks, the latter only with
+  # its TaskCompleted consumer on (helm-values/inventory-storage.yaml).
+  relocationMode: "kafka"
+  relocationConsumerGroup: "slotting-optimization-relocation"
 
 kafka:
   enabled: true
