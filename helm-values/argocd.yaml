@@ -27,6 +27,20 @@ controller:
 
 server:
   replicas: 1
+  # Probes (kind, 2026-10-14): the chart's 1s timeout on /healthz?full=true
+  # failed chronically under load (argocd-server: 98 liveness failures in 16h;
+  # repo-server: killed 23x in 5h, exit 137) and, when a terraform apply made
+  # all 16 Applications re-render at once (helm template ~14s, git fetch ~32s,
+  # GenerateManifest ~78s), the repo-server entered a liveness-kill loop and
+  # every Application went "Unknown" (connection refused on :8081). The process
+  # was healthy, only slow to answer: give the probe a realistic budget.
+  livenessProbe:
+    timeoutSeconds: 10
+    failureThreshold: 6
+    periodSeconds: 15
+  readinessProbe:
+    timeoutSeconds: 5
+    failureThreshold: 6
   service:
     type: ClusterIP
   # Kept on TLS (server.insecure stays false) -- port-forwarding to a TLS
@@ -37,6 +51,20 @@ server:
 
 repoServer:
   replicas: 1
+  # Probes (kind, 2026-10-14): the chart's 1s timeout on /healthz?full=true
+  # failed chronically under load (argocd-server: 98 liveness failures in 16h;
+  # repo-server: killed 23x in 5h, exit 137) and, when a terraform apply made
+  # all 16 Applications re-render at once (helm template ~14s, git fetch ~32s,
+  # GenerateManifest ~78s), the repo-server entered a liveness-kill loop and
+  # every Application went "Unknown" (connection refused on :8081). The process
+  # was healthy, only slow to answer: give the probe a realistic budget.
+  livenessProbe:
+    timeoutSeconds: 10
+    failureThreshold: 6
+    periodSeconds: 15
+  readinessProbe:
+    timeoutSeconds: 5
+    failureThreshold: 6
 
 applicationSet:
   enabled: true
@@ -44,4 +72,9 @@ applicationSet:
 
 configs:
   params:
+    # Bound concurrent `helm template` renders in the repo-server (chart
+    # default 0 = unlimited): 16 charts rendering at once on the single kind
+    # worker is what pushed the repo-server past its probe budget. Excess
+    # requests queue instead of all slowing down together.
+    reposerver.parallelism.limit: 4
     server.disable.auth: true
