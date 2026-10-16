@@ -273,6 +273,61 @@ on `5556`/`5557` (SSO, unused here since auth is off); `argocd-redis` on
 `6379`. None of these need a host port — only `argocd-server` is ever
 reached directly, and only via port-forward.
 
+**Probe budgets and render parallelism** (`helm-values/argocd.yaml`). The
+chart's 1 s timeout on `/healthz?full=true` fails chronically on the single kind
+worker: on 2026-10-14 `argocd-server` had 98 liveness failures in 16 h and
+`argocd-repo-server` was killed 23 times in 5 h (exit 137). When a Terraform
+apply made all 16 Applications re-render at once (`helm template` ~14 s, git
+fetch ~32 s, `GenerateManifest` up to ~78 s) the repo-server entered a
+liveness-kill loop and every Application went `Unknown`, although the process
+was healthy and only slow to answer. Two settings address it
+([#83](https://github.com/IQVO/warehouse-infra/pull/83)):
+
+| Setting | Value | Effect |
+| --- | --- | --- |
+| `server` and `repoServer` `livenessProbe` | `timeoutSeconds: 10`, `periodSeconds: 15`, `failureThreshold: 6` | A slow answer is no longer a kill. |
+| `server` and `repoServer` `readinessProbe` | `timeoutSeconds: 5`, `failureThreshold: 6` | Same budget for readiness. |
+| `configs.params."reposerver.parallelism.limit"` | `4` | Bounds concurrent `helm template` renders (chart default `0` = unlimited); excess requests queue instead of all slowing down together. |
+
+These are Helm values for the ArgoCD release, so they take effect only after a
+Terraform apply of `argocd.tf`; merging the PR changes nothing in a running
+cluster.
+
+### kind CPU-request overlay
+
+The kind cluster is **one worker** with the Docker VM's 10 CPUs. The charts
+request 50-100m CPU per container (about 10 cores for ~76 app containers) while
+measured use is ~10 % of that, and every Deployment is 1 replica with the
+default RollingUpdate (`maxSurge` 1). A fleet-wide rollout therefore left new
+pods `Pending` (`Insufficient cpu`) and stalled (2026-10-14). The overlay lowers
+`requests.cpu` to `25m` for every component whose chart default is higher (API,
+MCP, analytics projector and reports, frontend, console); limits and memory keep
+the chart defaults, so a busy pod can still burst.
+
+* `helm-values/kind-resources/<app>.yaml` — one generated overlay per
+  Application (16 files plus a `README.md`). Regenerate it when a chart adds a
+  component with a CPU request above `25m`.
+* `terraform/kind-overlay.tf` — merges each overlay **into the Application's
+  `helm.valuesObject`** (explicitly at `resources`, `mcp`, `frontend` and
+  `analytics.projector` / `analytics.reports`, because Terraform's `merge()` is
+  shallow). `terraform/argocd-apps.tf` reads the merged
+  `local.argocd_*_values`.
+* Not a separate `helm.values` string: ArgoCD v2.13 renders **only**
+  `valuesObject` when both are set, so a `values` string is silently ignored
+  ([#81](https://github.com/IQVO/warehouse-infra/pull/81) shipped that form;
+  [#82](https://github.com/IQVO/warehouse-infra/pull/82) fixed it).
+
+After an apply, check that the containers request `25m` and that the node's
+requested CPU dropped:
+
+```bash
+kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.containers[*].resources.requests.cpu}{"\n"}{end}'
+kubectl describe nodes | grep -A8 'Allocated resources'
+```
+
+The overlay is a kind-environment setting only; a production-like environment
+uses the chart defaults.
+
 ---
 
 ## Process-path catalogue
@@ -960,6 +1015,8 @@ warehouse-infra/
 │   ├── product-master.yaml
 │   ├── wes-work-planning.yaml
 │   ├── workforce-management.yaml
+│   ├── argocd.yaml              # ArgoCD release values (probe budgets, render parallelism limit)
+│   ├── kind-resources/          # generated per-Application CPU-request overlays (kind only)
 │   └── fulfillment-execution.yaml
 ├── scripts/
 │   ├── up.sh                    # single entrypoint: init + apply + next steps
@@ -977,6 +1034,9 @@ warehouse-infra/
     ├── istio.tf                 # istio-base -> istiod
     ├── kong.tf                  # Kong Gateway + Ingress Controller
     ├── services.tf              # build/load + the four service releases
+    ├── argocd.tf                # ArgoCD release (helm-values/argocd.yaml)
+    ├── argocd-apps.tf           # one ArgoCD Application per service (valuesObject from kind-overlay.tf)
+    ├── kind-overlay.tf          # merges helm-values/kind-resources/*.yaml into each valuesObject
     ├── outputs.tf
     └── templates/
         └── init-databases.sql.tftpl
