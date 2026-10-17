@@ -11,8 +11,8 @@
 #
 # Its platform contract (generated passwords, the network-inventory-planning-db
 # and network-inventory-planning-analytics-db Secrets, the API and frontend
-# image builds, the ArgoCD Application) is created by modules/bounded-context
-# (bounded-contexts.tf, ADR 0002 phase 1:
+# image builds, the ArgoCD Application) is created by modules/application
+# (applications.tf, ADR 0002 phase 1:
 # docs/adr/0002-application-delivery-boundary.md). This file keeps what the
 # module does not own yet: the database names and the chart values (ADR 0002
 # phase 3 moves the values to a value file).
@@ -51,7 +51,7 @@ locals {
 
 output "network_inventory_planning_db_password" {
   description = "Generated password for the network-inventory-planning OLTP role (needed to create the role by hand on an already-initialized Postgres)."
-  value       = module.bounded_context["network-inventory-planning"].db_password
+  value       = module.application["network-inventory-planning"].db_password
   sensitive   = true
 }
 
@@ -98,8 +98,8 @@ locals {
       # Analytics read side (NIP ADR 0009): projector (only writer of the
       # SEPARATE analytical database) + read-only reports. Not in
       # local.analytics_services (NIP is not in local.services); the DSN
-      # Secret comes from modules/bounded-context (analytics_database.secret
-      # in bounded-contexts.tf). The chart
+      # Secret comes from modules/application (analytics_database.secret
+      # in applications.tf). The chart
       # reads BOTH ANALYTICS_DATABASE_URL (projector) and
       # ANALYTICS_READER_DATABASE_URL (reports) from this one Secret; the same
       # DIRECT DSN serves both, the documented local/dev baseline (a
@@ -156,7 +156,7 @@ locals {
         targetPort = 8080
       }
 
-      # Created by modules/bounded-context; an Application's Git/cluster-visible
+      # Created by modules/application; an Application's Git/cluster-visible
       # valuesObject never carries a plaintext DSN (same posture as
       # postgres.tf's header explains for every other service).
       database = {
@@ -229,7 +229,7 @@ locals {
         enabled = true
         image = {
           repository = "warehouse/network-inventory-planning-frontend"
-          tag        = "local-${local.frontend_source_hash["network-inventory-planning"]}"
+          # tag: set by modules/application, which builds the image.
           pullPolicy = "IfNotPresent"
         }
       }
@@ -257,7 +257,7 @@ locals {
 
 output "network_inventory_planning_analytics_db_password" {
   description = "Generated password for the network-inventory-planning analytics role (needed to create the role by hand on an already-initialized Postgres)."
-  value       = module.bounded_context["network-inventory-planning"].analytics_db_password
+  value       = module.application["network-inventory-planning"].analytics_db_password
   sensitive   = true
 }
 

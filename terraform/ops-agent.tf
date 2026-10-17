@@ -27,40 +27,26 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
-# ANTHROPIC_API_KEY — Terraform-managed Kubernetes Secret, generated-value
-# posture identical to postgres.tf's kubernetes_secret.service_db /
-# network-fulfillment.tf's kubernetes_secret.network_fulfillment_db: created
-# directly by Terraform (never a plaintext value inside the ArgoCD
+# ANTHROPIC_API_KEY — the warehouse-ops-agent-anthropic Secret, created by
+# modules/application from this application's `secrets` entry
+# (applications.tf), the same way the module creates every context's
+# <name>-db Secret: created directly by Terraform (never a plaintext value
+# inside the ArgoCD
 # Application CR's `helm.valuesObject`, which is visible via `kubectl get
 # application -o yaml`/the ArgoCD UI), consumed by the chart via
 # `credentials.existingSecret` rather than `credentials.anthropicApiKey`.
 #
-# UNLIKE service_db/network_fulfillment_db, this is NOT a `random_password` --
+# UNLIKE the <name>-db Secrets, this is NOT a `random_password` --
 # there is no Terraform-generatable Anthropic API key. `var.anthropic_api_key`
 # defaults to "" and MUST be supplied by the operator out-of-band (see that
-# variable's description in variables.tf and terraform.tfvars.example). This
-# resource still creates the Secret even when the value is empty, so `plan`/
+# variable's description in variables.tf and terraform.tfvars.example). The
+# module still creates the Secret even when the value is empty, so `plan`/
 # `apply` never fail on a missing key -- see the `check` block below for how
 # that condition surfaces instead, and warehouse-ops-agent's own ADR-0004
 # composition root (cmd/agent/reasoner.go) for the real, cluster-side
 # fail-loud behavior: `LLM_MODE=shadow requires ANTHROPIC_API_KEY` at pod
 # startup, never a silent no-op.
 # ---------------------------------------------------------------------------
-resource "kubernetes_secret" "ops_agent_anthropic" {
-  count = var.deploy_services ? 1 : 0
-
-  metadata {
-    name      = "warehouse-ops-agent-anthropic"
-    namespace = var.apps_namespace
-  }
-
-  data = {
-    ANTHROPIC_API_KEY = var.anthropic_api_key
-  }
-
-  depends_on = [kubernetes_namespace.apps]
-}
-
 # ---------------------------------------------------------------------------
 # Plan/apply-time visibility for the "LLM_MODE=shadow with no real key"
 # misconfiguration. This is a WARNING only (check-block asserts never fail
@@ -92,7 +78,7 @@ check "anthropic_api_key_required_for_llm_mode" {
 # ---------------------------------------------------------------------------
 # Full computed Helm values for warehouse-ops-agent, extracted from the
 # (now-removed) helm_release.ops_agent's `values` argument -- unchanged
-# content, pure refactor -- so the ArgoCD Application in argocd-apps.tf
+# content, pure refactor -- so the ArgoCD Application (modules/application)
 # reads from exactly the same computation. Mirrors services.tf's
 # local.service_full_values pattern for the 8 database-backed services.
 # ---------------------------------------------------------------------------
@@ -205,13 +191,12 @@ locals {
       # alongside the deterministic policy without ever acting on the
       # model's output alone (see cmd/agent/reasoner.go/FlowBalanceAdvisory).
       # `credentials.existingSecret` points at the Terraform-managed
-      # Secret above by its fixed, deterministic name (not a resource
-      # attribute reference: kubernetes_secret.ops_agent_anthropic is
-      # count-gated on var.deploy_services, and this local is evaluated
-      # regardless of that flag) -- never `credentials.anthropicApiKey`
-      # plaintext, which would land inside the ArgoCD Application CR's
-      # `helm.valuesObject` (see this file's kubernetes_secret.
-      # ops_agent_anthropic header comment for why that matters).
+      # Secret by its fixed, deterministic name (modules/application names
+      # it <name>-<key>; a resource attribute reference would make these
+      # values depend on the module that consumes them) -- never
+      # `credentials.anthropicApiKey` plaintext, which would land inside the
+      # ArgoCD Application CR's `helm.valuesObject` (see this file's
+      # ANTHROPIC_API_KEY header comment for why that matters).
       credentials = {
         existingSecret = "warehouse-ops-agent-anthropic"
       }
@@ -281,8 +266,8 @@ locals {
 
 # ---------------------------------------------------------------------------
 # NOTE: there is deliberately NO `helm_release.ops_agent` resource here
-# anymore. ArgoCD (argocd-apps.tf's `kubectl_manifest.ops_agent_application`)
-# is now the sole owner of this release's lifecycle -- removed from
+# anymore. ArgoCD (the Application modules/application creates) is now the
+# sole owner of this release's lifecycle -- removed from
 # Terraform state via `terraform state rm` after verifying the Application
 # was already Synced/Healthy (never a `helm uninstall`).
 # ---------------------------------------------------------------------------

@@ -6,11 +6,11 @@
 # It now HAS a database (its NetworkOrder aggregate carries the 24h
 # acknowledgement deadlines the sweep enforces, and an in-memory repo forgets
 # them on the restart every pod here takes at rollout). It is still NOT in
-# `local.services`, deliberately: membership there also implies the analytics
-# projector/reports apparatus, the Kafka wiring and the per-service chart
-# shape none of which exist here, and moving it in would recreate the
-# resources this file already owns. So the database is wired explicitly
-# below, mirroring services.tf's pattern rather than inheriting it.
+# `local.services`, deliberately: membership there implies services.tf's
+# per-service chart shape (Kong routes, MCP, the shared analytics values),
+# which this chart does not have. Its values are computed below; its image,
+# databases, Secrets and ArgoCD Application come from modules/application
+# like every other application (applications.tf, ADR 0002).
 #
 # THE IMPORTANT PART OF THIS FILE IS WHAT IT DOES NOT SET.
 #
@@ -26,45 +26,11 @@
 # ---------------------------------------------------------------------------
 
 locals {
-  network_fulfillment_chart_path = "${path.module}/../../network-fulfillment/charts/network-fulfillment"
-
-  network_fulfillment_source_hash = sha256(join("", concat(
-    [for f in sort(fileset("${path.module}/../../network-fulfillment", "**/*.go")) : filesha256("${path.module}/../../network-fulfillment/${f}")],
-    [
-      filesha256("${path.module}/../../network-fulfillment/Dockerfile"),
-      filesha256("${path.module}/../../network-fulfillment/go.mod"),
-      filesha256("${path.module}/../../network-fulfillment/go.sum"),
-    ],
-  )))
-}
-
-resource "null_resource" "build_and_load_network_fulfillment" {
-  count = var.deploy_services ? 1 : 0
-
-  depends_on = [kind_cluster.warehouse]
-
-  triggers = {
-    source_hash = local.network_fulfillment_source_hash
-    image       = "warehouse/network-fulfillment:${local.network_fulfillment_image_tag}"
-    cluster     = var.cluster_name
-  }
-
-  provisioner "local-exec" {
-    command = "${path.module}/../scripts/build-and-load.sh 'network-fulfillment' '${local.network_fulfillment_image_tag}' '${var.cluster_name}'"
-  }
-}
-
-locals {
-  # Content-derived, same rationale as services.tf's local.service_image_tags:
-  # ArgoCD's sync only fires on an actual diff, so a fixed tag gives it
-  # nothing to detect on a rebuild.
-  network_fulfillment_image_tag = "local-${substr(local.network_fulfillment_source_hash, 0, 12)}"
-
   network_fulfillment_helm_values = merge(
     {
       image = {
         repository = "warehouse/network-fulfillment"
-        tag        = local.network_fulfillment_image_tag
+        # tag: set by modules/application, which builds the image.
         pullPolicy = "IfNotPresent"
       }
 
@@ -251,7 +217,7 @@ locals {
         enabled = true
         image = {
           repository = "warehouse/network-fulfillment-frontend"
-          tag        = "local-${local.frontend_source_hash["network-fulfillment"]}"
+          # tag: set by modules/application, which builds the image.
           pullPolicy = "IfNotPresent"
         }
       }
@@ -317,65 +283,37 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
-# OLTP database. Mirrors postgres.tf's per-service pattern (generated
-# password, never committed; Secret consumed by the chart's
-# database.existingSecret) without joining local.services -- see this file's
-# header for why.
+# Databases. The generated passwords, the network-fulfillment-db Secret
+# (DATABASE_URL through PgBouncer, MIGRATIONS_DATABASE_URL direct) and the
+# network-fulfillment-analytics-db Secret come from modules/application
+# (applications.tf, ADR 0002). The role and database names stay here,
+# because the platform's initdb script and PgBouncer userlist read them.
 #
 # NOTE FOR AN ALREADY-RUNNING CLUSTER: Bitnami executes
 # primary.initdb.scripts exactly ONCE, against an empty data directory. On a
-# cluster whose Postgres already has data, adding this role/database here
-# renders the SQL but never runs it, and the pod then CrashLoopBackOffs with
-# `password authentication failed`. Create them by hand against the live
-# primary, mirroring templates/init-databases.sql.tftpl's loop body, using
-# the password from `terraform output -raw network_fulfillment_db_password`.
+# cluster whose Postgres already has data, adding a role/database renders the
+# SQL but never runs it, and the pod then CrashLoopBackOffs with `password
+# authentication failed`. Create them by hand against the live primary,
+# mirroring templates/init-databases.sql.tftpl's loop body, using the
+# passwords from `terraform output -raw network_fulfillment_db_password` and
+# `terraform output -raw network_fulfillment_analytics_db_password`.
 # ---------------------------------------------------------------------------
-resource "random_password" "network_fulfillment_db" {
-  length  = 24
-  special = false # URL-safe: no chars needing percent-encoding in the DSN
-}
-
 locals {
   network_fulfillment_db_user = "network_fulfillment"
   network_fulfillment_db_name = "network_fulfillment"
 
-  # Routed through PgBouncer (pgbouncer.tf) since the connection-pooling
-  # rollout (see docs/scalability/pgbouncer-connection-pooling.md):
-  # network-fulfillment shares the same Postgres instance as every service
-  # in local.services and is included in pgbouncer.tf's
-  # pgbouncer_oltp_services map, so its OLTP DSN moves to PgBouncer's
-  # host:port exactly like theirs -- same dbname/user/password, only the
-  # host:port changed.
-  network_fulfillment_database_url = "postgres://${local.network_fulfillment_db_user}:${random_password.network_fulfillment_db.result}@${local.pgbouncer_host}:${local.pgbouncer_port}/${local.network_fulfillment_db_name}?sslmode=disable"
-
-  # Direct (non-pooled, session-mode) counterpart to
-  # network_fulfillment_database_url above, for the migration-runner-only
-  # fix described at length in locals.tf's direct_database_urls comment
-  # (session-scoped pg_advisory_lock vs PgBouncer transaction-pooling).
-  # Same dbname/user/password; only the host:port differs (Postgres's own
-  # Service, not PgBouncer's).
-  network_fulfillment_migrations_database_url = "postgres://${local.network_fulfillment_db_user}:${random_password.network_fulfillment_db.result}@${local.postgres_host}:${local.postgres_port}/${local.network_fulfillment_db_name}?sslmode=disable"
-}
-
-resource "kubernetes_secret" "network_fulfillment_db" {
-  count = var.deploy_services ? 1 : 0
-
-  metadata {
-    name      = "network-fulfillment-db"
-    namespace = var.apps_namespace
-  }
-
-  data = {
-    DATABASE_URL            = local.network_fulfillment_database_url
-    MIGRATIONS_DATABASE_URL = local.network_fulfillment_migrations_database_url
-  }
-
-  depends_on = [kubernetes_namespace.apps]
+  # The "Network Order Acknowledgement & Translation" data product's own
+  # analytical database (PR#18 upstream, ADR 0002 there). Its chart's
+  # analytics-secret.yaml reads a single ANALYTICS_DATABASE_URL key (both
+  # netfulfil-projector and netfulfil-reports use it), so the module writes
+  # only that key for this context.
+  network_fulfillment_analytics_db_user = "network_fulfillment_analytics"
+  network_fulfillment_analytics_db_name = "network_fulfillment_analytics"
 }
 
 output "network_fulfillment_db_password" {
   description = "Generated password for the network-fulfillment OLTP role (needed to create the role by hand on an already-initialized Postgres)."
-  value       = random_password.network_fulfillment_db.result
+  value       = module.application["network-fulfillment"].db_password
   sensitive   = true
 }
 
@@ -384,65 +322,9 @@ output "network_fulfillment_route" {
   value       = "${var.api_path_prefix}/network-fulfillment"
 }
 
-# ---------------------------------------------------------------------------
-# Analytics database (PR#18 upstream, ADR 0002 there): the "Network Order
-# Acknowledgement & Translation" data product's own analytical Postgres
-# database, mirroring the OLTP database block above EXACTLY (own
-# random_password, own db/user locals, own kubernetes_secret, own DSN
-# local) rather than joining local.analytics_services in locals.tf --
-# `analytics_db_info` there does `local.services[name].db`/`.user`, which
-# would KeyError for a name not in `local.services`. Same
-# not-in-local.services reasoning as the OLTP database above; see this
-# file's header.
-#
-# Same NOTE as the OLTP database above applies here too: Bitnami's
-# primary.initdb.scripts runs exactly ONCE. Adding this role/database to
-# postgres.tf's already-applied initdb template on an already-initialized
-# Postgres renders the SQL but never runs it. Create the role/database by
-# hand against the live primary in that case, using the password from
-# `terraform output -raw network_fulfillment_analytics_db_password`.
-# ---------------------------------------------------------------------------
-resource "random_password" "network_fulfillment_analytics_db" {
-  length  = 24
-  special = false
-}
-
-locals {
-  network_fulfillment_analytics_db_user = "network_fulfillment_analytics"
-  network_fulfillment_analytics_db_name = "network_fulfillment_analytics"
-
-  # This DSN carries the real generated password via interpolation
-  # (${random_password.network_fulfillment_analytics_db.result}), matching
-  # every other DSN in this repo (locals.tf's database_urls/
-  # analytics_database_urls, and this file's own OLTP
-  # network_fulfillment_database_url above).
-  network_fulfillment_analytics_database_url = "postgres://${local.network_fulfillment_analytics_db_user}:${random_password.network_fulfillment_analytics_db.result}@${local.postgres_host}:${local.postgres_port}/${local.network_fulfillment_analytics_db_name}?sslmode=disable"
-}
-
-resource "kubernetes_secret" "network_fulfillment_analytics_db" {
-  count = var.deploy_services ? 1 : 0
-
-  metadata {
-    name      = "network-fulfillment-analytics-db"
-    namespace = var.apps_namespace
-  }
-
-  data = {
-    # This chart's own analytics-secret.yaml template has a single
-    # ANALYTICS_DATABASE_URL key (both netfulfil-projector and
-    # netfulfil-reports read it directly) -- NOT the
-    # ANALYTICS_DATABASE_URL/ANALYTICS_READER_DATABASE_URL pair
-    # facility-layout's chart has. Confirmed against PR#18's actual
-    # templates/analytics-secret.yaml, not assumed.
-    ANALYTICS_DATABASE_URL = local.network_fulfillment_analytics_database_url
-  }
-
-  depends_on = [kubernetes_namespace.apps]
-}
-
 output "network_fulfillment_analytics_db_password" {
   description = "Generated password for the network-fulfillment analytics role (needed to create the role by hand on an already-initialized Postgres)."
-  value       = random_password.network_fulfillment_analytics_db.result
+  value       = module.application["network-fulfillment"].analytics_db_password
   sensitive   = true
 }
 # Reports route: DELETED (fleet decision 2026-10-13) — the chart's own

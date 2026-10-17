@@ -16,27 +16,17 @@
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Per-service database passwords — GENERATED, never committed.
-#
-# Each bounded context's Postgres role gets a random password created at
-# `terraform apply` time. The value lives ONLY in Terraform state (which is
-# gitignored), never in a .tf file, so warehouse-infra can be a public repo
-# without leaking credentials. Rotating a password is `terraform taint` +
-# apply. Consumed by locals.service_passwords -> the initdb template and each
-# service's DATABASE_URL Secret.
+# Database passwords are GENERATED, never committed: each application's OLTP
+# password (and, where its chart reads a Secret, its analytics password) is a
+# random_password inside modules/application, which also writes the
+# <name>-db Secret. The initdb template below reads them through
+# local.app_db_passwords (applications.tf). The values live ONLY in
+# Terraform state (gitignored), so warehouse-infra can be a public repo.
 # ---------------------------------------------------------------------------
-resource "random_password" "service_db" {
-  # Contexts registered through modules/bounded-context generate their own
-  # (bounded-contexts.tf, ADR 0002 phase 1).
-  for_each = { for name, svc in local.services : name => svc if !contains(local.bounded_context_names, name) }
-
-  length  = 24
-  special = false # keep it URL-safe: no chars needing percent-encoding in the DSN
-}
 
 # ---------------------------------------------------------------------------
 # Per-service ANALYTICS database passwords — same generated-never-committed
-# posture as service_db above, one extra role per service in
+# posture as the module's OLTP passwords, one extra role per service in
 # local.analytics_services (see locals.tf's analytics_* locals). A single
 # role per service for now (the chart's own reportsUrl-falls-back-to-
 # projectorUrl default), not yet the separate read-only reports role the
@@ -45,54 +35,12 @@ resource "random_password" "service_db" {
 resource "random_password" "service_analytics_db" {
   # Stays here for every context, order-management included: these charts
   # still take the analytics DSN as a value (services.tf), so the password
-  # moves into modules/bounded-context with ADR 0002 phase 3, when they read
+  # moves into modules/application with ADR 0002 phase 3, when they read
   # it from a Secret instead.
   for_each = local.analytics_services
 
   length  = 24
   special = false
-}
-
-# ---------------------------------------------------------------------------
-# Per-service DATABASE_URL Secret — created directly by Terraform, ahead of
-# the ArgoCD cutover (see argocd-apps.tf).
-#
-# Before ArgoCD, each chart rendered its own Secret from a plaintext
-# `database.url` Helm value (see each chart's templates/secret.yaml). That
-# is fine for a one-shot `terraform apply`, but an ArgoCD Application CR's
-# `helm.valuesObject` is a plain Kubernetes custom resource field — visible
-# via `kubectl get application -o yaml` to anyone with read access to the
-# `argocd` namespace, and diffed/displayed in the ArgoCD UI. Putting a
-# plaintext DSN there would be a real regression versus today, even in an
-# otherwise-unauthenticated fleet, so Terraform now creates the Secret
-# itself and every Application passes only `database.existingSecret: "
-# <service>-db"` — never `database.url`. Every one of the 8 service charts
-# already supports `existingSecret` (verified during the ArgoCD rollout;
-# no chart changes were needed).
-# ---------------------------------------------------------------------------
-resource "kubernetes_secret" "service_db" {
-  for_each = { for name, svc in local.services : name => svc if !contains(local.bounded_context_names, name) }
-
-  metadata {
-    name      = "${each.key}-db"
-    namespace = var.apps_namespace
-  }
-
-  data = {
-    DATABASE_URL = local.database_urls[each.key]
-    # Direct (non-pooled, session-mode) Postgres DSN, used ONLY by each
-    # service's golang-migrate startup step -- see locals.tf's
-    # direct_database_urls comment for the full "why" (session-scoped
-    # pg_advisory_lock vs PgBouncer transaction-pooling incompatibility).
-    # Purely additive: DATABASE_URL above is completely unchanged (still
-    # PgBouncer), so this does not alter runtime traffic behavior at all.
-    # A service that doesn't yet read this key (the other 8 of 9 OLTP
-    # services, pending their own follow-up PR) simply ignores it -- an
-    # unconsumed Secret key is harmless.
-    MIGRATIONS_DATABASE_URL = local.direct_database_urls[each.key]
-  }
-
-  depends_on = [kubernetes_namespace.apps]
 }
 
 resource "helm_release" "postgresql" {
@@ -190,14 +138,14 @@ resource "helm_release" "postgresql" {
                   "network-inventory-planning" = {
                     db       = local.network_inventory_planning_db_name
                     user     = local.network_inventory_planning_db_user
-                    password = module.bounded_context["network-inventory-planning"].db_password
+                    password = local.app_db_passwords["network-inventory-planning"]
                   }
                 },
                 {
                   "network-fulfillment" = {
                     db       = local.network_fulfillment_db_name
                     user     = local.network_fulfillment_db_user
-                    password = random_password.network_fulfillment_db.result
+                    password = local.app_db_passwords["network-fulfillment"]
                   }
                 },
               )
@@ -221,7 +169,7 @@ resource "helm_release" "postgresql" {
                   "network-fulfillment" = {
                     db       = local.network_fulfillment_analytics_db_name
                     user     = local.network_fulfillment_analytics_db_user
-                    password = random_password.network_fulfillment_analytics_db.result
+                    password = module.application["network-fulfillment"].analytics_db_password
                   }
                 },
                 {
@@ -231,7 +179,7 @@ resource "helm_release" "postgresql" {
                   "network-inventory-planning" = {
                     db       = local.network_inventory_planning_analytics_db_name
                     user     = local.network_inventory_planning_analytics_db_user
-                    password = module.bounded_context["network-inventory-planning"].analytics_db_password
+                    password = module.application["network-inventory-planning"].analytics_db_password
                   }
                 },
               )
