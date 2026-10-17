@@ -243,7 +243,9 @@ locals {
 # ---------------------------------------------------------------------------
 
 resource "null_resource" "build_and_load_frontend" {
-  for_each = local.frontend_remotes
+  # Contexts registered through modules/bounded-context build their own
+  # frontend (bounded-contexts.tf, ADR 0002 phase 1).
+  for_each = { for name, fe in local.frontend_remotes : name => fe if !contains(local.bounded_context_names, name) }
 
   depends_on = [kind_cluster.warehouse]
 
@@ -368,6 +370,7 @@ resource "kubernetes_deployment" "web_gateway" {
     # from-scratch apply.
     kubectl_manifest.console_application,
     kubectl_manifest.application,
+    module.bounded_context,
   ]
 
   metadata {

@@ -9,7 +9,7 @@ amends or supersedes an earlier one with its own ADR
 | ADR | Title | Status (from the ADR body) |
 | --- | --- | --- |
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions in `docs/adr/` | Accepted (2026-10-17) |
-| [0002](0002-application-delivery-boundary.md) | Application delivery boundary: Terraform owns the platform, Helm and ArgoCD own the applications | Accepted (2026-10-17). Implemented in phases; no phase has landed yet |
+| [0002](0002-application-delivery-boundary.md) | Application delivery boundary: Terraform owns the platform, Helm and ArgoCD own the applications | Accepted (2026-10-17). Phase 1 (module pilot) merged, state moves apply at the next `terraform apply`; phases 2 to 6 open |
 
 ## Adding an ADR
 

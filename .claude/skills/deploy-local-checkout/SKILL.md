@@ -22,7 +22,7 @@ State is a plain local file, terraform.tfstate under the terraform directory (gi
    cp ~/warehouse-systems/warehouse-infra/terraform/terraform.tfstate <worktree>/terraform/terraform.tfstate
    ```
 2. `terraform -chdir=terraform init`, then `make tf-validate`.
-3. Scope plan AND apply with `-target=`, e.g. `-target='null_resource.build_and_load["order-management"]'`. An untargeted run walks all of `local.services` and rebuilds every sibling whose checkout happens to be stale.
+3. Scope plan AND apply with `-target=`, e.g. `-target='null_resource.build_and_load["inventory-storage"]'`. A context registered through `terraform/modules/bounded-context` (listed in `terraform/bounded-contexts.tf`) is targeted as a whole with `-target='module.bounded_context["order-management"]'`. An untargeted run walks all of `local.services` and rebuilds every sibling whose checkout happens to be stale.
 4. Before a targeted apply, check each sibling is on `develop`, fast-forwarded and clean (`git branch --show-current`, `git status --short`). Leave dirty or off-branch repos alone and defer applies touching them.
 5. After an apply that changed real state, copy the tfstate BACK to the real checkout's terraform directory (reverse of step 1). Skipping this orphans resources; the next apply from the main checkout fails with `<kind> "<name>" already exists`. Recover with `terraform import <addr> "<namespace>/<name>"` per resource (check `terraform state list` after a timeout before retrying).
 6. `terraform validate`/`plan` in a worktree needs the sibling repos symlinked next to the worktree (`filesha256(...): no such file` otherwise).
