@@ -141,6 +141,7 @@ Every bounded-context service's OLTP pod listens on container port `8080`
 | `postgres-postgresql` (`warehouse-data` ns)| `5432 → 5432`           | Shared Postgres release, one logical database per service |
 | `kafka` (`warehouse-systems` ns)           | `9092 → 9092`, `9095`   | Kafka's CLIENT listener (in-cluster only — see `kafka-controller-0-external` above for the host-reachable EXTERNAL listener) |
 | `otel-collector` (`observability` ns)      | `4317` (gRPC), `4318` (HTTP) | OTLP ingest — every service's exporter points here |
+| `prometheus-alertmanager` (`observability` ns) | `9093 → 9093`        | Alertmanager (one replica, null receiver: nothing is delivered). `kubectl -n observability port-forward svc/prometheus-alertmanager 9093:9093`, then `http://localhost:9093` or `/api/v2/alerts` |
 | `istiod` (`istio-system` ns)               | `15010`/`15012`/`443`/`15014` | Istio control plane (sidecar injection webhook, xDS) |
 
 The analytics **projector** (`cmd/<svc>-projector`, admin port `8091`) has NO
@@ -919,14 +920,53 @@ the output. Never hand-edit the JSON.
   `runbook_url` annotation is that context's runbook page. There is no
   outbox dead-row rule (no context exports an attempt-cap metric; it is a log
   line and a SQL query) and no consumer-lag rule (no Kafka exporter runs).
-  Alertmanager is off: alerts show on Prometheus `/alerts`, in the `ALERTS`
-  series and in Grafana.
+- SLO burn-rate alerts, four per context in the sibling group
+  `warehouse-<context>-slo` (same table, so rules, dashboards and runbook URLs
+  cannot disagree). SLO 1 is API availability (99 % of Kong requests do not
+  answer 5xx per day), SLO 2 is API latency (95 % of Kong requests have
+  `kong_upstream_latency_ms` at or under 500 ms per day). Prometheus keeps 24 h
+  (`retention`), so every window is one day, not 28 days. Burn = bad ratio /
+  (1 − target); the day's budget lasts 24 h / burn:
+
+  | Alert | SLO | Severity | Fires when (both windows hold, `for`) | Budget gone in |
+  |---|---|---|---|---|
+  | `WarehouseApiAvailabilityBurnFast` | 1 | critical | burn ≥ 14.4 over 1 h and 5 m (5xx ≥ 14.4 %), 2 m | ~100 min |
+  | `WarehouseApiAvailabilityBurnSlow` | 1 | warning | burn ≥ 3 over 6 h and 30 m (5xx ≥ 3 %), 15 m | ~8 h |
+  | `WarehouseApiLatencyBurnFast` | 2 | critical | burn ≥ 14.4 over 1 h and 5 m (slow ≥ 72 %), 2 m | ~100 min |
+  | `WarehouseApiLatencyBurnSlow` | 2 | warning | burn ≥ 3 over 6 h and 30 m (slow ≥ 15 %), 15 m | ~8 h |
+
+  Each is evaluated per Kong route and needs at least 30 requests in the long
+  window, so one failed request on an idle local route cannot fire a critical
+  alert. Kong 3.9 exports no `le="500"` bucket (its boundaries are 25, 50, 80,
+  100, 250, 400, 700, 1000, … spelled `"400.0"`), so the latency rule counts on
+  the nearest one, `le="400.0"`: a request between 400 and 500 ms counts as
+  slow, which makes the alert slightly stricter than the 500 ms SLO. The
+  existing `WarehouseKong5xxRatioHigh` stays as the coarse 5 %-for-5-minutes
+  signal. The thresholds are constants at the top of the alert section of
+  `scripts/gen-context-dashboards.py`.
+- Alertmanager is ON in the Prometheus release (`observability.tf`): one
+  replica, no PVC (emptyDir; silences on a disposable cluster are not worth a
+  volume), 10m / 32Mi. Its only receiver is `null`, a receiver with no
+  integrations, because a local cluster has no pager: **nothing is delivered
+  anywhere**. What it gives is grouping (`group_by` alertname, context,
+  service), inhibition (a `severity="critical"` alert inhibits the
+  `severity="warning"` alerts with the same context and service), silences and
+  the `/api/v2/alerts` view; a real receiver is added to
+  `alertmanager.config.receivers` and the route when one exists. Prometheus
+  finds it with no extra setting (the chart renders `alerting.alertmanagers`
+  while `alertmanager.enabled` is true). Reach it with
+  `kubectl -n observability port-forward svc/prometheus-alertmanager 9093:9093`;
+  Grafana has an `Alertmanager` datasource for the same instance. Alerts also
+  show on Prometheus `/alerts` and in the `ALERTS` series.
 
 Gates: `make observability-check` (committed JSON equals the generator
 output, valid JSON, no backslash escapes in PromQL, every context in
-`local.services` has a dashboard, every rule names its runbook) and
+`local.services` has a dashboard, every rule names its runbook, every context
+has the four SLO rules on a bucket Kong exports) and
 `make alert-rules-check` (promtool `check rules` plus the unit tests in
-`terraform/alerting/tests/`; uses docker when `promtool` is not installed).
+`terraform/alerting/tests/`, including the burn-rate cases in
+`warehouse-slo-burn-rules.test.yml`; uses docker when `promtool` is not
+installed).
 Both run in the CI job `observability-as-code`.
 
 ---

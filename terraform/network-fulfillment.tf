@@ -148,6 +148,42 @@ locals {
         existingSecretKey = "DATABASE_URL"
       }
 
+      # Capability offer (gaps K10/K13/R5, ADR 0001 section 8 there): the
+      # throttled "what can this site ship" figure the network is told. The
+      # binary gates the whole pipeline behind CAPABILITY_OFFER_ENABLED, so
+      # the reference deployment never ran it. None of these four variables
+      # has a dedicated chart value, hence extraEnv (a variable with a
+      # chart value belongs in the values above, never here).
+      #
+      #   - Two Kafka-fed caches, rebuilt from FirstOffset on every boot
+      #     under a fresh consumer group per process (no group state to
+      #     collide with or to clean up): process-path-management's CPT
+      #     schedule / cycle times and wes-work-planning's
+      #     PathCapacityChanged. Boot BLOCKS (60 s per cache) until both
+      #     have replayed, on purpose: an offer computed from a half-read
+      #     model would advertise a wrong figure. Both topics hold a few
+      #     dozen messages in this cluster, so the replay takes seconds.
+      #   - One REST read of inventory-storage's usable-inventory model
+      #     (a documented departure from a third Kafka cache, see the
+      #     inventoryclient package in network-fulfillment).
+      #   - SITE_ID is the single site the recompute targets; site-1 is the
+      #     binary's own default and the site the stub demand above uses.
+      #
+      # KAFKA_BROKERS is set here, NOT through the chart's kafka.enabled,
+      # because kafka.enabled also flips EVENT_PUBLISHER to kafka and
+      # would start publishing this context's events to the broker: a
+      # separate decision. The publisher stays "log".
+      #
+      # Nothing leaves the cluster: networkMode stays "stub". To switch the
+      # offer off again, delete this block; the offer endpoints and the MCP
+      # tool are then not registered, exactly as before.
+      extraEnv = [
+        { name = "CAPABILITY_OFFER_ENABLED", value = "true" },
+        { name = "KAFKA_BROKERS", value = "kafka.${var.apps_namespace}.svc.cluster.local:9092" },
+        { name = "INVENTORY_STORAGE_URL", value = "http://inventory-storage.${var.apps_namespace}.svc.cluster.local:80" },
+        { name = "SITE_ID", value = "site-1" },
+      ]
+
       # Kong route. NO Ingress at all once Gateway API is on (see the
       # gatewayApi block below) -- disabled-but-present would otherwise
       # still create a Kong route object nothing removes.

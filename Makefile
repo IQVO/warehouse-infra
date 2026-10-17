@@ -110,10 +110,10 @@ ALERTING_DIR := terraform/alerting
 alert-rules-check:
 	@if command -v promtool >/dev/null 2>&1; then \
 		promtool check rules $(ALERTING_DIR)/warehouse-alert-rules.json && \
-		promtool test rules $(ALERTING_DIR)/tests/warehouse-alert-rules.test.yml; \
+		promtool test rules $(ALERTING_DIR)/tests/warehouse-alert-rules.test.yml $(ALERTING_DIR)/tests/warehouse-slo-burn-rules.test.yml; \
 	else \
 		docker run --rm -v "$(CURDIR)/$(ALERTING_DIR):/w:ro" --entrypoint promtool $(PROMETHEUS_IMAGE) check rules /w/warehouse-alert-rules.json && \
-		docker run --rm -v "$(CURDIR)/$(ALERTING_DIR):/w:ro" --entrypoint promtool $(PROMETHEUS_IMAGE) test rules /w/tests/warehouse-alert-rules.test.yml; \
+		docker run --rm -v "$(CURDIR)/$(ALERTING_DIR):/w:ro" --entrypoint promtool $(PROMETHEUS_IMAGE) test rules /w/tests/warehouse-alert-rules.test.yml /w/tests/warehouse-slo-burn-rules.test.yml; \
 	fi
 
 # Post-deploy seed scripts (final-gaps E2): stdlib unit tests against a real
