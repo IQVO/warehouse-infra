@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted (2026-10-17). Implemented in the phases listed under "Rollout";
-no phase has landed yet.
+Accepted (2026-10-17). Phase 1 (module pilot: order-management and
+network-inventory-planning) merged; its state moves take effect at the next
+`terraform apply`. Phases 2 to 6 open.
 
 ## Context
 

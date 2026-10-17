@@ -1123,7 +1123,10 @@ warehouse-infra/
     ├── argocd.tf                # ArgoCD release (helm-values/argocd.yaml)
     ├── argocd-apps.tf           # one ArgoCD Application per service (valuesObject from kind-overlay.tf)
     ├── kind-overlay.tf          # merges helm-values/kind-resources/*.yaml into each valuesObject
+    ├── bounded-contexts.tf      # contexts registered through modules/bounded-context (ADR 0002)
     ├── outputs.tf
+    ├── modules/
+    │   └── bounded-context/     # one application's platform contract: DB passwords, Secrets, images, Application
     └── templates/
         └── init-databases.sql.tftpl
 ```

@@ -14,6 +14,8 @@
 # ---------------------------------------------------------------------------
 
 locals {
+  # Contexts registered through modules/bounded-context hash their own source
+  # (bounded-contexts.tf, ADR 0002 phase 1).
   service_source_hash = {
     for name, svc in local.services :
     name => sha256(join("", concat(
@@ -37,7 +39,7 @@ locals {
         filesha256("${path.module}/../../${name}/go.mod"),
         filesha256("${path.module}/../../${name}/go.sum"),
       ],
-    )))
+    ))) if !contains(local.bounded_context_names, name)
   }
 
   # Gateway API (gateway-api.tf): every service in local.services now
@@ -58,6 +60,8 @@ locals {
   # no longer just an inconvenience: Argo's diffing IS what triggers a
   # sync, so a tag that never changes gives Argo nothing to detect on a
   # rebuild. Mirrors local.frontend_source_hash's existing pattern exactly.
+  # Only the contexts this file still builds; modules/bounded-context sets
+  # image.tag itself for the ones registered through it.
   service_image_tags = {
     for name, hash in local.service_source_hash :
     name => "local-${substr(hash, 0, 12)}"
@@ -66,7 +70,7 @@ locals {
 
 
 resource "null_resource" "build_and_load" {
-  for_each = var.deploy_services ? local.services : {}
+  for_each = var.deploy_services ? { for name, svc in local.services : name => svc if !contains(local.bounded_context_names, name) } : {}
 
   depends_on = [kind_cluster.warehouse]
 
@@ -115,7 +119,9 @@ locals {
       {
         image = {
           repository = "warehouse/${name}"
-          tag        = local.service_image_tags[name]
+          # null for a context registered through modules/bounded-context:
+          # the module sets the tag of the image it builds.
+          tag = lookup(local.service_image_tags, name, null)
           # The image only ever exists in the kind nodes' containerd store, put
           # there by `kind load docker-image`. IfNotPresent stops the kubelet
           # trying to pull it from Docker Hub and ImagePullBackOff-ing.

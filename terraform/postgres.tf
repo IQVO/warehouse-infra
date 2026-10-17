@@ -26,7 +26,9 @@
 # service's DATABASE_URL Secret.
 # ---------------------------------------------------------------------------
 resource "random_password" "service_db" {
-  for_each = local.services
+  # Contexts registered through modules/bounded-context generate their own
+  # (bounded-contexts.tf, ADR 0002 phase 1).
+  for_each = { for name, svc in local.services : name => svc if !contains(local.bounded_context_names, name) }
 
   length  = 24
   special = false # keep it URL-safe: no chars needing percent-encoding in the DSN
@@ -41,6 +43,10 @@ resource "random_password" "service_db" {
 # governance charter's promotion path describes.
 # ---------------------------------------------------------------------------
 resource "random_password" "service_analytics_db" {
+  # Stays here for every context, order-management included: these charts
+  # still take the analytics DSN as a value (services.tf), so the password
+  # moves into modules/bounded-context with ADR 0002 phase 3, when they read
+  # it from a Secret instead.
   for_each = local.analytics_services
 
   length  = 24
@@ -65,7 +71,7 @@ resource "random_password" "service_analytics_db" {
 # no chart changes were needed).
 # ---------------------------------------------------------------------------
 resource "kubernetes_secret" "service_db" {
-  for_each = local.services
+  for_each = { for name, svc in local.services : name => svc if !contains(local.bounded_context_names, name) }
 
   metadata {
     name      = "${each.key}-db"
@@ -184,7 +190,7 @@ resource "helm_release" "postgresql" {
                   "network-inventory-planning" = {
                     db       = local.network_inventory_planning_db_name
                     user     = local.network_inventory_planning_db_user
-                    password = random_password.network_inventory_planning_db.result
+                    password = module.bounded_context["network-inventory-planning"].db_password
                   }
                 },
                 {
@@ -225,7 +231,7 @@ resource "helm_release" "postgresql" {
                   "network-inventory-planning" = {
                     db       = local.network_inventory_planning_analytics_db_name
                     user     = local.network_inventory_planning_analytics_db_user
-                    password = random_password.network_inventory_planning_analytics_db.result
+                    password = module.bounded_context["network-inventory-planning"].analytics_db_password
                   }
                 },
               )
