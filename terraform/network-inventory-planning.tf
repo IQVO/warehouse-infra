@@ -3,23 +3,23 @@
 # planning context. It publishes TransferAllocationRequested commands and
 # WorkDemandReleased facts onto warehouse.network-inventory-planning.events,
 # consumed by inventory-storage's site-scoped allocation consumer
-# (ADR-0030 there, enabled in ../helm-values/inventory-storage.yaml in this
-# same change) and by wes-work-planning's inbound integration consumer as
-# its FIFTH topic (IQVO/wes-work-planning#150 — no env or chart value there:
-# the topic is a hardcoded constant on the existing consumer group). The
-# chart lives in NIP's own repo; this file is the environment overlay.
+# (ADR-0030 there, enabled in ../helm-values/inventory-storage.yaml) and by
+# wes-work-planning's inbound integration consumer as its FIFTH topic
+# (IQVO/wes-work-planning#150 — no env or chart value there: the topic is a
+# hardcoded constant on the existing consumer group). The chart lives in
+# NIP's own repo; this file is the environment overlay.
 #
-# NOT in `local.services`, deliberately, for the same reasons as
-# network-fulfillment (see network-fulfillment.tf's header): membership
-# there implies the analytics projector/reports apparatus, the frontend
-# remote wiring, and — blocking today — `service_source_hash`'s
-# filesha256(<repo>/Dockerfile) in services.tf, which fails
-# `terraform validate` until NIP's packaging PR (Dockerfile +
-# charts/network-inventory-planning) lands on its develop. This file
-# mirrors network-fulfillment.tf's explicit pattern instead. The packaging
-# follow-up (null_resource.build_and_load + content-derived image tag +
-# image values block, exactly like network-fulfillment.tf's) is
-# deliberately deferred until that PR merges.
+# Its platform contract (generated passwords, the network-inventory-planning-db
+# and network-inventory-planning-analytics-db Secrets, the API and frontend
+# image builds, the ArgoCD Application) is created by modules/bounded-context
+# (bounded-contexts.tf, ADR 0002 phase 1:
+# docs/adr/0002-application-delivery-boundary.md). This file keeps what the
+# module does not own yet: the database names and the chart values (ADR 0002
+# phase 3 moves the values to a value file).
+#
+# NOT in `local.services`: that map's entries also imply the computed values
+# layer in services.tf (analytics DSN as a value, the shared MCP/frontend
+# blocks), which NIP's chart does not take in that shape.
 #
 # Kafka topics: NO declaration in this repo is the fleet norm. Every
 # business topic (see kafka.tf's overrideConfiguration comment and
@@ -30,66 +30,28 @@
 # warehouse.network-inventory-planning.analytics (NIP's analytics stream
 # name follows the warehouse.<context>.analytics convention) take that
 # same path, so kafka.tf is untouched by design.
-#
-# The packaging (Dockerfile + chart) is on NIP's develop; this file builds
-# and side-loads the image (null_resource.build_and_load_network_inventory_planning,
-# content-derived tag) and carries the chart's environment values.
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# OLTP database. Mirrors postgres.tf's per-service pattern (generated
-# password, never committed; Secret consumed by the chart's
-# database.existingSecret) without joining local.services — see this
-# file's header for why.
+# OLTP database names. The role and database are created by the initdb
+# script (postgres.tf) with the module's generated password.
 #
 # NOTE FOR AN ALREADY-RUNNING CLUSTER: Bitnami executes
 # primary.initdb.scripts exactly ONCE, against an empty data directory. On
-# a cluster whose Postgres already has data, adding this role/database
-# here renders the SQL but never runs it. Create them by hand against the
-# live primary, mirroring templates/init-databases.sql.tftpl's loop body,
-# using the password from
+# a cluster whose Postgres already has data, a new role/database here
+# renders the SQL but never runs it. Create them by hand against the live
+# primary, mirroring templates/init-databases.sql.tftpl's loop body, using
+# the password from
 # `terraform output -raw network_inventory_planning_db_password`.
 # ---------------------------------------------------------------------------
-resource "random_password" "network_inventory_planning_db" {
-  length  = 24
-  special = false # URL-safe: no chars needing percent-encoding in the DSN
-}
-
 locals {
   network_inventory_planning_db_user = "network_inventory_planning"
   network_inventory_planning_db_name = "network_inventory_planning"
-
-  # Routed through PgBouncer (pgbouncer.tf) exactly like every other OLTP
-  # database: same dbname/user/password, only the host:port is PgBouncer's.
-  network_inventory_planning_database_url = "postgres://${local.network_inventory_planning_db_user}:${random_password.network_inventory_planning_db.result}@${local.pgbouncer_host}:${local.pgbouncer_port}/${local.network_inventory_planning_db_name}?sslmode=disable"
-
-  # Direct (non-pooled, session-mode) counterpart, for any future
-  # golang-migrate boot step, mirroring locals.tf's direct_database_urls
-  # rationale (session-scoped pg_advisory_lock vs PgBouncer
-  # transaction-pooling incompatibility). An unconsumed Secret key is
-  # harmless if NIP's binary never reads it.
-  network_inventory_planning_migrations_database_url = "postgres://${local.network_inventory_planning_db_user}:${random_password.network_inventory_planning_db.result}@${local.postgres_host}:${local.postgres_port}/${local.network_inventory_planning_db_name}?sslmode=disable"
-}
-
-resource "kubernetes_secret" "network_inventory_planning_db" {
-  count = var.deploy_services ? 1 : 0
-
-  metadata {
-    name      = "network-inventory-planning-db"
-    namespace = var.apps_namespace
-  }
-
-  data = {
-    DATABASE_URL            = local.network_inventory_planning_database_url
-    MIGRATIONS_DATABASE_URL = local.network_inventory_planning_migrations_database_url
-  }
-
-  depends_on = [kubernetes_namespace.apps]
 }
 
 output "network_inventory_planning_db_password" {
   description = "Generated password for the network-inventory-planning OLTP role (needed to create the role by hand on an already-initialized Postgres)."
-  value       = random_password.network_inventory_planning_db.result
+  value       = module.bounded_context["network-inventory-planning"].db_password
   sensitive   = true
 }
 
@@ -99,60 +61,15 @@ output "network_inventory_planning_route" {
 }
 
 # ---------------------------------------------------------------------------
-# Helm values for the ArgoCD Application (argocd-apps.tf). Minimal on
-# purpose: the chart is still landing in NIP's parallel PR, so this sets
-# only the keys whose shape is fixed by fleet convention across every
-# sibling chart (service/database/kafka/routing) and nothing
-# chart-specific. The image block is deliberately absent until the
-# build-and-load wiring exists (see this file's header) — the chart's own
-# image defaults apply until then.
+# Helm values for the ArgoCD Application the module creates. The image tag is
+# the module's content-derived tag (ArgoCD's sync only fires on an actual
+# diff, so a fixed tag would give it nothing to detect on a rebuild).
 # ---------------------------------------------------------------------------
-locals {
-  network_inventory_planning_chart_path = "${path.module}/../../network-inventory-planning/charts/network-inventory-planning"
-
-  # Same content hash as network-fulfillment.tf: every Go file, the
-  # Dockerfile and the module files. NIP keeps its migrations under
-  # internal/adapters/outbound/postgres/migrations, which holds only .sql
-  # files, so they are hashed explicitly (a migration-only change has no Go
-  # diff and would otherwise never rebuild the image).
-  network_inventory_planning_source_hash = sha256(join("", concat(
-    [for f in sort(fileset("${path.module}/../../network-inventory-planning", "**/*.go")) : filesha256("${path.module}/../../network-inventory-planning/${f}")],
-    [for f in sort(fileset("${path.module}/../../network-inventory-planning", "internal/**/migrations/**")) : filesha256("${path.module}/../../network-inventory-planning/${f}")],
-    [
-      filesha256("${path.module}/../../network-inventory-planning/Dockerfile"),
-      filesha256("${path.module}/../../network-inventory-planning/go.mod"),
-      filesha256("${path.module}/../../network-inventory-planning/go.sum"),
-    ],
-  )))
-
-  # Content-derived, same rationale as services.tf's local.service_image_tags:
-  # ArgoCD's sync only fires on an actual diff, so a fixed tag gives it
-  # nothing to detect on a rebuild.
-  network_inventory_planning_image_tag = "local-${substr(local.network_inventory_planning_source_hash, 0, 12)}"
-}
-
-resource "null_resource" "build_and_load_network_inventory_planning" {
-  count = var.deploy_services ? 1 : 0
-
-  depends_on = [kind_cluster.warehouse]
-
-  triggers = {
-    source_hash = local.network_inventory_planning_source_hash
-    image       = "warehouse/network-inventory-planning:${local.network_inventory_planning_image_tag}"
-    cluster     = var.cluster_name
-  }
-
-  provisioner "local-exec" {
-    command = "${path.module}/../scripts/build-and-load.sh 'network-inventory-planning' '${local.network_inventory_planning_image_tag}' '${var.cluster_name}'"
-  }
-}
-
 locals {
   network_inventory_planning_helm_values = merge(
     {
       image = {
         repository = "warehouse/network-inventory-planning"
-        tag        = local.network_inventory_planning_image_tag
         pullPolicy = "IfNotPresent"
       }
 
@@ -180,8 +97,9 @@ locals {
 
       # Analytics read side (NIP ADR 0009): projector (only writer of the
       # SEPARATE analytical database) + read-only reports. Not in
-      # local.analytics_services (NIP is not in local.services), so the DSN
-      # secret is hand-rolled below, like network-fulfillment.tf. The chart
+      # local.analytics_services (NIP is not in local.services); the DSN
+      # Secret comes from modules/bounded-context (analytics_database.secret
+      # in bounded-contexts.tf). The chart
       # reads BOTH ANALYTICS_DATABASE_URL (projector) and
       # ANALYTICS_READER_DATABASE_URL (reports) from this one Secret; the same
       # DIRECT DSN serves both, the documented local/dev baseline (a
@@ -238,7 +156,7 @@ locals {
         targetPort = 8080
       }
 
-      # Pre-created above; an Application's Git/cluster-visible
+      # Created by modules/bounded-context; an Application's Git/cluster-visible
       # valuesObject never carries a plaintext DSN (same posture as
       # postgres.tf's header explains for every other service).
       database = {
@@ -320,59 +238,29 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
-# Analytics database (NIP ADR 0009): the saga-health data product's own
-# analytical Postgres database, mirroring network-fulfillment.tf's analytics
-# block EXACTLY (own random_password, own db/user locals, own
-# kubernetes_secret, own DSN local) rather than joining
-# local.analytics_services, whose analytics_db_info does
-# local.services[name].db/.user and would KeyError for a name not in
-# local.services.
+# Analytics database names (NIP ADR 0009): the saga-health data product's own
+# analytical Postgres database. The module generates its password and writes
+# the network-inventory-planning-analytics-db Secret (ANALYTICS_DATABASE_URL
+# and ANALYTICS_READER_DATABASE_URL, the same DIRECT DSN for both: the
+# projector also runs the analytical migrations, which take a session-scoped
+# advisory lock PgBouncer's transaction pooling cannot honour).
 #
-# Same NOTE as the OLTP database above: Bitnami's primary.initdb.scripts runs
-# exactly ONCE, against an empty data directory. On an already-initialized
-# Postgres, create the role/database by hand against the live primary using
+# Same NOTE as the OLTP database above: on an already-initialized Postgres,
+# create the role/database by hand using
 # `terraform output -raw network_inventory_planning_analytics_db_password`
 # (README "Network inventory planning (NIP) runbook").
 # ---------------------------------------------------------------------------
-resource "random_password" "network_inventory_planning_analytics_db" {
-  length  = 24
-  special = false # URL-safe: no chars needing percent-encoding in the DSN
-}
-
 locals {
   network_inventory_planning_analytics_db_user = "network_inventory_planning_analytics"
   network_inventory_planning_analytics_db_name = "network_inventory_planning_analytics"
-
-  # DIRECT (non-pooled) Postgres: the projector also runs the analytical
-  # migrations, which take a session-scoped advisory lock PgBouncer's
-  # transaction pooling cannot honour (and analytics stays direct fleet-wide,
-  # see locals.tf analytics_database_urls).
-  network_inventory_planning_analytics_database_url = "postgres://${local.network_inventory_planning_analytics_db_user}:${random_password.network_inventory_planning_analytics_db.result}@${local.postgres_host}:${local.postgres_port}/${local.network_inventory_planning_analytics_db_name}?sslmode=disable"
-}
-
-resource "kubernetes_secret" "network_inventory_planning_analytics_db" {
-  count = var.deploy_services ? 1 : 0
-
-  metadata {
-    name      = "network-inventory-planning-analytics-db"
-    namespace = var.apps_namespace
-  }
-
-  data = {
-    # Both keys the chart's projector and reports Deployments read
-    # (templates/projector-deployment.yaml, reports-deployment.yaml).
-    ANALYTICS_DATABASE_URL        = local.network_inventory_planning_analytics_database_url
-    ANALYTICS_READER_DATABASE_URL = local.network_inventory_planning_analytics_database_url
-  }
-
-  depends_on = [kubernetes_namespace.apps]
 }
 
 output "network_inventory_planning_analytics_db_password" {
   description = "Generated password for the network-inventory-planning analytics role (needed to create the role by hand on an already-initialized Postgres)."
-  value       = random_password.network_inventory_planning_analytics_db.result
+  value       = module.bounded_context["network-inventory-planning"].analytics_db_password
   sensitive   = true
 }
+
 # Reports route: DELETED (fleet decision 2026-10-13) — the chart's own
 # reports-route.yaml renders it (/api/<context>/reports -> /reports), switched
 # on by the analytics.reports.route values from services.tf's computed layer.

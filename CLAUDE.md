@@ -3,8 +3,8 @@
 Terraform + Helm deployment of the entire `warehouse-systems` fleet onto a
 local `kind` cluster named `warehouse`. This repo owns the cluster's
 existence, not any bounded context's business logic: one Terraform root
-module plus per-service values; each service's chart lives in that
-service's own repo.
+module (plus the `bounded-context` child module, ADR 0002) and per-service
+values; each service's chart lives in that service's own repo.
 
 > **Study project.** Personal DDD/hexagonal/Kubernetes learning exercise. Not
 > a production system; no uptime or support guarantee.
@@ -20,6 +20,7 @@ know about".
 ```
 terraform/             Root module: services, Kafka, Postgres + PgBouncer, MCP, ArgoCD,
                        dashboards, the Nginx/Kong localhost edge
+terraform/modules/bounded-context/  One application's platform contract (DB, Secrets, images, Application)
 helm-values/           Per-service STATIC values (computed layer in services.tf wins)
 config/process-paths/  Seed data for scripts/seed-process-paths.py
 scripts/               up/down, smoke test, exposure-policy gate, chart selector check
