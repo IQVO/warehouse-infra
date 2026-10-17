@@ -440,6 +440,13 @@ locals {
     "fulfillment-execution" = [
       { name = "PRODUCT_CLASSIFICATION_MODE", value = "kafka" },
       { name = "PRODUCT_CLASSIFICATION_CONSUMER_GROUP", value = "fulfillment-execution-product-classification" },
+      # Station-location role check (FE ADR-0024, gap R8), ON since
+      # 2026-10-17: RegisterStation validates a supplied locationCode against
+      # facility-layout and rejects a KNOWN non-WorkCenter role (an unknown
+      # location still passes -- fail-open by design). Registration-time only,
+      # never on the task hot path.
+      { name = "LOCATION_ROLE_MODE", value = "http" },
+      { name = "FACILITY_LAYOUT_BASE_URL", value = "http://facility-layout.${var.apps_namespace}.svc.cluster.local:80" },
     ]
     "workforce-management" = [
       { name = "INSTALLED_CAPACITY_MODE", value = "http" },
