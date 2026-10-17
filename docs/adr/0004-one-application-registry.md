@@ -5,7 +5,10 @@
 Accepted (2026-10-17). Implements [ADR 0002](0002-application-delivery-boundary.md)
 phase 2 and decides what that phase left open. Renames the module ADR 0002
 D3 and [ADR 0003](0003-per-application-terraform-state.md) call
-`modules/bounded-context` to `modules/application`.
+`modules/bounded-context` to `modules/application`. Its state moves were
+recorded on the cluster's state on 2026-10-17. The two image-hash
+overrides kept for parity (decision 5) are removed by the follow-up change:
+every application now uses the module's default hash.
 
 ## Context
 

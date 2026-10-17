@@ -49,7 +49,7 @@ variable "helm_values" {
 }
 
 variable "image" {
-  description = "Build the API image from <repos_root>/<name> and side-load it into kind. Its tag is local-<first 12 chars of a sha256 over the files matched by hash_globs plus Dockerfile, go.mod and go.sum>. null when the image comes from a registry and the values set its repository and tag."
+  description = "Build the API image from <repos_root>/<name> and side-load it into kind. Its tag is local-<first 12 chars of a sha256 over the files matched by hash_globs plus Dockerfile, go.mod and go.sum>. Every file the Dockerfile copies into the image must be matched, or a change to it alone never rebuilds: the default covers the Go sources and every migrations tree the fleet's Dockerfiles ship. null when the image comes from a registry and the values set its repository and tag."
   type = object({
     hash_globs = optional(list(string), ["**/*.go", "migrations/**", "internal/**/migrations/**", "analytics/migrations/**"])
   })

@@ -7,8 +7,8 @@ Accepted (2026-10-17). Amended by [ADR 0003](0003-per-application-terraform-stat
 order-management and network-inventory-planning) merged and its state moves
 recorded on the cluster's state (2026-10-17). Phase 2 implemented by
 [ADR 0004](0004-one-application-registry.md), which renames the module to
-`modules/application`; its state moves apply at the next `terraform apply`.
-Phases 3 to 6 open.
+`modules/application`; its state moves recorded on the cluster's state
+(2026-10-17). Phases 3 to 6 open.
 
 ## Context
 
