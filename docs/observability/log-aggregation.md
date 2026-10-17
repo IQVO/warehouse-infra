@@ -68,8 +68,8 @@ inventing a second one).
 not a compliance decision, just "this is a laptop and the disk is the
 actual constraint."
 
-**Grafana datasource** gets a third entry (`Loki`, alongside the existing
-`Prometheus`/`Jaeger`) with a `derivedFields` regex that extracts
+**Grafana datasource** gets an entry (`Loki`, alongside the existing
+`Prometheus`/`Jaeger`/`Alertmanager` ones) with a `derivedFields` regex that extracts
 `trace_id` out of the raw JSON log line and turns it into a click-through
 to the matching Jaeger trace — the reverse direction of the existing
 Prometheus-exemplar-to-Jaeger link, so a suspicious log line and a slow
