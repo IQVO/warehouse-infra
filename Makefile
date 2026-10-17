@@ -121,6 +121,7 @@ alert-rules-check:
 # HTTP fake of facility-layout, so no cluster is needed.
 seed-scripts-test:
 	python3 scripts/test_seed_transfer_capability.py
+	python3 scripts/test_seed_transfer_lanes.py
 
 # The fast self-correction loop: run this after every change, before committing.
 check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test
