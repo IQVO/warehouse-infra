@@ -772,6 +772,12 @@ it.
 **Decision: each service repo owns its own Helm chart; `warehouse-infra` owns
 only the environment.** There is exactly one copy of every manifest.
 
+> [ADR 0002](docs/adr/0002-application-delivery-boundary.md) extends this
+> decision: application configuration moves out of the Terraform computed
+> layer described below into value files that ArgoCD reads from this repo,
+> and every application is registered through one `bounded-context` module.
+> Until its phases land, the split below is what the code does.
+
 All four services already ship a complete, well-formed Helm chart at
 `<service>/charts/<service>/` — Deployment, Service, ServiceAccount, ConfigMap,
 Secret, Ingress, HPA, with liveness/readiness probes already pointed at
@@ -1071,12 +1077,11 @@ terraform destroy -auto-approve
 kind delete cluster --name warehouse   # only if destroy left it behind
 ```
 
-The locally built `warehouse/*:local` images stay in your Docker daemon. Remove
-them with:
+The locally built `warehouse/*:local-<hash12>` images stay in your Docker
+daemon. Remove them with:
 
 ```bash
-docker rmi warehouse/inventory-storage:local warehouse/wes-work-planning:local \
-           warehouse/workforce-management:local warehouse/fulfillment-execution:local
+docker images --format '{{.Repository}}:{{.Tag}}' 'warehouse/*' | xargs docker rmi
 ```
 
 ---
@@ -1086,6 +1091,8 @@ docker rmi warehouse/inventory-storage:local warehouse/wes-work-planning:local \
 ```
 warehouse-infra/
 ├── README.md
+├── docs/
+│   └── adr/                     # architecture decision records; index in docs/adr/README.md
 ├── helm-values/                 # static per-service environment config (one file per service; excerpt)
 │   ├── _README.md
 │   ├── inventory-storage.yaml
@@ -1158,9 +1165,12 @@ plain `kubectl` with no `kind-warehouse` context. It exports to both.
 the gateway and the ingress controller as two containers in one pod, DB-less,
 with KIC on by default. `kong/ingress` is an umbrella that splits them into two
 subchart releases wired together by `gatewayDiscovery` — more moving parts and
-more to go wrong, for no benefit at this scale. Routing is therefore plain
-`Ingress` objects, which the existing service charts already emit; **no Gateway
-API CRDs are needed.**
+more to go wrong, for no benefit at this scale. Routing started as plain
+`Ingress` objects; it now uses Gateway API `HTTPRoute`s that each chart
+renders against the shared `warehouse-gateway` Gateway
+(`terraform/gateway-api.tf`, `deploy_gateway_api`, on by default). How those
+Gateway API platform objects are installed is set by
+[ADR 0002](docs/adr/0002-application-delivery-boundary.md), decision D5.
 
 **Why sidecar Istio and not ambient.** Sidecar mode needs no CNI DaemonSet and
 no ztunnel, which is markedly less fragile inside kind, and namespace-label
@@ -1170,6 +1180,8 @@ injection requires zero application changes.
 `null_resource` per service, triggered by a hash over that service's `**/*.go`,
 `migrations/**`, `Dockerfile`, `go.mod` and `go.sum`, keeps the whole thing a
 single `terraform apply` while still rebuilding only what changed. Images are
-tagged `warehouse/<service>:local` with `pullPolicy: IfNotPresent`, because
-they exist only in the kind nodes' containerd store and must never be pulled
-from Docker Hub.
+tagged `warehouse/<service>:local-<hash12>` (the first 12 characters of that
+same source hash, `local.service_image_tags` in `terraform/services.tf`), so a
+rebuilt image always carries a new tag and ArgoCD rolls the pods. They use
+`pullPolicy: IfNotPresent`, because they exist only in the kind nodes'
+containerd store and must never be pulled from Docker Hub.
