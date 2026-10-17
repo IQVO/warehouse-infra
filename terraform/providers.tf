@@ -47,7 +47,7 @@ provider "helm" {
 # exists on a clean apply. load_config_file=false stops this provider from
 # ALSO trying its own default ~/.kube/config fallback.
 #
-# Used only for the ArgoCD `Application` CRD instances (argocd-apps.tf) --
+# Used only for the ArgoCD `Application` CRD instances (modules/application) --
 # the native `kubernetes_manifest` resource validates a manifest against the
 # live cluster's OpenAPI schema at `plan` time, which fails for a CRD
 # installed by a `helm_release` in the SAME apply (the CRD doesn't exist yet

@@ -31,13 +31,13 @@ terraform {
     }
 
     # Generates per-service database passwords at apply time so no credential
-    # is ever committed (see postgres.tf random_password.service_db).
+    # is ever committed (see modules/application's random_password.db).
     random = {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
 
-    # Applies ArgoCD `Application` CRD instances (argocd-apps.tf). Chosen
+    # Applies ArgoCD `Application` CRD instances (modules/application). Chosen
     # over the native `kubernetes_manifest` resource because that resource
     # validates against the live OpenAPI schema at PLAN time, which fails
     # when the CRD is installed by a helm_release in the same apply.

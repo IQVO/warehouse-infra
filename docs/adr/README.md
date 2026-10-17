@@ -9,8 +9,9 @@ amends or supersedes an earlier one with its own ADR
 | ADR | Title | Status (from the ADR body) |
 | --- | --- | --- |
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions in `docs/adr/` | Accepted (2026-10-17) |
-| [0002](0002-application-delivery-boundary.md) | Application delivery boundary: Terraform owns the platform, Helm and ArgoCD own the applications | Accepted (2026-10-17). Amended by ADR 0003 (D6). Phase 1 (module pilot) merged and its state moves recorded; phases 2 to 6 open |
+| [0002](0002-application-delivery-boundary.md) | Application delivery boundary: Terraform owns the platform, Helm and ArgoCD own the applications | Accepted (2026-10-17). Amended by ADR 0003 (D6). Phase 1 (module pilot) merged and its state moves recorded; phase 2 implemented by ADR 0004; phases 3 to 6 open |
 | [0003](0003-per-application-terraform-state.md) | Each application gets its own Terraform state | Accepted (2026-10-17). Amends ADR 0002 D6; implemented with ADR 0002 phase 6 |
+| [0004](0004-one-application-registry.md) | Every application is registered through one module and one registry | Accepted (2026-10-17). Implements ADR 0002 phase 2; renames the module to `modules/application`. State moves apply at the next `terraform apply` |
 
 ## Adding an ADR
 
