@@ -29,7 +29,10 @@ What it pins, and why each one exists:
   it exports a gauge, and every rule names its context's runbook
   (https://iqvo.github.io/<context>/docs/operations/runbook, or the GitHub
   file for a context without a docs site). PromQL validity and firing
-  behaviour are promtool's job: make alert-rules-check.
+  behaviour are promtool's job: make alert-rules-check. SLO burn-rate rules
+  (gaps SLO-1/SLO-2): every context has the four WarehouseApi{Availability,
+  Latency}Burn{Fast,Slow} alerts in group warehouse-<key>-slo with the decided
+  thresholds, and the latency rule counts on a bucket Kong really exports.
 """
 import importlib.util
 import json
@@ -173,12 +176,74 @@ class AlertRulesTest(unittest.TestCase):
 
     def test_every_context_has_kong_5xx_and_restart_rules_and_outbox_where_a_gauge_exists(self):
         by_context = self.rules_by_context()
+        slo = [
+            "WarehouseApiAvailabilityBurnFast",
+            "WarehouseApiAvailabilityBurnSlow",
+            "WarehouseApiLatencyBurnFast",
+            "WarehouseApiLatencyBurnSlow",
+        ]
         for ctx in GEN.CONTEXTS:
             names = sorted(r["alert"] for r in by_context.get(ctx["key"], []))
-            expected = ["WarehouseKong5xxRatioHigh", "WarehousePodRestarting"]
+            expected = ["WarehouseKong5xxRatioHigh", "WarehousePodRestarting", *slo]
             if ctx.get("outbox_lag_metric"):
                 expected.append("WarehouseOutboxLagHigh")
             self.assertEqual(names, sorted(expected), ctx["key"])
+
+    def test_slo_burn_rules_live_in_a_sibling_group_with_the_decided_thresholds(self):
+        groups = {g["name"]: g["rules"] for g in committed_alert_rules()["groups"]}
+        for ctx in GEN.CONTEXTS:
+            rules = {r["alert"]: r for r in groups[f"warehouse-{ctx['key']}-slo"]}
+            self.assertEqual(
+                sorted(rules),
+                [
+                    "WarehouseApiAvailabilityBurnFast",
+                    "WarehouseApiAvailabilityBurnSlow",
+                    "WarehouseApiLatencyBurnFast",
+                    "WarehouseApiLatencyBurnSlow",
+                ],
+                ctx["key"],
+            )
+            for name, rule in rules.items():
+                fast = name.endswith("Fast")
+                self.assertEqual(rule["labels"], {"context": ctx["key"], "severity": "critical" if fast else "warning"}, name)
+                self.assertEqual(rule["for"], "2m" if fast else "15m", name)
+                long_w, short_w = ("1h", "5m") if fast else ("6h", "30m")
+                burn = "14.4" if fast else "3"
+                self.assertEqual(rule["expr"].count(f">= {burn})"), 2, name)
+                self.assertIn(f"[{long_w}]", rule["expr"], name)
+                self.assertIn(f"[{short_w}]", rule["expr"], name)
+                # traffic floor on the long window
+                self.assertRegex(rule["expr"], rf"increase\(kong_\w+\{{[^}}]*\}}\[{long_w}\]\)\) >= 30$", name)
+                for annotation in ("summary", "description", "runbook_url", "dashboard_url"):
+                    self.assertTrue(rule["annotations"][annotation], f"{name} / {annotation}")
+                self.assertIn("one-day", rule["annotations"]["description"], name)
+                self.assertIn(GEN.kong_service_regex(ctx["key"]), rule["expr"], name)
+
+    def test_slo_burn_rules_use_the_budget_of_their_slo(self):
+        # availability 99% -> budget 0.01 over the 5xx ratio; latency 95% -> 0.05.
+        for ctx in GEN.CONTEXTS:
+            rules = {r["alert"]: r for r in self.rules_by_context()[ctx["key"]]}
+            for name in ("WarehouseApiAvailabilityBurnFast", "WarehouseApiAvailabilityBurnSlow"):
+                expr = rules[name]["expr"]
+                self.assertIn("kong_http_requests_total", expr)
+                self.assertIn('code=~"5.."', expr)
+                self.assertIn("/ 0.01 >=", expr)
+            for name in ("WarehouseApiLatencyBurnFast", "WarehouseApiLatencyBurnSlow"):
+                expr = rules[name]["expr"]
+                self.assertIn("kong_upstream_latency_ms_bucket", expr)
+                self.assertIn("kong_upstream_latency_ms_count", expr)
+                self.assertIn("/ 0.05 >=", expr)
+
+    def test_latency_slo_counts_on_a_bucket_kong_really_exports(self):
+        # Kong 3.9 in this cluster exports NO le="500" bucket (verified on its
+        # Prometheus: 25, 50, 80, 100, 250, 400, 700, 1000, ...; label spelled
+        # "400.0"). A rule on le="500" would never match and never fire.
+        self.assertEqual(GEN.LATENCY_SLO_BUCKET_LE, "400.0")
+        for rule in (r for rules in self.rules_by_context().values() for r in rules if r["alert"].startswith("WarehouseApiLatencyBurn")):
+            self.assertIn('le="400.0"', rule["expr"])
+            self.assertNotIn('le="500', rule["expr"])
+            self.assertIn("no 500 ms bucket", rule["annotations"]["description"])
+            self.assertIn("le=400.0", rule["annotations"]["description"])
 
     def test_every_rule_names_its_contexts_runbook(self):
         for context, rules in self.rules_by_context().items():

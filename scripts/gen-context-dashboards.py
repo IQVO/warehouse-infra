@@ -907,12 +907,42 @@ def build_logs_overview():
 # No consumer-lag rule: no Kafka exporter runs in this cluster, so no
 # consumer-group lag metric exists to alert on.
 # Every rule carries annotations.runbook_url: the context's own runbook page.
+#
+# SLO burn-rate alerts (gaps SLO-1/SLO-2), in a sibling group
+# `warehouse-<key>-slo` per context, one pair (fast = critical, slow =
+# warning) per SLO and per Kong route:
+#   SLO 1, API availability: 99% of Kong requests do not answer 5xx, per day.
+#   SLO 2, API latency: 95% of Kong requests have kong_upstream_latency_ms
+#          <= 500 ms, per day.
+# Prometheus keeps 24 h (retention in observability.tf), so every SLO window
+# is ONE DAY, not 28 days. burn = observed bad ratio / (1 - target); the time
+# to exhaust the one-day budget is 24 h / burn. Both windows of a pair must
+# hold (the long one proves it is real, the short one proves it is still
+# happening), and the route needs >= SLO_MIN_REQUESTS requests in the long
+# window so one failed request on an idle local route cannot fire a page.
 # ---------------------------------------------------------------------------
 APPS_NAMESPACE = "warehouse-systems"
 GRAFANA_URL = "http://localhost:3000"
 KONG_5XX_RATIO_THRESHOLD = 0.05
 OUTBOX_LAG_THRESHOLD_SECONDS = 60
 POD_RESTARTS_THRESHOLD = 2
+
+AVAILABILITY_SLO_TARGET = 0.99
+LATENCY_SLO_TARGET = 0.95
+LATENCY_SLO_THRESHOLD_MS = 500
+# Kong's histogram has NO le="500" bucket. The real boundaries (Kong 3.9 in
+# this cluster, verified on its Prometheus) are 25, 50, 80, 100, 250, 400,
+# 700, 1000, 2000, 5000, 10000, 30000, 60000 and +Inf, spelled "400.0".
+# 400 is the nearest to 500 ms; a request between 400 and 500 ms counts as
+# slow (the alert is slightly stricter than the 500 ms SLO, never laxer).
+LATENCY_SLO_BUCKET_LE = "400.0"
+BURN_FAST = 14.4  # the whole one-day budget is gone in 24 h / 14.4 = 100 minutes
+BURN_SLOW = 3  # ... in 24 h / 3 = 8 hours
+SLO_FAST_WINDOWS = ("1h", "5m")  # (long, short)
+SLO_SLOW_WINDOWS = ("6h", "30m")
+SLO_FAST_FOR = "2m"
+SLO_SLOW_FOR = "15m"
+SLO_MIN_REQUESTS = 30  # traffic floor over the long window
 
 
 def runbook_url(ctx):
@@ -924,6 +954,127 @@ def pod_regex(key):
     `<release>` or `<release>-<component>` and the release is the context key
     (no context key is a `<other key>-` prefix of another; the test pins it)."""
     return f"{key}-.+"
+
+
+SLO_WINDOW_WORDS = {
+    "1h": "the last hour",
+    "5m": "the last 5 minutes",
+    "6h": "the last 6 hours",
+    "30m": "the last 30 minutes",
+}
+
+
+def _num(x):
+    """Short, float-noise-free number for PromQL and annotation text."""
+    return f"{round(x, 6):g}"
+
+
+def exhaustion_words(burn):
+    """Time to exhaust the one-day error budget at `burn`: 24 h / burn."""
+    minutes = 24 * 60 / burn
+    if minutes < 180:
+        return f"{_num(minutes)} minutes"
+    return f"{_num(minutes / 60)} hours"
+
+
+def availability_burn_expr(kong_re, burn, windows):
+    """5xx burn over both windows AND the traffic floor, per Kong route.
+    $value of the alert is the long-window burn (`and` keeps the left side)."""
+    budget = round(1 - AVAILABILITY_SLO_TARGET, 6)
+    long_w, short_w = windows
+
+    def burn_over(w):
+        return (
+            f'(sum by (service) (rate(kong_http_requests_total{{service=~"{kong_re}", code=~"5.."}}[{w}])) '
+            f'/ sum by (service) (rate(kong_http_requests_total{{service=~"{kong_re}"}}[{w}])) '
+            f"/ {_num(budget)} >= {_num(burn)})"
+        )
+
+    floor = f'sum by (service) (increase(kong_http_requests_total{{service=~"{kong_re}"}}[{long_w}])) >= {SLO_MIN_REQUESTS}'
+    return f"{burn_over(long_w)} and {burn_over(short_w)} and {floor}"
+
+
+def latency_burn_expr(kong_re, burn, windows):
+    """Slow-request burn (1 - share within the le bucket) over both windows
+    AND the traffic floor, per Kong route."""
+    budget = round(1 - LATENCY_SLO_TARGET, 6)
+    long_w, short_w = windows
+
+    def burn_over(w):
+        return (
+            f'((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{{service=~"{kong_re}", le="{LATENCY_SLO_BUCKET_LE}"}}[{w}])) '
+            f'/ sum by (service) (rate(kong_upstream_latency_ms_count{{service=~"{kong_re}"}}[{w}]))) '
+            f"/ {_num(budget)} >= {_num(burn)})"
+        )
+
+    floor = f'sum by (service) (increase(kong_upstream_latency_ms_count{{service=~"{kong_re}"}}[{long_w}])) >= {SLO_MIN_REQUESTS}'
+    return f"{burn_over(long_w)} and {burn_over(short_w)} and {floor}"
+
+
+def build_slo_rules(ctx):
+    """The four burn-rate alerts of one context (see the section header)."""
+    key, title = ctx["key"], ctx["title"]
+    kong_re = kong_service_regex(key)
+    common = {
+        "runbook_url": runbook_url(ctx),
+        "dashboard_url": f"{GRAFANA_URL}/d/{ctx['uid']}",
+    }
+    availability_pct = _num(AVAILABILITY_SLO_TARGET * 100)
+    latency_pct = _num(LATENCY_SLO_TARGET * 100)
+    rules = []
+    for speed, severity, burn, windows, for_ in (
+        ("Fast", "critical", BURN_FAST, SLO_FAST_WINDOWS, SLO_FAST_FOR),
+        ("Slow", "warning", BURN_SLOW, SLO_SLOW_WINDOWS, SLO_SLOW_FOR),
+    ):
+        long_w, short_w = windows
+        pace = "fast" if speed == "Fast" else "slowly"
+        exhaustion = exhaustion_words(burn)
+        windows_text = f"over {SLO_WINDOW_WORDS[long_w]} and over {SLO_WINDOW_WORDS[short_w]}"
+        budget_text = f"At this burn the whole day's error budget is gone in about {exhaustion}."
+        labels = {"context": key, "severity": severity}
+
+        bad_pct = _num(burn * round(1 - AVAILABILITY_SLO_TARGET, 6) * 100)
+        rules.append({
+            "alert": f"WarehouseApiAvailabilityBurn{speed}",
+            "expr": availability_burn_expr(kong_re, burn, windows),
+            "for": for_,
+            "labels": labels,
+            "annotations": {
+                "summary": f"{title}: API availability SLO burning {pace} (day's budget gone in ~{exhaustion})",
+                "description": (
+                    "Kong route {{ $labels.service }} answers 5xx at {{ $value | humanize }}x the rate "
+                    f"the one-day {availability_pct}% availability SLO allows, {windows_text} "
+                    f"(5xx ratio of {bad_pct}% or more). {budget_text} "
+                    f"The alert needs at least {SLO_MIN_REQUESTS} requests in {SLO_WINDOW_WORDS[long_w]}, "
+                    "so one failed request on an idle local route cannot fire it."
+                ),
+                **common,
+            },
+        })
+
+        slow_pct = _num(burn * round(1 - LATENCY_SLO_TARGET, 6) * 100)
+        rules.append({
+            "alert": f"WarehouseApiLatencyBurn{speed}",
+            "expr": latency_burn_expr(kong_re, burn, windows),
+            "for": for_,
+            "labels": labels,
+            "annotations": {
+                "summary": f"{title}: API latency SLO burning {pace} (day's budget gone in ~{exhaustion})",
+                "description": (
+                    f"Kong route {{{{ $labels.service }}}} is missing the {LATENCY_SLO_THRESHOLD_MS} ms upstream latency target at "
+                    "{{ $value | humanize }}x the rate "
+                    f"the one-day {latency_pct}% latency SLO allows, {windows_text} "
+                    f"(slow ratio of {slow_pct}% or more). {budget_text} "
+                    f"Kong's histogram has no {LATENCY_SLO_THRESHOLD_MS} ms bucket, so the nearest boundary, "
+                    f"le={LATENCY_SLO_BUCKET_LE} ({_num(float(LATENCY_SLO_BUCKET_LE))} ms), is used: "
+                    f"a request between {_num(float(LATENCY_SLO_BUCKET_LE))} and {LATENCY_SLO_THRESHOLD_MS} ms counts as slow. "
+                    f"The alert needs at least {SLO_MIN_REQUESTS} requests in {SLO_WINDOW_WORDS[long_w]}, "
+                    "so one slow request on an idle local route cannot fire it."
+                ),
+                **common,
+            },
+        })
+    return rules
 
 
 def build_alert_rules():
@@ -978,6 +1129,7 @@ def build_alert_rules():
             },
         })
         groups.append({"name": f"warehouse-{key}", "rules": rules})
+        groups.append({"name": f"warehouse-{key}-slo", "rules": build_slo_rules(ctx)})
     return {"groups": groups}
 
 
