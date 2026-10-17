@@ -180,7 +180,9 @@ jobs:
   # CLASSIFICATION: UNIT TESTS (post-deploy seed scripts)
   # scripts/seed-transfer-capability.py against a stdlib fake of
   # facility-layout's REST contract (idempotency, dry run, UNSPECIFIED
-  # never written, 409 concurrent-modification retry, non-zero exit).
+  # never written, 409 concurrent-modification retry, non-zero exit);
+  # scripts/seed-transfer-lanes.py against fakes of facility-layout + NIP
+  # (nearest-neighbour lanes, idempotency, drift update, unmanaged lanes).
   # Stdlib only: the runner's preinstalled python3 is enough.
   # ============================================================
   seed-scripts:

@@ -336,8 +336,8 @@ uses the chart defaults.
 
 process-path-management owns the process-path catalogue. The paths every
 environment must define are declared in its repository
-(`catalogue/paths.json`: `PICK`, `PACK`, `REBIN`, `SLAM`, `RELOCATE`, each with
-its `intake`) and applied by its `scripts/seed_catalogue.py` — step 1 of the
+(`catalogue/paths.json`: `PICK`, `PACK`, `REBIN`, `SLAM`, `RELOCATE`, `DISPATCH`,
+`REPLENISH`, each with its `intake`) and applied by its `scripts/seed_catalogue.py` — step 1 of the
 [post-deploy seeds](#post-deploy-seeds). fulfillment-execution,
 wes-work-planning, workforce-management and order-management read the catalogue
 from `warehouse.process-path-management.events`
@@ -398,15 +398,16 @@ one-time YAML → process-path-management migration and is superseded by
 
 ## Post-deploy seeds
 
-Two idempotent seeds converge data the services own but no deploy step creates.
+Three idempotent seeds converge data the services own but no deploy step creates.
 Run them after every deploy that changes their inputs (and once on a fresh
-cluster), **in this order**, both through Kong; each has a `--dry-run` and each is a
+cluster), **in this order**, all through Kong; each has a `--dry-run` and each is a
 no-op when nothing changed:
 
 | # | Seed                                                                 | Owner / source of truth                                        | Why this position |
 |---|----------------------------------------------------------------------|----------------------------------------------------------------|-------------------|
-| 1 | process-path catalogue: `../process-path-management/scripts/seed_catalogue.py` | process-path-management `catalogue/paths.json` (its ADR 0033/0034) | adds `RELOCATE` (intake `SLOT_RELOCATION`) and sets every path's `intake` (`PICK` = `CUSTOMER_ORDER`; `PACK`/`REBIN`/`SLAM` = `[]`). Every consumer (wes-work-planning, fulfillment-execution, workforce-management, order-management) gets it live from `warehouse.process-path-management.events`. It must run before anything routes work: before slotting-optimization approves a plan (wes-work-planning plans each move on `RELOCATE`) and before stock-transfer work is released |
+| 1 | process-path catalogue: `../process-path-management/scripts/seed_catalogue.py` | process-path-management `catalogue/paths.json` (its ADR 0033/0034) | adds `RELOCATE` (intake `SLOT_RELOCATION`, its ADR 0033), `DISPATCH` (`STOCK_TRANSFER`, ADR 0035) and `REPLENISH` (`REPLENISHMENT`, ADR 0036) and sets every path's `intake` (`PICK` = `CUSTOMER_ORDER`; `PACK`/`REBIN`/`SLAM` = `[]`). Every consumer (wes-work-planning, fulfillment-execution, workforce-management, order-management) gets it live from `warehouse.process-path-management.events`. It must run before anything routes work: before slotting-optimization approves a plan (wes-work-planning plans each move on `RELOCATE`) and before stock-transfer work is released |
 | 2 | site transfer capability: `scripts/seed-transfer-capability.py`      | facility-layout `GET /site-roles/transfer-defaults` (its ADR-0035/0037) | turns on inter-site transfers between the sites whose role allows them; network-inventory-planning starts proposing transfers (and releasing their legs onto process paths) as soon as capabilities land, so the catalogue must already be converged |
+| 3 | transfer lanes: `scripts/seed-transfer-lanes.py`                      | NIP's own lane catalogue (its ADR-0015), computed from the capabilities of step 2 and the sites' geography | NIP proposes a transfer only along an enabled lane whose origin may send and whose destination may receive, so the lanes follow the capabilities |
 
 ```bash
 # 1. process-path catalogue (sibling checkout, the same layout the Makefile's CHARTS assume)
@@ -418,13 +419,17 @@ python3 ../process-path-management/scripts/seed_catalogue.py \
 # 2. site transfer capability
 python3 scripts/seed-transfer-capability.py --dry-run
 python3 scripts/seed-transfer-capability.py
+
+# 3. transfer lanes (needs step 2: lanes follow the capabilities)
+python3 scripts/seed-transfer-lanes.py --dry-run
+python3 scripts/seed-transfer-lanes.py
 ```
 
 `seed_catalogue.py` exits 1 if any declared path is not converged (a DEACTIVATED id
 or a changed immutable field such as `direct`: declare a new `pathId` in
 `paths.json` instead); fix that before step 2. The first run after
 process-path-management's `0009_intake` migration writes at most a `POST` for
-`RELOCATE` (if it is absent) and one `PUT` per path whose stored `intake` differs
+each declared path that is absent (`RELOCATE`, `DISPATCH`, `REPLENISH`) and one `PUT` per path whose stored `intake` differs
 from the declaration (`PICK`, and `RELOCATE` if it was created before intake
 existed); every later run writes nothing. Check the result through Kong:
 
@@ -493,6 +498,35 @@ Verify a site afterwards:
 ```bash
 curl -s http://localhost:8000/api/facility-layout/sites/ABE8/transfer-capability
 ```
+
+### Transfer lanes (`scripts/seed-transfer-lanes.py`)
+
+network-inventory-planning (NIP) proposes a transfer only along an **enabled lane** whose
+origin may send and whose destination may receive (its ADR-0015). The lane catalogue is
+NIP's own operator-managed data and no sibling publishes it, so a fresh cluster has none
+and the scheduled rebalance pass can never propose anything. This seed computes the lanes
+from the live capabilities (step 2) and from geography:
+
+- for every origin, one directed lane to each of its **K nearest destinations** (default 4)
+  in the **same country** within **2,500 km** (`--neighbours`, `--max-km`); no cross-border
+  lanes;
+- distance is great-circle between city centres (`scripts/data/site-coordinates.json`,
+  geocoded from the `(City, ST)` in each site name with OpenStreetMap Nominatim, ODbL; a new
+  site is added with `--refresh-coordinates`);
+- `LeadTime` = (1 + ceil(km / 800)) days, `UnitHandlingCost` = 1 + ceil(km / 400). NIP scores a
+  proposal as `quantity x UnitPriority - quantity x UnitHandlingCost - lead-time days`, so the
+  cost is a relative weight, not a currency amount.
+
+Idempotent: an identical lane is not written; a drifted one is updated (revision + 1); a lane
+NIP has that the rule does not compute is **left alone** and listed (NIP has no DELETE;
+disable one with `Enabled: false`). A capable site without coordinates (the simulator `SIM1`
+has no city) gets no lane and is listed. Exit codes: `0` converged, `1` a PUT failed, `2`
+sites/capabilities/lane catalogue/coordinates unreadable (nothing written). Unit tests:
+`make seed-scripts-test`.
+
+Rebalance **policies** (`PUT /v1/rebalance-policies`, per site + SKU: safety stock, target
+stock, priority) are not seeded here: their numbers only mean something against real stock
+and demand per site, so they follow the inventory seed.
 
 ---
 
