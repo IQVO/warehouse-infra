@@ -48,6 +48,10 @@ locals {
     { for k in ["resources", "mcp", "frontend"] : k => merge(try(local.network_inventory_planning_helm_values[k], {}), local.kind_overlay["network-inventory-planning"][k]) if can(local.kind_overlay["network-inventory-planning"][k]) },
     can(local.kind_overlay["network-inventory-planning"].analytics) ? { analytics = merge(try(local.network_inventory_planning_helm_values.analytics, {}), { for s in ["projector", "reports"] : s => merge(try(local.network_inventory_planning_helm_values.analytics[s], {}), local.kind_overlay["network-inventory-planning"].analytics[s]) if can(local.kind_overlay["network-inventory-planning"].analytics[s]) }) } : {},
   )
+  argocd_ecosystem_values = merge(
+    local.ecosystem_helm_values,
+    { for k in ["resources", "mcp", "frontend"] : k => merge(try(local.ecosystem_helm_values[k], {}), local.kind_overlay["ecosystem"][k]) if can(local.kind_overlay["ecosystem"][k]) },
+  )
   argocd_console_values = merge(
     local.console_helm_values,
     { for k in ["resources", "mcp", "frontend"] : k => merge(try(local.console_helm_values[k], {}), local.kind_overlay["warehouse-console"][k]) if can(local.kind_overlay["warehouse-console"][k]) },

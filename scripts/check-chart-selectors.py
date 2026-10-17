@@ -123,6 +123,7 @@ CHARTS: dict[str, dict[str, str]] = {
     # not because they're currently at risk of this specific bug shape.
     "../../warehouse-ops-agent/charts/warehouse-ops-agent": {},
     "../../warehouse-console/charts/warehouse-console": {},
+    "../../ecosystem/charts/ecosystem": {},
 }
 
 

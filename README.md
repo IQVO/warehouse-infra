@@ -14,7 +14,7 @@ The product has **two independent host-facing edges**, and neither proxies to
 the other:
 
 ```
-http://localhost        ->  Nginx web gateway  ->  console shell + /mfes/<context>/ remotes
+http://localhost        ->  Nginx web gateway  ->  console shell + /mfes/<context>/ remotes + /catalog/ (EventCatalog)
 http://localhost:8000   ->  Kong               ->  /api/<context> REST APIs
 ```
 
@@ -100,6 +100,7 @@ route table (Kong's `/api/<context>` prefixes) see "Route table" below.
 | Host URL / port                  | `listen_address` | Container (NodePort) | Backing Service                         | What it is |
 |-----------------------------------|-------------------|-----------------------|------------------------------------------|------------|
 | `http://localhost` (`:80`)        | `127.0.0.1`       | `30081`               | `web-gateway` (`warehouse-systems`)       | **Product UI** — Nginx web gateway: console shell + `/mfes/<context>/` remotes |
+| `http://localhost/catalog/` (`:80`) | `127.0.0.1` | `30081` | `web-gateway` -> `ecosystem` (`warehouse-systems`) | **EventCatalog** — architecture catalog at `/catalog/` (base-prefixed SSG, bytes only) |
 | `http://localhost:8000`           | `127.0.0.1`       | `30080`               | `kong-kong-proxy` (`kong`)                | **Product API** — Kong HTTP proxy, `/api/<context>/*` |
 | `https://localhost:443`           | `0.0.0.0`         | `30443`               | `kong-kong-proxy` (`kong`)                | Kong HTTPS proxy (unused by the product today; no chart routes TLS) |
 | `http://localhost:3000`           | `0.0.0.0`         | `30300`               | `grafana-nodeport` (`observability`)      | Grafana (`admin` / `var.grafana_admin_password`, default `admin`) |
