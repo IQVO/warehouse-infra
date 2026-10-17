@@ -24,9 +24,18 @@ helm-values/           Per-service STATIC values (computed layer in services.tf 
 config/process-paths/  Seed data for scripts/seed-process-paths.py
 scripts/               up/down, smoke test, exposure-policy gate, chart selector check
 docs/                  Analytics governance, observability, edge decision, CloudEvents cutover
+docs/adr/              Architecture decision records (index: docs/adr/README.md)
 .github/workflows/ci.yml   terraform, helm-lint, shellcheck, chart-selector-check, guide-lint
 Makefile               make check / check-fast / check-all mirror ci.yml 1:1
 ```
+
+## Architecture decisions
+
+Decisions live in `docs/adr/` (index: `docs/adr/README.md`). A change that
+alters a recorded decision ships its ADR in the same PR.
+`docs/adr/0002-application-delivery-boundary.md` sets the boundary: an
+application's Kubernetes objects belong in its own chart, never in
+Terraform. Read its Rollout section before restructuring `terraform/`.
 
 ## Non-negotiables (short form; detail loads from `.claude/rules/` when you touch the files)
 
