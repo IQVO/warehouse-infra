@@ -112,10 +112,25 @@ resource "helm_release" "jaeger" {
 # webhook) and it is the only one of the two that actually works with the chart
 # installed here.
 #
-# Subcharts alertmanager, node-exporter and pushgateway are off. This
-# Prometheus exists to hold application metrics coming through the
-# Collector; a node-exporter DaemonSet with hostPath mounts on a two-node
-# kind cluster is cost without benefit here.
+# Subcharts node-exporter and pushgateway are off. This Prometheus exists to
+# hold application metrics coming through the Collector; a node-exporter
+# DaemonSet with hostPath mounts on a two-node kind cluster is cost without
+# benefit here.
+#
+# Alertmanager is ON (gap SLO-1): ONE replica, no PVC (emptyDir; silences on
+# a disposable kind cluster are not worth a volume), requests 10m / 32Mi.
+# Its config has a route whose default receiver is `null`, a receiver with
+# no integrations. The honest statement: a local cluster has no pager, so
+# NOTHING IS DELIVERED ANYWHERE. What Alertmanager adds is grouping
+# (group_by alertname, context, service), inhibition (a severity="critical"
+# alert silences the severity="warning" alerts of the same context and
+# service), silences, and the /api/v2/alerts view; a real receiver is added
+# here when one exists. Prometheus finds it with no extra setting: the chart
+# renders prometheus.yml's `alerting.alertmanagers` (pod discovery of the
+# release's alertmanager pods on port 9093) whenever alertmanager.enabled is
+# true (verified with `helm template` of chart 29.27.0, subchart
+# alertmanager 1.42.0 / v0.34.0). Keys live under the top-level
+# `alertmanager` key: replicaCount, persistence.enabled, resources, config.
 #
 # kube-state-metrics is ON (gap fix D30), limited to the pods and
 # deployments collectors: it is the only source of
@@ -131,8 +146,13 @@ resource "helm_release" "jaeger" {
 # scripts/gen-context-dashboards.py from the same per-context table as the
 # dashboards, checked by `make alert-rules-check` (promtool check + unit
 # tests). Every rule names its context's runbook in annotations.runbook_url.
-# With Alertmanager off they surface in Prometheus' /alerts page, the ALERTS
-# series and Grafana; nothing pages anyone.
+# Besides the coarse per-route and per-pod rules, every context has four SLO
+# burn-rate rules (gaps SLO-1/SLO-2, group warehouse-<key>-slo): API
+# availability (99% of requests not 5xx per day) and API latency (95% of
+# requests under 500 ms per day), each as a fast (critical) and a slow
+# (warning) alert. Every SLO window is ONE DAY because retention is 24h.
+# Without a pager they surface in Alertmanager's /api/v2/alerts, Prometheus'
+# /alerts page, the ALERTS series and Grafana; nothing pages anyone.
 # ---------------------------------------------------------------------------
 
 resource "helm_release" "prometheus" {
@@ -150,7 +170,28 @@ resource "helm_release" "prometheus" {
   wait    = true
 
   values = [yamlencode({
-    alertmanager = { enabled = false }
+    alertmanager = {
+      enabled      = true
+      replicaCount = 1
+      persistence  = { enabled = false }
+      resources = {
+        requests = { cpu = "10m", memory = "32Mi" }
+        limits   = { cpu = "100m", memory = "64Mi" }
+      }
+      config = {
+        route = {
+          receiver = "null"
+          group_by = ["alertname", "context", "service"]
+        }
+        # `null` has no integrations: nothing is delivered (see the header).
+        receivers = [{ name = "null" }]
+        inhibit_rules = [{
+          source_matchers = ["severity=\"critical\""]
+          target_matchers = ["severity=\"warning\""]
+          equal           = ["context", "service"]
+        }]
+      }
+    }
     "kube-state-metrics" = {
       enabled    = true
       collectors = ["pods", "deployments"]
@@ -303,6 +344,17 @@ resource "helm_release" "grafana" {
             type   = "jaeger"
             access = "proxy"
             url    = "http://${local.observability_dns.jaeger}:${local.jaeger_query_port}"
+          },
+          # Alertmanager (the chart's alertmanager subchart, Service
+          # <release>-alertmanager:9093): the Alerting UI lists its alerts and
+          # silences. Same shape as the datasources above.
+          {
+            name     = "Alertmanager"
+            uid      = "alertmanager"
+            type     = "alertmanager"
+            access   = "proxy"
+            url      = "http://${local.prometheus_release}-alertmanager.${var.observability_namespace}.svc.cluster.local:9093"
+            jsonData = { implementation = "prometheus" }
           },
           ],
           # Loki (logging.tf). Conditional because deploy_logging can be
