@@ -1,0 +1,725 @@
+{
+ "_comment": "City-centre coordinates of the network's sites, geocoded from the '(City, ST)' in each facility-layout site name with OpenStreetMap Nominatim. (c) OpenStreetMap contributors, ODbL 1.0. Refreshed by scripts/seed-transfer-lanes.py --refresh-coordinates.",
+ "sites": {
+  "ABE8": {
+   "city": "Breinigsville",
+   "region": "PA",
+   "country": "US",
+   "lat": 40.5367,
+   "lon": -75.6303,
+   "match": "Breinigsville, Upper Macungie Township, Lehigh County, Pennsylvania, 18031, United States"
+  },
+  "ATL9": {
+   "city": "Union City",
+   "region": "GA",
+   "country": "US",
+   "lat": 33.5871,
+   "lon": -84.5424,
+   "match": "Union City, Fulton County, Georgia, United States"
+  },
+  "AUS3": {
+   "city": "Austin",
+   "region": "TX",
+   "country": "US",
+   "lat": 30.2649,
+   "lon": -97.7474,
+   "match": "Austin, Travis County, Texas, United States"
+  },
+  "BFI4": {
+   "city": "Kent",
+   "region": "WA",
+   "country": "US",
+   "lat": 47.3827,
+   "lon": -122.227,
+   "match": "Kent, King County, Washington, United States"
+  },
+  "BNA3": {
+   "city": "Lebanon",
+   "region": "TN",
+   "country": "US",
+   "lat": 36.208,
+   "lon": -86.2911,
+   "match": "Lebanon, Wilson County, Middle Tennessee, Tennessee, United States"
+  },
+  "BOS7": {
+   "city": "Fall River",
+   "region": "MA",
+   "country": "US",
+   "lat": 41.7011,
+   "lon": -71.1546,
+   "match": "Fall River, Bristol County, Massachusetts, United States"
+  },
+  "BOS8": {
+   "city": "Taunton",
+   "region": "MA",
+   "country": "US",
+   "lat": 41.9019,
+   "lon": -71.0931,
+   "match": "Taunton, Bristol County, Massachusetts, United States"
+  },
+  "CHA2": {
+   "city": "Chattanooga",
+   "region": "TN",
+   "country": "US",
+   "lat": 35.0457,
+   "lon": -85.3095,
+   "match": "Chattanooga, Hamilton County, East Tennessee, Tennessee, United States"
+  },
+  "CLT2": {
+   "city": "Charlotte",
+   "region": "NC",
+   "country": "US",
+   "lat": 35.2272,
+   "lon": -80.8431,
+   "match": "Charlotte, Mecklenburg County, North Carolina, United States"
+  },
+  "CMH2": {
+   "city": "Etna",
+   "region": "OH",
+   "country": "US",
+   "lat": 39.9576,
+   "lon": -82.682,
+   "match": "Etna, Etna Township, Licking County, Ohio, 43018, United States"
+  },
+  "CVG1": {
+   "city": "Hebron",
+   "region": "KY",
+   "country": "US",
+   "lat": 39.0658,
+   "lon": -84.7028,
+   "match": "Hebron, Boone County, Kentucky, 41048, United States"
+  },
+  "CVG9": {
+   "city": "Florence",
+   "region": "KY",
+   "country": "US",
+   "lat": 38.9989,
+   "lon": -84.6266,
+   "match": "Florence, Boone County, Kentucky, 41402, United States"
+  },
+  "DAT3": {
+   "city": "Atlanta",
+   "region": "GA",
+   "country": "US",
+   "lat": 33.7545,
+   "lon": -84.3898,
+   "match": "Atlanta, Fulton County, Georgia, United States"
+  },
+  "DBS4": {
+   "city": "Boston",
+   "region": "MA",
+   "country": "US",
+   "lat": 42.3588,
+   "lon": -71.0578,
+   "match": "Boston, Suffolk County, Massachusetts, United States"
+  },
+  "DCA6": {
+   "city": "Hanover",
+   "region": "MD",
+   "country": "US",
+   "lat": 39.1929,
+   "lon": -76.7241,
+   "match": "Hanover, Howard County, Maryland, 21076, United States"
+  },
+  "DCH7": {
+   "city": "Chicago",
+   "region": "IL",
+   "country": "US",
+   "lat": 41.8756,
+   "lon": -87.6244,
+   "match": "Chicago, South Chicago Township, Cook County, Illinois, United States"
+  },
+  "DDF4": {
+   "city": "Dallas",
+   "region": "TX",
+   "country": "US",
+   "lat": 32.7763,
+   "lon": -96.7969,
+   "match": "Dallas, Dallas County, Texas, United States"
+  },
+  "DDN2": {
+   "city": "Denver",
+   "region": "CO",
+   "country": "US",
+   "lat": 39.7392,
+   "lon": -104.9849,
+   "match": "Denver, Colorado, United States"
+  },
+  "DEN8": {
+   "city": "Aurora",
+   "region": "CO",
+   "country": "US",
+   "lat": 39.7401,
+   "lon": -104.8733,
+   "match": "Aurora, Adams County, Colorado, United States"
+  },
+  "DEN9": {
+   "city": "Denver",
+   "region": "CO",
+   "country": "US",
+   "lat": 39.7392,
+   "lon": -104.9849,
+   "match": "Denver, Colorado, United States"
+  },
+  "DFW7": {
+   "city": "Haslet",
+   "region": "TX",
+   "country": "US",
+   "lat": 32.9744,
+   "lon": -97.3483,
+   "match": "Haslet, Tarrant County, Texas, United States"
+  },
+  "DFW9": {
+   "city": "Dallas",
+   "region": "TX",
+   "country": "US",
+   "lat": 32.7763,
+   "lon": -96.7969,
+   "match": "Dallas, Dallas County, Texas, United States"
+  },
+  "DHO3": {
+   "city": "Houston",
+   "region": "TX",
+   "country": "US",
+   "lat": 29.7589,
+   "lon": -95.3677,
+   "match": "Houston, Harris County, Texas, United States"
+  },
+  "DLA5": {
+   "city": "Los Angeles",
+   "region": "CA",
+   "country": "US",
+   "lat": 34.0537,
+   "lon": -118.2428,
+   "match": "Los Angeles, Los Angeles County, California, United States"
+  },
+  "DLN2": {
+   "city": "London",
+   "region": "",
+   "country": "GB",
+   "lat": 51.5074,
+   "lon": -0.1278,
+   "match": "Greater London, England, United Kingdom"
+  },
+  "DNY5": {
+   "city": "Queens",
+   "region": "NY",
+   "country": "US",
+   "lat": 40.7135,
+   "lon": -73.8283,
+   "match": "Queens, Queens County, New York, United States"
+  },
+  "DPH6": {
+   "city": "Phoenix",
+   "region": "AZ",
+   "country": "US",
+   "lat": 33.4484,
+   "lon": -112.0741,
+   "match": "Phoenix, Maricopa County, Arizona, United States"
+  },
+  "DSD2": {
+   "city": "San Diego",
+   "region": "CA",
+   "country": "US",
+   "lat": 32.7157,
+   "lon": -117.1638,
+   "match": "San Diego, San Diego County, California, United States"
+  },
+  "DSE4": {
+   "city": "Seattle",
+   "region": "WA",
+   "country": "US",
+   "lat": 47.6038,
+   "lon": -122.3301,
+   "match": "Seattle, King County, Washington, United States"
+  },
+  "EWR6": {
+   "city": "Edison",
+   "region": "NJ",
+   "country": "US",
+   "lat": 40.5005,
+   "lon": -74.3984,
+   "match": "Edison, Middlesex County, New Jersey, United States"
+  },
+  "EWR8": {
+   "city": "Robbinsville",
+   "region": "NJ",
+   "country": "US",
+   "lat": 40.2163,
+   "lon": -74.6198,
+   "match": "Robbinsville Township, Mercer County, New Jersey, United States"
+  },
+  "FRA3": {
+   "city": "Bad Hersfeld",
+   "region": "",
+   "country": "DE",
+   "lat": 50.8604,
+   "lon": 9.6768,
+   "match": "Bad Hersfeld, Landkreis Hersfeld-Rotenburg, Hessen, 36251, Deutschland"
+  },
+  "GRU9": {
+   "city": "Cajamar",
+   "region": "SP",
+   "country": "BR",
+   "lat": -23.3561,
+   "lon": -46.8769,
+   "match": "Cajamar, São Paulo, Região Sudeste, Brasil"
+  },
+  "GSO1": {
+   "city": "Greensboro",
+   "region": "NC",
+   "country": "US",
+   "lat": 36.0726,
+   "lon": -79.792,
+   "match": "Greensboro, Guilford County, North Carolina, United States"
+  },
+  "IAD7": {
+   "city": "Sterling",
+   "region": "VA",
+   "country": "US",
+   "lat": 39.0017,
+   "lon": -77.4033,
+   "match": "Sterling, Loudoun County, Virginia, 20164, United States"
+  },
+  "IAH3": {
+   "city": "Houston",
+   "region": "TX",
+   "country": "US",
+   "lat": 29.7589,
+   "lon": -95.3677,
+   "match": "Houston, Harris County, Texas, United States"
+  },
+  "IND5": {
+   "city": "Whitestown",
+   "region": "IN",
+   "country": "US",
+   "lat": 39.9973,
+   "lon": -86.3458,
+   "match": "Whitestown, Boone County, Indiana, United States"
+  },
+  "JAX3": {
+   "city": "Jacksonville",
+   "region": "FL",
+   "country": "US",
+   "lat": 30.3262,
+   "lon": -81.6579,
+   "match": "Jacksonville, Duval County, Florida, United States"
+  },
+  "JFK5": {
+   "city": "Brooklyn",
+   "region": "NY",
+   "country": "US",
+   "lat": 40.6526,
+   "lon": -73.9497,
+   "match": "Brooklyn, Kings County, New York, United States"
+  },
+  "JFK8": {
+   "city": "Staten Island",
+   "region": "NY",
+   "country": "US",
+   "lat": 40.5835,
+   "lon": -74.1496,
+   "match": "Staten Island, Richmond County, New York, United States"
+  },
+  "KCVG": {
+   "city": "Hebron",
+   "region": "KY",
+   "country": "US",
+   "lat": 39.0658,
+   "lon": -84.7028,
+   "match": "Hebron, Boone County, Kentucky, 41048, United States"
+  },
+  "KSBD": {
+   "city": "San Bernardino",
+   "region": "CA",
+   "country": "US",
+   "lat": 34.1211,
+   "lon": -117.3018,
+   "match": "San Bernardino, San Bernardino County, California, United States"
+  },
+  "LAM1": {
+   "city": "Culver City",
+   "region": "CA",
+   "country": "US",
+   "lat": 34.0211,
+   "lon": -118.3965,
+   "match": "Culver City, Los Angeles County, California, 90232, United States"
+  },
+  "LAS2": {
+   "city": "North Las Vegas",
+   "region": "NV",
+   "country": "US",
+   "lat": 36.2005,
+   "lon": -115.1215,
+   "match": "North Las Vegas, Clark County, Nevada, United States"
+  },
+  "LAX9": {
+   "city": "Rialto",
+   "region": "CA",
+   "country": "US",
+   "lat": 34.1064,
+   "lon": -117.3703,
+   "match": "Rialto, San Bernardino County, California, United States"
+  },
+  "LEX1": {
+   "city": "Lexington",
+   "region": "KY",
+   "country": "US",
+   "lat": 38.0464,
+   "lon": -84.497,
+   "match": "Lexington, Fayette County, Kentucky, United States"
+  },
+  "LEX4": {
+   "city": "Lexington",
+   "region": "KY",
+   "country": "US",
+   "lat": 38.0464,
+   "lon": -84.497,
+   "match": "Lexington, Fayette County, Kentucky, United States"
+  },
+  "LGB6": {
+   "city": "Long Beach",
+   "region": "CA",
+   "country": "US",
+   "lat": 33.769,
+   "lon": -118.1916,
+   "match": "Long Beach, Los Angeles County, California, United States"
+  },
+  "LTN4": {
+   "city": "Dunstable",
+   "region": "",
+   "country": "GB",
+   "lat": 51.8861,
+   "lon": -0.5209,
+   "match": "Dunstable, Central Bedfordshire, England, United Kingdom"
+  },
+  "MCO2": {
+   "city": "Orlando",
+   "region": "FL",
+   "country": "US",
+   "lat": 28.5421,
+   "lon": -81.379,
+   "match": "Orlando, Orange County, Florida, United States"
+  },
+  "MDW6": {
+   "city": "Joliet",
+   "region": "IL",
+   "country": "US",
+   "lat": 41.5264,
+   "lon": -88.084,
+   "match": "Joliet, Will County, Illinois, United States"
+  },
+  "MEM1": {
+   "city": "Memphis",
+   "region": "TN",
+   "country": "US",
+   "lat": 35.146,
+   "lon": -90.0518,
+   "match": "Memphis, Shelby County, West Tennessee, Tennessee, United States"
+  },
+  "MEM6": {
+   "city": "Memphis",
+   "region": "TN",
+   "country": "US",
+   "lat": 35.146,
+   "lon": -90.0518,
+   "match": "Memphis, Shelby County, West Tennessee, Tennessee, United States"
+  },
+  "MIA2": {
+   "city": "Miami Gardens",
+   "region": "FL",
+   "country": "US",
+   "lat": 25.942,
+   "lon": -80.2456,
+   "match": "Miami Gardens, Miami-Dade County, Florida, United States"
+  },
+  "MKE1": {
+   "city": "Kenosha",
+   "region": "WI",
+   "country": "US",
+   "lat": 42.5847,
+   "lon": -87.8212,
+   "match": "Kenosha, Kenosha County, Wisconsin, United States"
+  },
+  "MSP1": {
+   "city": "Shakopee",
+   "region": "MN",
+   "country": "US",
+   "lat": 44.798,
+   "lon": -93.5269,
+   "match": "Shakopee, Scott County, Minnesota, 55379, United States"
+  },
+  "OKC2": {
+   "city": "Oklahoma City",
+   "region": "OK",
+   "country": "US",
+   "lat": 35.473,
+   "lon": -97.5171,
+   "match": "Oklahoma City, Oklahoma County, Oklahoma, United States"
+  },
+  "ONT5": {
+   "city": "Ontario",
+   "region": "CA",
+   "country": "US",
+   "lat": 34.0658,
+   "lon": -117.6484,
+   "match": "Ontario, San Bernardino County, California, United States"
+  },
+  "ONT8": {
+   "city": "Moreno Valley",
+   "region": "CA",
+   "country": "US",
+   "lat": 33.9375,
+   "lon": -117.2306,
+   "match": "Moreno Valley, Riverside County, California, United States"
+  },
+  "ORD4": {
+   "city": "Joliet",
+   "region": "IL",
+   "country": "US",
+   "lat": 41.5264,
+   "lon": -88.084,
+   "match": "Joliet, Will County, Illinois, United States"
+  },
+  "ORD9": {
+   "city": "Bolingbrook",
+   "region": "IL",
+   "country": "US",
+   "lat": 41.7003,
+   "lon": -88.0718,
+   "match": "Bolingbrook, Will County, Illinois, United States"
+  },
+  "ORF3": {
+   "city": "Chesapeake",
+   "region": "VA",
+   "country": "US",
+   "lat": 36.7168,
+   "lon": -76.2494,
+   "match": "Chesapeake, Virginia, United States"
+  },
+  "PDX9": {
+   "city": "Troutdale",
+   "region": "OR",
+   "country": "US",
+   "lat": 45.5393,
+   "lon": -122.3873,
+   "match": "Troutdale, Multnomah County, Oregon, 97060, United States"
+  },
+  "PHL7": {
+   "city": "Carlisle",
+   "region": "PA",
+   "country": "US",
+   "lat": 40.2015,
+   "lon": -77.1891,
+   "match": "Carlisle, Cumberland County, Pennsylvania, 17013, United States"
+  },
+  "PHX6": {
+   "city": "Phoenix",
+   "region": "AZ",
+   "country": "US",
+   "lat": 33.4484,
+   "lon": -112.0741,
+   "match": "Phoenix, Maricopa County, Arizona, United States"
+  },
+  "PHX7": {
+   "city": "Goodyear",
+   "region": "AZ",
+   "country": "US",
+   "lat": 33.4672,
+   "lon": -112.3853,
+   "match": "Goodyear, Maricopa County, Arizona, United States"
+  },
+  "PHX9": {
+   "city": "Phoenix",
+   "region": "AZ",
+   "country": "US",
+   "lat": 33.4484,
+   "lon": -112.0741,
+   "match": "Phoenix, Maricopa County, Arizona, United States"
+  },
+  "RIC2": {
+   "city": "Petersburg",
+   "region": "VA",
+   "country": "US",
+   "lat": 37.2279,
+   "lon": -77.4019,
+   "match": "Petersburg, Virginia, United States"
+  },
+  "RNO4": {
+   "city": "Reno",
+   "region": "NV",
+   "country": "US",
+   "lat": 39.5262,
+   "lon": -119.8127,
+   "match": "Reno, Washoe County, Nevada, United States"
+  },
+  "SAN3": {
+   "city": "Otay Mesa",
+   "region": "CA",
+   "country": "US",
+   "lat": 32.5629,
+   "lon": -116.9878,
+   "match": "Otay Mesa, San Diego, San Diego County, California, United States"
+  },
+  "SAT4": {
+   "city": "San Antonio",
+   "region": "TX",
+   "country": "US",
+   "lat": 29.4246,
+   "lon": -98.4951,
+   "match": "San Antonio, Bexar County, Texas, United States"
+  },
+  "SAV7": {
+   "city": "Savannah",
+   "region": "GA",
+   "country": "US",
+   "lat": 32.079,
+   "lon": -81.0921,
+   "match": "Savannah, Chatham County, Georgia, United States"
+  },
+  "SBD5": {
+   "city": "San Bernardino",
+   "region": "CA",
+   "country": "US",
+   "lat": 34.1211,
+   "lon": -117.3018,
+   "match": "San Bernardino, San Bernardino County, California, United States"
+  },
+  "SCK4": {
+   "city": "Stockton",
+   "region": "CA",
+   "country": "US",
+   "lat": 37.9577,
+   "lon": -121.2908,
+   "match": "Stockton, San Joaquin County, California, United States"
+  },
+  "SDF4": {
+   "city": "Jeffersonville",
+   "region": "IN",
+   "country": "US",
+   "lat": 38.277,
+   "lon": -85.7372,
+   "match": "Jeffersonville, Clark County, Indiana, United States"
+  },
+  "SEA5": {
+   "city": "Kent",
+   "region": "WA",
+   "country": "US",
+   "lat": 47.3827,
+   "lon": -122.227,
+   "match": "Kent, King County, Washington, United States"
+  },
+  "SEA8": {
+   "city": "Seattle",
+   "region": "WA",
+   "country": "US",
+   "lat": 47.6038,
+   "lon": -122.3301,
+   "match": "Seattle, King County, Washington, United States"
+  },
+  "SEA9": {
+   "city": "Kent",
+   "region": "WA",
+   "country": "US",
+   "lat": 47.3827,
+   "lon": -122.227,
+   "match": "Kent, King County, Washington, United States"
+  },
+  "SFO3": {
+   "city": "Hayward",
+   "region": "CA",
+   "country": "US",
+   "lat": 37.6688,
+   "lon": -122.0808,
+   "match": "Hayward, Alameda County, California, United States"
+  },
+  "SJC7": {
+   "city": "Tracy",
+   "region": "CA",
+   "country": "US",
+   "lat": 37.7386,
+   "lon": -121.4201,
+   "match": "Tracy, San Joaquin County, California, United States"
+  },
+  "SLC2": {
+   "city": "Salt Lake City",
+   "region": "UT",
+   "country": "US",
+   "lat": 40.7596,
+   "lon": -111.8868,
+   "match": "Salt Lake City, Salt Lake County, Utah, United States"
+  },
+  "SMF3": {
+   "city": "West Sacramento",
+   "region": "CA",
+   "country": "US",
+   "lat": 38.5805,
+   "lon": -121.5302,
+   "match": "West Sacramento, Yolo County, California, United States"
+  },
+  "SMF7": {
+   "city": "Sacramento",
+   "region": "CA",
+   "country": "US",
+   "lat": 38.5811,
+   "lon": -121.4939,
+   "match": "Sacramento, Sacramento County, California, United States"
+  },
+  "STL4": {
+   "city": "Edwardsville",
+   "region": "IL",
+   "country": "US",
+   "lat": 38.8114,
+   "lon": -89.9532,
+   "match": "Edwardsville, Madison County, Illinois, United States"
+  },
+  "SYD1": {
+   "city": "Moorebank",
+   "region": "NSW",
+   "country": "AU",
+   "lat": -33.9333,
+   "lon": 150.9497,
+   "match": "Moorebank, Sydney, New South Wales, Australia"
+  },
+  "TEB9": {
+   "city": "Carteret",
+   "region": "NJ",
+   "country": "US",
+   "lat": 40.5773,
+   "lon": -74.2282,
+   "match": "Carteret, Middlesex County, New Jersey, 07008, United States"
+  },
+  "TPA2": {
+   "city": "Ruskin",
+   "region": "FL",
+   "country": "US",
+   "lat": 27.7206,
+   "lon": -82.434,
+   "match": "Ruskin, Hillsborough County, Florida, 33570, United States"
+  },
+  "WRO5": {
+   "city": "Bielany Wroclawskie",
+   "region": "",
+   "country": "PL",
+   "lat": 51.0393,
+   "lon": 16.9687,
+   "match": "Bielany Wrocławskie, gmina Kobierzyce, powiat wrocławski, województwo dolnośląskie, 55-077, Polska"
+  },
+  "YVR2": {
+   "city": "Delta",
+   "region": "BC",
+   "country": "CA",
+   "lat": 49.0846,
+   "lon": -123.0579,
+   "match": "Delta, Metro Vancouver Regional District, British Columbia, Canada"
+  },
+  "YYZ4": {
+   "city": "Brampton",
+   "region": "ON",
+   "country": "CA",
+   "lat": 43.6858,
+   "lon": -79.7599,
+   "match": "Brampton, Peel Region, Ontario, Canada"
+  }
+ }
+}
