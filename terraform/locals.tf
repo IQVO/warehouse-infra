@@ -181,10 +181,19 @@ locals {
   # gets a random 24-char password (see random_password.service_db in
   # postgres.tf); the value lives only in Terraform state, which is gitignored.
   # This keeps credentials out of version control so the repo is safe to publish.
-  service_passwords = {
-    for name in keys(local.services) :
-    name => random_password.service_db[name].result
-  }
+  service_passwords = merge(
+    {
+      for name in keys(local.services) :
+      name => random_password.service_db[name].result if !contains(local.bounded_context_names, name)
+    },
+    # Registered through modules/bounded-context (bounded-contexts.tf). A
+    # literal key on purpose: `module.bounded_context[name]` would make this
+    # local wait for the WHOLE module (its Application included), and the
+    # Postgres release reads this map.
+    {
+      "order-management" = module.bounded_context["order-management"].db_password
+    },
+  )
 
   # sslmode=disable: the Postgres release runs without TLS inside the cluster.
   # Traffic between service pods and Postgres (or, since pgbouncer.tf, PgBouncer)

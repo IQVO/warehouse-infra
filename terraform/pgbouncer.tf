@@ -80,7 +80,7 @@ locals {
       "network-inventory-planning" = {
         db       = local.network_inventory_planning_db_name
         user     = local.network_inventory_planning_db_user
-        password = random_password.network_inventory_planning_db.result
+        password = module.bounded_context["network-inventory-planning"].db_password
       }
     },
     {

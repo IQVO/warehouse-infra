@@ -17,6 +17,8 @@ This repo owns the environment, not the workload: each service's chart lives in 
 
 Exceptions that are NOT in `local.services`: network-fulfillment (`terraform/network-fulfillment.tf`), ops-agent (`terraform/ops-agent.tf`) and the console (`terraform/frontends.tf`) have their own files and their own `kubectl_manifest` in `terraform/argocd-apps.tf`. Do not add network-fulfillment to `analytics_services`: `analytics_db_info` indexes `local.services[name]` and throws a plan-time KeyError. `mcp_services` only needs the name, so it is safe there.
 
+Registered through `terraform/modules/bounded-context` (ADR 0002 phase 1, `docs/adr/0002-application-delivery-boundary.md`): order-management and network-inventory-planning, listed in `terraform/bounded-contexts.tf`. The module owns their generated passwords, `<name>-db`/`<name>-analytics-db` Secrets, image builds and ArgoCD `Application`; the root's `for_each` resources skip every name in `local.bounded_context_names`. order-management stays in `local.services` for its computed values. A NEW context still goes into `local.services` until phase 2 moves every context onto the module.
+
 ## 2. Per-service env: where it must live
 
 `services.tf` computes `local.service_helm_values` and pre-merges it OVER `helm-values/<svc>.yaml` into `local.service_full_values` (computed wins; only `config` and `analytics` are deep-merged). An `extraEnv` list written in a `helm-values/*.yaml` file is silently dropped and `terraform plan` shows nothing. Put per-service env that has no dedicated chart value into `local.sync_edge_env` (`terraform/locals.tf`).
