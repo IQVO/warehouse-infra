@@ -1,47 +1,19 @@
 # ---------------------------------------------------------------------------
-# The four bounded-context services.
+# The computed Helm values of the bounded contexts in local.services.
 #
-# Each is installed from the Helm chart that already ships in its OWN repo
-# (see locals.tf `chart_path`). warehouse-infra contributes only the
-# environment: a values file per service in ../helm-values/ for the static
-# bits, plus the values computed here (image tag, database URL, Kong route).
-# Terraform-computed values are appended last, so they win over the file.
+# Each is installed from the Helm chart that already ships in its OWN repo.
+# warehouse-infra contributes only the environment: a values file per service
+# in ../helm-values/ for the static bits, plus the values computed here (Kong
+# routes, analytics, MCP, feature switches). The image builds, the image tags,
+# the database Secrets and the ArgoCD Applications come from
+# modules/application (applications.tf, ADR 0002): the module sets
+# image.tag and frontend.image.tag on these values itself.
 #
-# Images are built and side-loaded into kind rather than pushed to a registry;
-# `docker build` + `kind load docker-image` is the whole supply chain. The
-# hash below re-triggers that build whenever Go source, migrations, the
-# Dockerfile or the module files change.
+# ADR 0002 phase 3 moves these values into value files that ArgoCD reads from
+# this repo (docs/adr/0002-application-delivery-boundary.md).
 # ---------------------------------------------------------------------------
 
 locals {
-  # Contexts registered through modules/bounded-context hash their own source
-  # (bounded-contexts.tf, ADR 0002 phase 1).
-  service_source_hash = {
-    for name, svc in local.services :
-    name => sha256(join("", concat(
-      [for f in sort(fileset("${path.module}/../../${name}", "**/*.go")) : filesha256("${path.module}/../../${name}/${f}")],
-      [for f in sort(fileset("${path.module}/../../${name}", "migrations/**")) : filesha256("${path.module}/../../${name}/${f}")],
-      # warehouse-planning, product-master and inbound-receiving keep their migrations under
-      # internal/ (the others use a top-level migrations/ dir, matched above).
-      # No other service has files matching this pattern, so adding it leaves
-      # their hashes unchanged.
-      [for f in sort(fileset("${path.module}/../../${name}", "internal/**/migrations/**")) : filesha256("${path.module}/../../${name}/${f}")],
-      # warehouse-planning's and product-master's ANALYTICAL migrations live in
-      # a top-level analytics/migrations/ (applied by their projectors; no Go
-      # file changes with them, so a migration-only change would otherwise
-      # never rebuild the image). The other services keep theirs under
-      # migrations/analytics/, already matched by the top-level migrations/**
-      # term above, and have no top-level analytics/ directory, so this leaves
-      # their hashes unchanged.
-      [for f in sort(fileset("${path.module}/../../${name}", "analytics/migrations/**")) : filesha256("${path.module}/../../${name}/${f}")],
-      [
-        filesha256("${path.module}/../../${name}/Dockerfile"),
-        filesha256("${path.module}/../../${name}/go.mod"),
-        filesha256("${path.module}/../../${name}/go.sum"),
-      ],
-    ))) if !contains(local.bounded_context_names, name)
-  }
-
   # Gateway API (gateway-api.tf): every service in local.services now
   # migrates from Ingress to HTTPRoute, chart-rendered via each service's
   # own `gatewayApi` values block (added to all 7 charts in the fan-out
@@ -52,65 +24,29 @@ locals {
   # mechanism) and instead gets `gatewayApi.enabled=true` with the shared
   # Gateway as its parentRef.
   gateway_api_pilot_services = var.deploy_gateway_api ? toset(keys(local.services)) : toset([])
-
-  # Content-derived image tag (ArgoCD rollout, Task 6). `var.image_tag`
-  # ("local", fixed) previously left a rebuilt image's pod spec
-  # byte-identical, which is exactly the documented "rebuilt image alone
-  # does not roll a running Deployment" pitfall -- and under ArgoCD it is
-  # no longer just an inconvenience: Argo's diffing IS what triggers a
-  # sync, so a tag that never changes gives Argo nothing to detect on a
-  # rebuild. Mirrors local.frontend_source_hash's existing pattern exactly.
-  # Only the contexts this file still builds; modules/bounded-context sets
-  # image.tag itself for the ones registered through it.
-  service_image_tags = {
-    for name, hash in local.service_source_hash :
-    name => "local-${substr(hash, 0, 12)}"
-  }
-}
-
-
-resource "null_resource" "build_and_load" {
-  for_each = var.deploy_services ? { for name, svc in local.services : name => svc if !contains(local.bounded_context_names, name) } : {}
-
-  depends_on = [kind_cluster.warehouse]
-
-  triggers = {
-    source_hash = local.service_source_hash[each.key]
-    image       = "warehouse/${each.key}:${local.service_image_tags[each.key]}"
-    cluster     = var.cluster_name
-  }
-
-  provisioner "local-exec" {
-    command = "${path.module}/../scripts/build-and-load.sh '${each.key}' '${local.service_image_tags[each.key]}' '${var.cluster_name}'"
-  }
 }
 
 # ---------------------------------------------------------------------------
 # NOTE: there is deliberately NO `helm_release.service` resource here
-# anymore. ArgoCD (argocd-apps.tf's `kubectl_manifest.application`, one per
-# service) is now the SOLE owner of these 8 Helm releases' lifecycle --
-# removed from Terraform state via `terraform state rm` on 2026-09-12 after
-# verifying every Application was already Synced/Healthy (never a `helm
-# uninstall`; the running release was simply handed off). Re-adding a
-# `helm_release.service` resource here would fight ArgoCD for ownership of
-# the exact same release name+namespace. `null_resource.build_and_load`
-# above still builds and side-loads each service's image -- that part of
-# the supply chain is unrelated to which controller applies the chart.
+# anymore. ArgoCD (one Application per context, created by
+# modules/application) is the SOLE owner of these Helm releases'
+# lifecycle -- removed from Terraform state via `terraform state rm` on
+# 2026-09-12 after verifying every Application was already Synced/Healthy
+# (never a `helm uninstall`; the running release was simply handed off).
+# Re-adding a `helm_release.service` resource here would fight ArgoCD for
+# ownership of the exact same release name+namespace.
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# The full computed Helm values per service — extracted from helm_release.
-# service's `values` argument (unchanged content, pure refactor) so both the
-# Terraform-owned helm_release above AND the ArgoCD Application resources in
-# argocd-apps.tf read from exactly one computation. This is what makes "add a
-# service to local.services, get an ArgoCD Application with full parity" true
-# without re-implementing any of the 9 conditional blocks below in a second
-# place (e.g. an ApplicationSet Go-template).
+# The full computed Helm values per service, read by each service's ArgoCD
+# Application (modules/application, registered in applications.tf). This is
+# what makes "add a service to local.services, get an ArgoCD Application"
+# true without re-implementing any of the conditional blocks below in a
+# second place (e.g. an ApplicationSet Go-template).
 #
-# NOTE: `database` changed from a plaintext `url` to `existingSecret`
-# (Phase 3 of the ArgoCD rollout) -- kubernetes_secret.service_db in
-# postgres.tf creates "<service>-db" directly, so an Application CR's
-# Git/cluster-visible values never carry a plaintext DSN.
+# NOTE: `database` is `existingSecret`, never a plaintext `url`:
+# modules/application creates "<service>-db" directly, so an Application
+# CR's Git/cluster-visible values never carry a plaintext DSN.
 # ---------------------------------------------------------------------------
 locals {
   service_helm_values = {
@@ -119,12 +55,10 @@ locals {
       {
         image = {
           repository = "warehouse/${name}"
-          # null for a context registered through modules/bounded-context:
-          # the module sets the tag of the image it builds.
-          tag = lookup(local.service_image_tags, name, null)
           # The image only ever exists in the kind nodes' containerd store, put
           # there by `kind load docker-image`. IfNotPresent stops the kubelet
-          # trying to pull it from Docker Hub and ImagePullBackOff-ing.
+          # trying to pull it from Docker Hub and ImagePullBackOff-ing. Its
+          # content-addressed tag is set by modules/application.
           pullPolicy = "IfNotPresent"
         }
 
@@ -394,11 +328,8 @@ locals {
           enabled = true
           image = {
             repository = "warehouse/${name}-frontend"
-            # Content-addressed, NOT the fixed "local" tag this file uses for
-            # the Go image above. See frontends.tf's comment: a fixed tag
-            # leaves the pod template identical after a rebuild, so the old
-            # bundle keeps serving until something else changes the spec.
-            tag        = "local-${local.frontend_source_hash[name]}"
+            # The content-addressed tag is set by modules/application,
+            # which builds this image.
             pullPolicy = "IfNotPresent"
           }
         }
@@ -432,10 +363,10 @@ locals {
 
   # ---------------------------------------------------------------------
   # Full per-service values, static file + computed layer PRE-MERGED into
-  # one object. helm_release.service (above) doesn't need this -- Helm's
-  # own engine deep-merges the `values = [file(...), yamlencode(...)]`
-  # list at install/upgrade time. ArgoCD's Application `helm.valuesObject`
-  # (argocd-apps.tf) accepts only ONE values object per source, so this is
+  # one object. Helm's own engine would deep-merge a
+  # `values = [file(...), yamlencode(...)]` list at install/upgrade time,
+  # but ArgoCD's Application `helm.valuesObject` (modules/application)
+  # accepts only ONE values object per source, so this is
   # the one place that merge has to happen ahead of time, in Terraform.
   #
   # A plain top-level `merge()` (computed wins) is correct for every key

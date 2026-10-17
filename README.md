@@ -236,7 +236,8 @@ is `SlotPlanApproved` → wes-work-planning (its inbound consumer, on whenever i
 (post-deploy seed step 1). Two things a first `terraform apply` will
 not do on its own: (1) initdb never re-runs on a populated Postgres, so create
 the role/database once by hand, mirroring `templates/init-databases.sql.tftpl`
-with the password from `random_password.service_db["slotting-optimization"]`;
+with the password from `module.application["slotting-optimization"]`'s
+generated `db_password` (`terraform console`, never printed in a log);
 (2) its chart does not render the Kong plugins yet (no `kong-plugins.yaml`), so
 `scripts/test-exposure-policy.sh` section 11 flags its HTTPRoute and Kong
 exports no `kong_http_requests_total` series for it until that chart change
@@ -312,8 +313,8 @@ the chart defaults, so a busy pod can still burst.
 * `terraform/kind-overlay.tf` — merges each overlay **into the Application's
   `helm.valuesObject`** (explicitly at `resources`, `mcp`, `frontend` and
   `analytics.projector` / `analytics.reports`, because Terraform's `merge()` is
-  shallow). `terraform/argocd-apps.tf` reads the merged
-  `local.argocd_*_values`.
+  shallow). `terraform/applications.tf` passes the merged
+  `local.argocd_*_values` to each application's module instance.
 * Not a separate `helm.values` string: ArgoCD v2.13 renders **only**
   `valuesObject` when both are set, so a `values` string is silently ignored
   ([#81](https://github.com/IQVO/warehouse-infra/pull/81) shipped that form;
@@ -740,7 +741,8 @@ warehouse-ops-agent's ADR-0004 model-backed Reasoner is wired real in this
 cluster (`LLM_MODE=shadow` — it calls the real Anthropic API alongside the
 deterministic policy, logs agreement, but never acts on the model's output
 alone). Terraform creates the Kubernetes Secret
-(`kubernetes_secret.ops_agent_anthropic` in `terraform/ops-agent.tf`) but
+(`warehouse-ops-agent-anthropic`, from the ops agent's `secrets` entry in
+`terraform/applications.tf`) but
 **never generates or hardcodes the API key itself** — `var.anthropic_api_key`
 defaults to `""`.
 
@@ -775,8 +777,10 @@ only the environment.** There is exactly one copy of every manifest.
 > [ADR 0002](docs/adr/0002-application-delivery-boundary.md) extends this
 > decision: application configuration moves out of the Terraform computed
 > layer described below into value files that ArgoCD reads from this repo,
-> and every application is registered through one `bounded-context` module.
-> Until its phases land, the split below is what the code does.
+> and every application is registered through one `application` module
+> ([ADR 0004](docs/adr/0004-one-application-registry.md), done: see
+> `terraform/applications.tf`). Until its other phases land, the split below
+> is what the code does.
 
 All four services already ship a complete, well-formed Helm chart at
 `<service>/charts/<service>/` — Deployment, Service, ServiceAccount, ConfigMap,
@@ -800,7 +804,7 @@ So the split is:
 
 `terraform/locals.tf` points each service at its chart via a relative
 `chart_path` (`${path.module}/../../<service>/charts/<service>`), consumed by
-the ArgoCD `Application` source's `path` field (`argocd-apps.tf`).
+the ArgoCD `Application` source's `path` field (`modules/application`).
 
 ### No application changes were required
 
@@ -845,31 +849,34 @@ was staged for commit.
 ## Deploying a new bounded context (GitOps via ArgoCD)
 
 **ArgoCD is now the sole owner of every chart's Helm release lifecycle** —
-all 8 database-backed bounded-context services, `warehouse-ops-agent`, and
-`warehouse-console` (10 Applications total). Terraform still bootstraps the
+every application in `terraform/applications.tf`'s registry (the
+`local.services` contexts, network-inventory-planning, network-fulfillment,
+`warehouse-ops-agent`, `warehouse-console` and the EventCatalog: 17
+Applications). Terraform still bootstraps the
 platform (kind, Postgres, Kafka, Istio, Kong, the Nginx web gateway, and
 ArgoCD itself) and still computes every release's full environment values,
 but it no longer runs `helm install`/`upgrade` directly for any of them — it
 hands each one to ArgoCD instead.
 
-**Registering a new service is still exactly one step: add it to
-`terraform/locals.tf`'s `local.services` map.** Nothing else changes. That
-map feeds BOTH `terraform/services.tf`'s `local.service_full_values`
-computation (image tag, database secret ref, Kong/Gateway route, analytics,
-MCP, and every other conditional block already documented there) AND
-`terraform/argocd-apps.tf`'s `kubectl_manifest.application` resource, which
-`for_each`-es over that same map. (`warehouse-ops-agent` and
-`warehouse-console` sit outside `local.services` — no database — and each
-gets its own single, explicitly-named `kubectl_manifest` resource instead;
-see `ops-agent.tf`'s `local.ops_agent_helm_values` and `frontends.tf`'s
-`local.console_helm_values`.) A `terraform apply` after adding an entry:
+**Registering a new service with the shared chart shape is two steps: add
+it to `terraform/locals.tf`'s `local.services` map, and add its literal
+`db_password` line to `local.app_db_passwords` in `terraform/applications.tf`**
+(the plan fails until you do). That map feeds BOTH `terraform/services.tf`'s
+`local.service_full_values` computation (database secret ref, Kong/Gateway
+route, analytics, MCP, and every other conditional block already documented
+there) AND the application registry in `terraform/applications.tf`, which
+gives every entry one instance of `terraform/modules/application`
+([ADR 0004](docs/adr/0004-one-application-registry.md)). Applications with
+their own chart shape (`warehouse-ops-agent`, `warehouse-console`, the
+EventCatalog, network-fulfillment, network-inventory-planning) get an
+explicit entry in `local.other_applications` instead, with values computed in
+their own file. A `terraform apply` after adding an entry:
 
-1. Builds and side-loads the new service's image
-   (`null_resource.build_and_load`, unchanged from before).
-2. Creates its `<service>-db` Secret directly
-   (`kubernetes_secret.service_db` in `postgres.tf`) — no chart ever sees a
-   plaintext `DATABASE_URL` value through an ArgoCD `Application`'s
-   Git/cluster-visible spec.
+1. Builds and side-loads the new service's image (the module's
+   `null_resource.build_and_load`).
+2. Creates its `<service>-db` Secret directly (the module's
+   `kubernetes_secret.db`) — no chart ever sees a plaintext `DATABASE_URL`
+   value through an ArgoCD `Application`'s Git/cluster-visible spec.
 3. Applies a new `Application` CR pointed at that service's own
    `charts/<service>` in ITS OWN repo, with `syncPolicy.automated.prune` and
    `.selfHeal` both on. ArgoCD picks it up, installs the release, and from
@@ -903,9 +910,9 @@ Local admin access is `kubectl port-forward` only, same as above.
 Helm release it owned — no orphaned resources left behind.
 
 **Image tags are content-derived**, not the fixed `"local"` value from
-before this GitOps rollout: `local.service_image_tags[name]` hashes each
-service's Go source/migrations/Dockerfile/go.mod/go.sum (mirroring the
-existing `service_source_hash`). This is required, not cosmetic — ArgoCD's
+before this GitOps rollout: `modules/application` tags each image
+`local-<hash12>` over the service's Go source/migrations/Dockerfile/go.mod/
+go.sum. This is required, not cosmetic — ArgoCD's
 sync only fires on an actual diff, and a tag that never changes on rebuild
 gives it nothing to detect. This also happens to fix the older
 "rebuilt image alone does not roll a running Deployment" pitfall documented
@@ -1119,14 +1126,14 @@ warehouse-infra/
     ├── postgres.tf              # PostgreSQL release + 4 databases
     ├── istio.tf                 # istio-base -> istiod
     ├── kong.tf                  # Kong Gateway + Ingress Controller
-    ├── services.tf              # build/load + the four service releases
+    ├── services.tf              # computed Helm values of the local.services contexts
     ├── argocd.tf                # ArgoCD release (helm-values/argocd.yaml)
-    ├── argocd-apps.tf           # one ArgoCD Application per service (valuesObject from kind-overlay.tf)
     ├── kind-overlay.tf          # merges helm-values/kind-resources/*.yaml into each valuesObject
-    ├── bounded-contexts.tf      # contexts registered through modules/bounded-context (ADR 0002)
+    ├── applications.tf          # the application registry: one modules/application instance each (ADR 0004)
+    ├── moved-applications.tf    # state moves onto the module (ADR 0002 D3)
     ├── outputs.tf
     ├── modules/
-    │   └── bounded-context/     # one application's platform contract: DB passwords, Secrets, images, Application
+    │   └── application/         # one application's platform contract: DB passwords, Secrets, images, Application
     └── templates/
         └── init-databases.sql.tftpl
 ```
@@ -1184,7 +1191,7 @@ injection requires zero application changes.
 `migrations/**`, `Dockerfile`, `go.mod` and `go.sum`, keeps the whole thing a
 single `terraform apply` while still rebuilding only what changed. Images are
 tagged `warehouse/<service>:local-<hash12>` (the first 12 characters of that
-same source hash, `local.service_image_tags` in `terraform/services.tf`), so a
+same source hash, computed in `terraform/modules/application`), so a
 rebuilt image always carries a new tag and ArgoCD rolls the pods. They use
 `pullPolicy: IfNotPresent`, because they exist only in the kind nodes'
 containerd store and must never be pulled from Docker Hub.

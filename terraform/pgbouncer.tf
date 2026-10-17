@@ -80,14 +80,14 @@ locals {
       "network-inventory-planning" = {
         db       = local.network_inventory_planning_db_name
         user     = local.network_inventory_planning_db_user
-        password = module.bounded_context["network-inventory-planning"].db_password
+        password = local.app_db_passwords["network-inventory-planning"]
       }
     },
     {
       "network-fulfillment" = {
         db       = local.network_fulfillment_db_name
         user     = local.network_fulfillment_db_user
-        password = random_password.network_fulfillment_db.result
+        password = local.app_db_passwords["network-fulfillment"]
       }
     },
   )
@@ -117,7 +117,7 @@ locals {
 # Holds both rendered config files as Secret keys (not a ConfigMap: the
 # userlist.txt key carries every OLTP role's real plaintext password --
 # same "never a plaintext DSN/credential in a non-Secret object" posture
-# postgres.tf's own header explains for kubernetes_secret.service_db).
+# modules/application's <name>-db Secrets follow).
 # Mounted as a whole directory at PgBouncer's MOUNTED_CONF_DIR
 # (/bitnami/pgbouncer/conf) -- the Bitnami entrypoint's own
 # pgbouncer_copy_mounted_config step copies both files into its real config

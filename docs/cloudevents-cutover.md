@@ -123,7 +123,7 @@ done
 ## 2. Freeze ArgoCD auto-sync
 
 Every service Application has `syncPolicy.automated.selfHeal = true`
-(`terraform/argocd-apps.tf`), so a manual `kubectl scale` is reverted
+(`terraform/modules/application`), so a manual `kubectl scale` is reverted
 within seconds. Suspend auto-sync for the cutover window:
 
 ```bash

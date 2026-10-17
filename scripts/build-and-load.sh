@@ -2,7 +2,8 @@
 # Build one service's image from its existing Dockerfile and side-load it into
 # the kind cluster's containerd store.
 #
-# Invoked by Terraform (null_resource.build_and_load in terraform/services.tf),
+# Invoked by Terraform (null_resource.build_and_load in
+# terraform/modules/application),
 # and safe to run by hand:
 #     ./scripts/build-and-load.sh inventory-storage local warehouse
 set -euo pipefail
