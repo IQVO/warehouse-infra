@@ -110,7 +110,9 @@ tests:
 
   # Both windows must hold: 20% 5xx for the first 20 minutes, then clean. At
   # 40m the 1h/6h windows still burn but the 5m window is clean, so the fast
-  # alert has resolved; the slow pair (6h and 30m) is still above 3.
+  # alert has resolved; the slow pair (6h and 30m) is still above 3. The slow
+  # burn reads 10.26 rather than 10: rate() extrapolates the 5xx counter that
+  # stopped moving at minute 20 differently from the one that kept moving.
   - name: a recovered spike clears the fast alert while the slow one still holds
     interval: 1m
     input_series:
@@ -143,7 +145,7 @@ tests:
               service: httproute.warehouse-systems.process-path-management.0
             exp_annotations:
               summary: "Process Path Management: API availability SLO burning slowly (day's budget gone in ~8 hours)"
-              description: "Kong route httproute.warehouse-systems.process-path-management.0 answers 5xx at 10x the rate the one-day 99% availability SLO allows, over the last 6 hours and over the last 30 minutes (5xx ratio of 3% or more). At this burn the whole day's error budget is gone in about 8 hours. The alert needs at least 30 requests in the last 6 hours, so one failed request on an idle local route cannot fire it."
+              description: "Kong route httproute.warehouse-systems.process-path-management.0 answers 5xx at 10.26x the rate the one-day 99% availability SLO allows, over the last 6 hours and over the last 30 minutes (5xx ratio of 3% or more). At this burn the whole day's error budget is gone in about 8 hours. The alert needs at least 30 requests in the last 6 hours, so one failed request on an idle local route cannot fire it."
               runbook_url: https://iqvo.github.io/process-path-management/docs/operations/runbook
               dashboard_url: http://localhost:3000/d/warehouse-process-path-management
 
