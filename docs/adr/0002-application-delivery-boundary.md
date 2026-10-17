@@ -2,9 +2,10 @@
 
 ## Status
 
-Accepted (2026-10-17). Phase 1 (module pilot: order-management and
-network-inventory-planning) merged; its state moves take effect at the next
-`terraform apply`. Phases 2 to 6 open.
+Accepted (2026-10-17). Amended by [ADR 0003](0003-per-application-terraform-state.md)
+(D6: one Terraform state per application). Phase 1 (module pilot:
+order-management and network-inventory-planning) merged and its state moves
+recorded on the cluster's state (2026-10-17). Phases 2 to 6 open.
 
 ## Context
 
