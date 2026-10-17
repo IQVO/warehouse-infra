@@ -219,11 +219,15 @@ locals {
         # in the process-path catalogue (PICK).
         transferPickPathId    = "pick"
         transferPickCptOffset = "2h"
-        # NOT in the seeded catalogue: create it in process-path-management
-        # (id TRANSFER_DISPATCH, matchPrefix transfer-dispatch, direct) before
-        # a TransferPicked fact can release the dispatch demand; until then the
-        # dispatch leg stays fail-closed. README "Network inventory planning".
-        transferDispatchPathId    = "transfer-dispatch"
+        # `dispatch-transfer` falls in the DISPATCH family that
+        # process-path-management declares in catalogue/paths.json (ADR 0035:
+        # id DISPATCH, matchPrefix dispatch, capability dispatch, intake
+        # STOCK_TRANSFER). fulfillment-execution turns the path id into the task
+        # type (ADR-0036), and a path matches an id only as `dispatch` or
+        # `dispatch-*`, so a value outside that family never resolves. Until
+        # seed_catalogue.py has converged the DISPATCH path (README "Post-deploy
+        # seeds") the dispatch leg stays fail-closed after the pick.
+        transferDispatchPathId    = "dispatch-transfer"
         transferDispatchCptOffset = "3h"
         outboxRelayEnabled        = "true"
       }

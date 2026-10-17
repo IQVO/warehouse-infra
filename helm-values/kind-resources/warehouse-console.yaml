@@ -1,0 +1,9 @@
+# kind CPU-request overlay for warehouse-console (generated from warehouse-console/charts/warehouse-console/values.yaml on develop).
+# The local kind cluster is ONE worker with the Docker VM's 10 CPUs; chart defaults request
+# 50-100m per container (~10 cores for 76 app containers) while real use is ~10% of that, so
+# rolling updates (maxSurge 1 per Deployment) could not schedule. Only requests.cpu is lowered;
+# limits and memory keep the chart defaults. Merged INTO the Application's helm.valuesObject by
+# terraform/kind-overlay.tf (ArgoCD ignores a helm.values string when valuesObject is set).
+resources:
+  requests:
+    cpu: 25m
