@@ -60,14 +60,9 @@ locals {
         repo_url = "https://github.com/IQVO/network-inventory-planning.git"
         path     = "charts/network-inventory-planning"
       }
-      # Exactly the globs network-inventory-planning.tf hashed before the
-      # module. NOTE: the repo also keeps analytics/migrations/, which this
-      # list does not hash, so an analytics-migration-only change does not
-      # rebuild the image. The module default (which hashes it) replaces this
-      # list in its own change, because it changes the image tag.
-      image = {
-        hash_globs = ["**/*.go", "internal/**/migrations/**"]
-      }
+      # The module's default hash covers both migration trees its Dockerfile
+      # copies into the image (internal/**/migrations, analytics/migrations).
+      image    = {}
       frontend = contains(keys(local.frontend_remotes), "network-inventory-planning") ? { source_hash = local.frontend_source_hash["network-inventory-planning"] } : null
       database = merge(local.oltp_endpoints, {
         name = local.network_inventory_planning_db_name
@@ -88,11 +83,9 @@ locals {
         repo_url = "https://github.com/IQVO/network-fulfillment.git"
         path     = "charts/network-fulfillment"
       }
-      # Exactly what network-fulfillment.tf hashed before the module: Go
-      # sources only. Same follow-up as network-inventory-planning above.
-      image = {
-        hash_globs = ["**/*.go"]
-      }
+      # The module's default hash covers migrations/ (OLTP, plus
+      # migrations/analytics), which its Dockerfile copies into the image.
+      image    = {}
       frontend = contains(keys(local.frontend_remotes), "network-fulfillment") ? { source_hash = local.frontend_source_hash["network-fulfillment"] } : null
       database = merge(local.oltp_endpoints, {
         name = local.network_fulfillment_db_name
