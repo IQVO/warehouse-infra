@@ -382,11 +382,15 @@ one-time YAML → process-path-management migration and is superseded by
    already renders the OLTP role into its userlist on apply, and the analytics database
    is reached directly (never through PgBouncer).
 2. **The dispatch path.** NIP releases the dispatch leg with
-   `TRANSFER_DISPATCH_PATH_ID=transfer-dispatch`. process-path-management is the
-   catalogue's source of truth (the YAML under `config/process-paths/` is frozen), so
-   create the path there once: id `TRANSFER_DISPATCH`, matchPrefix `transfer-dispatch`,
-   direct, with the capability the dispatch crew carries. Until it exists the dispatch
-   leg is fail-closed (the saga stops after the pick).
+   `TRANSFER_DISPATCH_PATH_ID=dispatch-transfer`. process-path-management is the
+   catalogue's source of truth (the YAML under `config/process-paths/` is frozen) and
+   declares the `DISPATCH` family in `catalogue/paths.json` (its ADR 0035: matchPrefix
+   `dispatch`, direct, capability `dispatch`, intake `STOCK_TRANSFER`). The path id is
+   the fulfillment-execution task type, so the configured value must be `dispatch` or
+   `dispatch-*`. Run `seed_catalogue.py` (step 1 of "Post-deploy seeds") once the
+   declaration is on process-path-management's `develop`; until the path exists the
+   dispatch leg is fail-closed (the saga stops after the pick). Floor stations need the
+   `dispatch` capability to claim the task.
 
 ---
 
@@ -427,9 +431,9 @@ curl -s http://localhost:8000/api/process-path-management/process-paths/RELOCATE
 curl -s http://localhost:8000/api/process-path-management/process-paths/PICK   # intake ["CUSTOMER_ORDER"]
 ```
 
-`TRANSFER_DISPATCH` (NIP's dispatch leg, see the NIP runbook above) is not in
-`paths.json` yet, so it is still created by hand once; the catalogue seed never
-touches paths it does not declare.
+`DISPATCH` (NIP's dispatch leg, see the NIP runbook above) is declared in
+`paths.json` too, so the same seed creates it; the catalogue seed never touches
+paths it does not declare.
 
 ### Site transfer capability (`scripts/seed-transfer-capability.py`)
 
