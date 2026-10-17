@@ -18,8 +18,9 @@
 #                     total on GET /slot-plans/{planId} and the MCP plan tool)
 # Topics are auto-created by the first writer with the broker's
 # num.partitions / replication-factor-1 overrides (kafka.tf has no topic
-# resources -- the fleet norm), so warehouse.slotting-optimization.events and
-# the four <topic>.dlq need no declaration here.
+# resources -- the fleet norm), so warehouse.slotting-optimization.events,
+# warehouse.slotting-optimization.analytics (ADR 0006) and the .dlq topics
+# need no declaration here.
 #
 # Every key below is a DEDICATED chart value
 # (charts/slotting-optimization/values.yaml renders each one to its env var),
@@ -36,7 +37,9 @@
 #
 # DEMAND_SITE_ID / DEFAULT_SITE_ID are deliberately left unset: every request
 # names its site and every site's demand is ingested (no invented default).
-# The read-only MCP server (mcp.enabled) stays off: no consumer is wired yet.
+# The read-only MCP server is switched on by services.tf's mcp_services gate
+# (terraform/mcp.tf); the ops-agent consumes it (ops-agent.tf,
+# warehouse-ops-agent #151).
 
 replicaCount: 1
 
@@ -69,3 +72,21 @@ config:
 kafka:
   enabled: true
   brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
+
+# Analytics read side (ADR 0006, enabled by this change). `enabled` is also
+# set by Terraform's computed layer (services.tf,
+# contains(local.analytics_services, name)); repeated here so this file is
+# the readable source of truth, exactly as the siblings do. The projector's
+# consumer group (ANALYTICS_CONSUMER_GROUP) is a FIXED, stable id (fleet
+# charter naming `<ctx>-analytics`), pinned equal to the chart's default so
+# a rename there cannot silently orphan the committed offsets. NOTE the key
+# shape differs from the siblings: this chart pins the group at
+# analytics.consumerGroup (NOT analytics.projector.consumerGroup) and takes
+# the DSN as a single analytics.url -- computed by services.tf and
+# shallow-merged over this block (disjoint keys) -- NOT the
+# database.projectorUrl/reportsUrl pair. The role/database are NOT created
+# by a plain apply on an already-populated Postgres: see the infra PR
+# runbook.
+analytics:
+  enabled: true
+  consumerGroup: "slotting-optimization-analytics"

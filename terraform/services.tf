@@ -136,6 +136,28 @@ locals {
           }
         }
       } : {},
+      # slotting-optimization's analytics block (ADR 0006, repo PR #37) does
+      # NOT share the generic shape above: its chart takes a single DSN --
+      # analytics.url, rendered by its own analytics-secret.yaml into
+      # ANALYTICS_DATABASE_URL -- instead of the
+      # analytics.database.projectorUrl/reportsUrl pair (the same divergence
+      # network-fulfillment's chart has; see network-fulfillment.tf), pins
+      # its consumer group at analytics.consumerGroup (helm-values, not
+      # analytics.projector.consumerGroup) and ships NO chart-rendered
+      # reports Kong route (no analytics.reports.route value exists in its
+      # values.yaml), so there is nothing to enable there. This entry sits
+      # AFTER the generic block in merge() on purpose: merge is shallow, so
+      # this `analytics` map wholly replaces the generic one for this one
+      # service (its database/reports keys would be dead values the chart
+      # never reads). KAFKA_BROKERS needs no wiring here either:
+      # helm-values/slotting-optimization.yaml already sets kafka.enabled +
+      # brokers, and the chart refuses to render analytics without them.
+      name == "slotting-optimization" ? {
+        analytics = {
+          enabled = true
+          url     = local.analytics_database_urls[name]
+        }
+      } : {},
       # Process-path catalogue (ADR-0017 in fulfillment-execution / ADR-0012
       # in wes-work-planning / ADR-0013 in workforce-management): these three
       # services fail fast at boot without it. config/process-paths/sortable-fc.yaml

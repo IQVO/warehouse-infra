@@ -150,10 +150,11 @@ locals {
     # consumer groups) all have DEDICATED chart values, so they live in
     # helm-values/slotting-optimization.yaml, NOT in local.sync_edge_env. Its
     # migrations live under internal/ (matched by services.tf's
-    # internal/**/migrations/** term). NOT in mcp_services (its read-only
-    # cmd/mcp ships in the chart but no consumer is wired yet), NOT in
-    # analytics_services (no analytics read side) and NOT in frontend_remotes
-    # (no web/ remote).
+    # internal/**/migrations/** term). IN mcp_services (its read-only cmd/mcp;
+    # see terraform/mcp.tf -- the ops-agent consumes it, ops-agent.tf) and IN
+    # analytics_services (its ADR 0006 analytics read side,
+    # cmd/slotting-projector + cmd/slotting-reports, since repo PR #37), but
+    # NOT in frontend_remotes (no web/ remote).
     "slotting-optimization" = {
       db         = "slotting_optimization"
       user       = "slotting_optimization"
@@ -301,6 +302,20 @@ locals {
     # analytics/migrations/, already hashed by modules/application's default
     # image hash. Same one-time SQL caveat as warehouse-planning above.
     "inbound-receiving",
+    # Added (slotting-optimization ADR 0006, repo PR #37): the slot-plan
+    # funnel data product -- the `warehouse.slotting-optimization.analytics`
+    # stream (same outbox as the integration topic), cmd/slotting-projector
+    # (writer, admin :8091, group slotting-optimization-analytics) and
+    # cmd/slotting-reports (read-only reader, :8092), role/database
+    # slotting_optimization_analytics. Same image as the api and mcp
+    # binaries (one image build; its analytical migrations live in a
+    # top-level analytics/migrations/, already covered by
+    # modules/application's default hash_globs). Its chart takes the
+    # single-DSN shape (analytics.url -- services.tf), NOT the
+    # database.projectorUrl/reportsUrl pair, and ships no reports Kong
+    # route; see services.tf. Same one-time SQL caveat as
+    # warehouse-planning above.
+    "slotting-optimization",
   ])
 
   analytics_db_info = {
