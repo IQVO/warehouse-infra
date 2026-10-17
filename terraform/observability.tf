@@ -265,7 +265,8 @@ resource "helm_release" "prometheus" {
 }
 
 # ---------------------------------------------------------------------------
-# Grafana — dashboards, with both datasources pre-provisioned from values.
+# Grafana — dashboards, with the datasources (Prometheus, Jaeger,
+# Alertmanager, Loki) pre-provisioned from values.
 #
 # Provisioning them here rather than clicking through the UI keeps the whole
 # environment reproducible from a clean `terraform apply`, which is the same
