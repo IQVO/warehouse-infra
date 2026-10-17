@@ -26,7 +26,8 @@ CHARTS := \
 	../slotting-optimization/charts/slotting-optimization \
 	../network-inventory-planning/charts/network-inventory-planning \
 	../warehouse-ops-agent/charts/warehouse-ops-agent \
-	../warehouse-console/charts/warehouse-console
+	../warehouse-console/charts/warehouse-console \
+	../ecosystem/charts/ecosystem
 
 .PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test check check-all
 
