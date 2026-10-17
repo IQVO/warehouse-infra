@@ -160,12 +160,12 @@ locals {
 
   # Full computed Helm values for warehouse-console, extracted from the
   # (now-removed) helm_release.console's `values` argument -- unchanged
-  # content, pure refactor -- so the ArgoCD Application in argocd-apps.tf
+  # content, pure refactor -- so the ArgoCD Application (modules/application)
   # reads from exactly the same computation.
   console_helm_values = {
     image = {
       repository = "warehouse/warehouse-console-frontend"
-      tag        = "local-${local.console_source_hash}"
+      # tag: set by modules/application from local.console_source_hash.
       pullPolicy = "IfNotPresent"
     }
 
@@ -212,7 +212,7 @@ locals {
   ecosystem_helm_values = {
     image = {
       repository = "warehouse/ecosystem-frontend"
-      tag        = "local-${local.ecosystem_source_hash}"
+      # tag: set by modules/application from local.ecosystem_source_hash.
       pullPolicy = "IfNotPresent"
     }
 
@@ -239,72 +239,15 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
-# Build + side-load every frontend image.
-# ---------------------------------------------------------------------------
-
-resource "null_resource" "build_and_load_frontend" {
-  # Contexts registered through modules/bounded-context build their own
-  # frontend (bounded-contexts.tf, ADR 0002 phase 1).
-  for_each = { for name, fe in local.frontend_remotes : name => fe if !contains(local.bounded_context_names, name) }
-
-  depends_on = [kind_cluster.warehouse]
-
-  triggers = {
-    source_hash = local.frontend_source_hash[each.key]
-    image       = "warehouse/${each.key}-frontend:local-${local.frontend_source_hash[each.key]}"
-    cluster     = var.cluster_name
-  }
-
-  provisioner "local-exec" {
-    command = "${path.module}/../scripts/build-and-load-frontend.sh '${each.key}' 'web' 'local-${local.frontend_source_hash[each.key]}' '${var.cluster_name}'"
-  }
-}
-
-resource "null_resource" "build_and_load_console" {
-  count = var.deploy_frontends ? 1 : 0
-
-  depends_on = [kind_cluster.warehouse]
-
-  triggers = {
-    source_hash = local.console_source_hash
-    image       = "warehouse/warehouse-console-frontend:local-${local.console_source_hash}"
-    cluster     = var.cluster_name
-  }
-
-  # The console's SPA is the repo root, not a web/ subdirectory.
-  provisioner "local-exec" {
-    command = "${path.module}/../scripts/build-and-load-frontend.sh 'warehouse-console' '.' 'local-${local.console_source_hash}' '${var.cluster_name}'"
-  }
-}
-
-resource "null_resource" "build_and_load_ecosystem" {
-  count = var.deploy_frontends ? 1 : 0
-
-  depends_on = [kind_cluster.warehouse]
-
-  triggers = {
-    source_hash = local.ecosystem_source_hash
-    image       = "warehouse/ecosystem-frontend:local-${local.ecosystem_source_hash}"
-    cluster     = var.cluster_name
-  }
-
-  # Same shape as the console: the catalog is the repo root. The script's
-  # uikit named BuildKit context is unused by this Dockerfile and harmless.
-  provisioner "local-exec" {
-    command = "${path.module}/../scripts/build-and-load-frontend.sh 'ecosystem' '.' 'local-${local.ecosystem_source_hash}' '${var.cluster_name}'"
-  }
-}
-
-# ---------------------------------------------------------------------------
-# warehouse-console: its own Helm release.
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# NOTE: there is deliberately NO `helm_release.console` resource here
-# anymore. ArgoCD (argocd-apps.tf's `kubectl_manifest.console_application`)
-# is now the sole owner of this release's lifecycle -- removed from
-# Terraform state via `terraform state rm` after verifying the Application
-# was already Synced/Healthy (never a `helm uninstall`).
+# The frontend images (every Module Federation remote, the console shell and
+# the EventCatalog) are built and side-loaded by modules/application, and
+# their ArgoCD Applications come from the same module (applications.tf,
+# ADR 0002): this file computes their content hashes and Helm values only.
+#
+# NOTE: there is deliberately NO `helm_release.console` resource: ArgoCD is
+# the sole owner of the console release's lifecycle (removed from Terraform
+# state via `terraform state rm` after verifying the Application was already
+# Synced/Healthy, never a `helm uninstall`).
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
@@ -363,14 +306,11 @@ resource "kubernetes_deployment" "web_gateway" {
 
   depends_on = [
     kubernetes_config_map.web_gateway,
-    # ArgoCD now owns both the console release and the 8 service releases
-    # (this file's and services.tf's NOTEs on their helm_release removal)
-    # -- depend on the Applications actually being applied instead, so the
-    # gateway doesn't start routing to Services that don't exist yet on a
-    # from-scratch apply.
-    kubectl_manifest.console_application,
-    kubectl_manifest.application,
-    module.bounded_context,
+    # ArgoCD owns the console release and every context's release, and
+    # modules/application creates their Applications -- depend on the
+    # module, so the gateway doesn't start routing to Services that don't
+    # exist yet on a from-scratch apply.
+    module.application,
   ]
 
   metadata {

@@ -1,10 +1,10 @@
 # ---------------------------------------------------------------------------
-# One application deployed on this platform (ADR 0002, decision D3): the
-# platform contract Terraform owns for it, and nothing else.
+# One application deployed on this platform (ADR 0002 decision D3, ADR 0004):
+# the platform contract Terraform owns for it, and nothing else.
 #
 #   - generated database passwords (never committed; they live only in state)
 #   - the <name>-db / <name>-analytics-db Secrets the chart reads through
-#     existingSecret
+#     existingSecret, and any other Secret the root supplies (var.secrets)
 #   - the local image build(s), tagged by content so ArgoCD sees a new tag on
 #     every rebuild
 #   - the ArgoCD Application that installs the chart from the application's
@@ -44,10 +44,13 @@ locals {
     local.image_tag == null ? {} : {
       image = merge(try(var.helm_values.image, {}), { tag = local.image_tag })
     },
-    local.frontend_image_tag == null ? {} : {
+    local.frontend_image_tag == null || try(var.frontend.values_key, "") != "frontend" ? {} : {
       frontend = merge(try(var.helm_values.frontend, {}), {
         image = merge(try(var.helm_values.frontend.image, {}), { tag = local.frontend_image_tag })
       })
+    },
+    local.frontend_image_tag == null || try(var.frontend.values_key, "") != "image" ? {} : {
+      image = merge(try(var.helm_values.image, {}), { tag = local.frontend_image_tag })
     },
   )
 }
@@ -87,10 +90,25 @@ resource "kubernetes_secret" "db" {
     namespace = var.apps_namespace
   }
 
+  # DATABASE_URL goes through PgBouncer, which pools in transaction mode.
+  # golang-migrate takes a session-scoped pg_advisory_lock at boot, which
+  # transaction pooling cannot hold, so migrations get their own direct DSN
+  # (docs/scalability/pgbouncer-connection-pooling.md).
   data = {
     DATABASE_URL            = local.database_url
     MIGRATIONS_DATABASE_URL = local.migrations_database_url
   }
+}
+
+resource "kubernetes_secret" "extra" {
+  for_each = var.deploy ? var.secrets : {}
+
+  metadata {
+    name      = "${var.name}-${each.key}"
+    namespace = var.apps_namespace
+  }
+
+  data = each.value
 }
 
 resource "kubernetes_secret" "analytics_db" {
@@ -101,13 +119,11 @@ resource "kubernetes_secret" "analytics_db" {
     namespace = var.apps_namespace
   }
 
-  data = {
-    # The projector (writer) and the reports reader share the direct DSN:
-    # the documented local baseline; a read-only reports role is the
-    # promotion path (docs/analytics/governance-charter.md).
-    ANALYTICS_DATABASE_URL        = local.analytics_database_url
-    ANALYTICS_READER_DATABASE_URL = local.analytics_database_url
-  }
+  # The projector (writer) and the reports reader share the direct DSN: the
+  # documented local baseline; a read-only reports role is the promotion path
+  # (docs/analytics/governance-charter.md). Some charts read only the first
+  # key, hence analytics_database.secret_keys.
+  data = { for key in var.analytics_database.secret_keys : key => local.analytics_database_url }
 }
 
 # --- images -----------------------------------------------------------------
@@ -128,7 +144,8 @@ resource "null_resource" "build_and_load" {
 
 # Built whenever a frontend is declared, independent of var.deploy: the root
 # only declares one while var.deploy_frontends is on, which is the switch the
-# frontend builds have always followed.
+# frontend builds have always followed. A Module Federation remote builds from
+# web/; the console shell and the EventCatalog build from the repo root.
 resource "null_resource" "build_and_load_frontend" {
   count = var.frontend == null ? 0 : 1
 
@@ -139,7 +156,7 @@ resource "null_resource" "build_and_load_frontend" {
   }
 
   provisioner "local-exec" {
-    command = "${var.scripts_dir}/build-and-load-frontend.sh '${var.name}' 'web' '${local.frontend_image_tag}' '${var.cluster_name}'"
+    command = "${var.scripts_dir}/build-and-load-frontend.sh '${var.name}' '${var.frontend.dir}' '${local.frontend_image_tag}' '${var.cluster_name}'"
   }
 }
 
@@ -182,5 +199,6 @@ resource "kubectl_manifest" "application" {
   depends_on = [
     kubernetes_secret.db,
     kubernetes_secret.analytics_db,
+    kubernetes_secret.extra,
   ]
 }

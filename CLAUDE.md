@@ -3,24 +3,25 @@
 Terraform + Helm deployment of the entire `warehouse-systems` fleet onto a
 local `kind` cluster named `warehouse`. This repo owns the cluster's
 existence, not any bounded context's business logic: one Terraform root
-module (plus the `bounded-context` child module, ADR 0002) and per-service
-values; each service's chart lives in that service's own repo.
+module (plus the `application` child module, ADR 0002 and ADR 0004) and
+per-service values; each service's chart lives in that service's own repo.
 
 > **Study project.** Personal DDD/hexagonal/Kubernetes learning exercise. Not
 > a production system; no uptime or support guarantee.
 
 ## What this repo deploys
 
-`terraform/locals.tf`'s `local.services` map is the **single source of
-truth** for what gets deployed. It does NOT auto-discover sibling repos: a
-new bounded-context repo must be added by hand and its own `charts/<repo>/`
-must already exist. Read that file before answering "what does the cluster
-know about".
+`terraform/applications.tf`'s registry (`local.applications`: every
+`local.services` context plus `local.other_applications`) is the **single
+source of truth** for what gets deployed. It does NOT auto-discover sibling
+repos: a new repo must be added by hand and its own `charts/<repo>/` must
+already exist. Read it and `terraform/locals.tf` before answering "what does
+the cluster know about".
 
 ```
 terraform/             Root module: services, Kafka, Postgres + PgBouncer, MCP, ArgoCD,
                        dashboards, the Nginx/Kong localhost edge
-terraform/modules/bounded-context/  One application's platform contract (DB, Secrets, images, Application)
+terraform/modules/application/  One application's platform contract (DB, Secrets, images, Application)
 helm-values/           Per-service STATIC values (computed layer in services.tf wins)
 config/process-paths/  Seed data for scripts/seed-process-paths.py
 scripts/               up/down, smoke test, exposure-policy gate, chart selector check
@@ -37,12 +38,14 @@ alters a recorded decision ships its ADR in the same PR.
 `docs/adr/0002-application-delivery-boundary.md` sets the boundary: an
 application's Kubernetes objects belong in its own chart, never in
 Terraform. Read its Rollout section before restructuring `terraform/`.
+`docs/adr/0004-one-application-registry.md` makes every application one
+instance of `terraform/modules/application`.
 
 ## Non-negotiables (short form; detail loads from `.claude/rules/` when you touch the files)
 
 1. **`terraform apply` does NOT pick up chart-template changes.** The source
    hash covers Go source, migrations, Dockerfile and go.mod/go.sum only.
-   ArgoCD (`terraform/argocd-apps.tf`) installs each chart from the service
+   ArgoCD (an Application per instance of `terraform/modules/application`) installs each chart from the service
    repo's GitHub `develop`. NOTE: the older recipe here (`terraform taint
    helm_release.service[...]`) is obsolete; that resource no longer exists.
 2. **Images are built from the LOCAL sibling checkout, not `origin/develop`.**
