@@ -1,0 +1,261 @@
+# promtool unit tests for the generated SLO burn-rate alerts (gaps SLO-1/SLO-2).
+#
+#   promtool test rules terraform/alerting/tests/warehouse-slo-burn-rules.test.yml
+#   (make alert-rules-check runs it, through docker when promtool is absent)
+#
+# SLO 1 = API availability, 99% of Kong requests do not answer 5xx per day.
+# SLO 2 = API latency, 95% of Kong requests have an upstream latency <= 500 ms
+#         per day (counted on Kong's nearest histogram boundary, le="400.0").
+# Burn = observed bad ratio / (1 - target); a burn of 14.4 empties the one-day
+# budget in 100 minutes, a burn of 3 in 8 hours. Both windows of a pair must
+# hold, and a route needs >= 30 requests in the long window.
+#
+# process-path-management is the fixture context (same as
+# warehouse-alert-rules.test.yml). Its API route is `.0`; the MCP route
+# `-mcp.0` and order-management's route are healthy and must never fire.
+rule_files:
+  - ../warehouse-alert-rules.json
+
+evaluation_interval: 1m
+
+tests:
+  # (a) 20% of the API route's requests answer 5xx: burn 20 over every window.
+  - name: availability 20 percent 5xx fires the fast (critical) and the slow (warning) alert
+    interval: 1m
+    input_series:
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.process-path-management.0", code="500"}'
+        values: '0+12x40'
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.process-path-management.0", code="200"}'
+        values: '0+48x40'
+      # (e) healthy MCP route of the same context and a healthy route of another context.
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.process-path-management-mcp.0", code="200"}'
+        values: '0+60x40'
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.order-management.0", code="200"}'
+        values: '0+60x40'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: WarehouseApiAvailabilityBurnFast
+        exp_alerts:
+          - exp_labels:
+              context: process-path-management
+              severity: critical
+              service: httproute.warehouse-systems.process-path-management.0
+            exp_annotations:
+              summary: "Process Path Management: API availability SLO burning fast (day's budget gone in ~100 minutes)"
+              description: "Kong route httproute.warehouse-systems.process-path-management.0 answers 5xx at 20x the rate the one-day 99% availability SLO allows, over the last hour and over the last 5 minutes (5xx ratio of 14.4% or more). At this burn the whole day's error budget is gone in about 100 minutes. The alert needs at least 30 requests in the last hour, so one failed request on an idle local route cannot fire it."
+              runbook_url: https://iqvo.github.io/process-path-management/docs/operations/runbook
+              dashboard_url: http://localhost:3000/d/warehouse-process-path-management
+      - eval_time: 40m
+        alertname: WarehouseApiAvailabilityBurnSlow
+        exp_alerts:
+          - exp_labels:
+              context: process-path-management
+              severity: warning
+              service: httproute.warehouse-systems.process-path-management.0
+            exp_annotations:
+              summary: "Process Path Management: API availability SLO burning slowly (day's budget gone in ~8 hours)"
+              description: "Kong route httproute.warehouse-systems.process-path-management.0 answers 5xx at 20x the rate the one-day 99% availability SLO allows, over the last 6 hours and over the last 30 minutes (5xx ratio of 3% or more). At this burn the whole day's error budget is gone in about 8 hours. The alert needs at least 30 requests in the last 6 hours, so one failed request on an idle local route cannot fire it."
+              runbook_url: https://iqvo.github.io/process-path-management/docs/operations/runbook
+              dashboard_url: http://localhost:3000/d/warehouse-process-path-management
+      # Not yet: `for: 2m` of the fast alert is not over one minute after the
+      # series start (and the slow alert's `for: 15m` is far away).
+      - eval_time: 1m
+        alertname: WarehouseApiAvailabilityBurnFast
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: WarehouseApiAvailabilityBurnSlow
+        exp_alerts: []
+
+  # (b) 4% 5xx: burn 4, above the slow threshold (3), below the fast one (14.4).
+  - name: availability 4 percent 5xx fires only the slow alert
+    interval: 1m
+    input_series:
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.process-path-management.0", code="503"}'
+        values: '0+4x40'
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.process-path-management.0", code="200"}'
+        values: '0+96x40'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: WarehouseApiAvailabilityBurnFast
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: WarehouseApiAvailabilityBurnSlow
+        exp_alerts:
+          - exp_labels:
+              context: process-path-management
+              severity: warning
+              service: httproute.warehouse-systems.process-path-management.0
+            exp_annotations:
+              summary: "Process Path Management: API availability SLO burning slowly (day's budget gone in ~8 hours)"
+              description: "Kong route httproute.warehouse-systems.process-path-management.0 answers 5xx at 4x the rate the one-day 99% availability SLO allows, over the last 6 hours and over the last 30 minutes (5xx ratio of 3% or more). At this burn the whole day's error budget is gone in about 8 hours. The alert needs at least 30 requests in the last 6 hours, so one failed request on an idle local route cannot fire it."
+              runbook_url: https://iqvo.github.io/process-path-management/docs/operations/runbook
+              dashboard_url: http://localhost:3000/d/warehouse-process-path-management
+
+  # (c) traffic floor: ONE 5xx on an otherwise idle route is a 100% 5xx ratio
+  # over every window, but only 1 request: nothing may fire. The 5xx lands at
+  # minute 6, so without the floor the fast alert would be firing at 9m and the
+  # slow one at 30m.
+  - name: one failing request on an idle route fires nothing
+    interval: 1m
+    input_series:
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.process-path-management.0", code="500"}'
+        values: '0 0 0 0 0 0 1+0x34'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: WarehouseApiAvailabilityBurnFast
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: WarehouseApiAvailabilityBurnSlow
+        exp_alerts: []
+
+  # Both windows must hold: 20% 5xx for the first 20 minutes, then clean. At
+  # 40m the 1h/6h windows still burn but the 5m window is clean, so the fast
+  # alert has resolved; the slow pair (6h and 30m) is still above 3.
+  - name: a recovered spike clears the fast alert while the slow one still holds
+    interval: 1m
+    input_series:
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.process-path-management.0", code="500"}'
+        values: '0+12x20 240+0x20'
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.process-path-management.0", code="200"}'
+        values: '0+48x20 960+60x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: WarehouseApiAvailabilityBurnFast
+        exp_alerts:
+          - exp_labels:
+              context: process-path-management
+              severity: critical
+              service: httproute.warehouse-systems.process-path-management.0
+            exp_annotations:
+              summary: "Process Path Management: API availability SLO burning fast (day's budget gone in ~100 minutes)"
+              description: "Kong route httproute.warehouse-systems.process-path-management.0 answers 5xx at 20x the rate the one-day 99% availability SLO allows, over the last hour and over the last 5 minutes (5xx ratio of 14.4% or more). At this burn the whole day's error budget is gone in about 100 minutes. The alert needs at least 30 requests in the last hour, so one failed request on an idle local route cannot fire it."
+              runbook_url: https://iqvo.github.io/process-path-management/docs/operations/runbook
+              dashboard_url: http://localhost:3000/d/warehouse-process-path-management
+      - eval_time: 40m
+        alertname: WarehouseApiAvailabilityBurnFast
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: WarehouseApiAvailabilityBurnSlow
+        exp_alerts:
+          - exp_labels:
+              context: process-path-management
+              severity: warning
+              service: httproute.warehouse-systems.process-path-management.0
+            exp_annotations:
+              summary: "Process Path Management: API availability SLO burning slowly (day's budget gone in ~8 hours)"
+              description: "Kong route httproute.warehouse-systems.process-path-management.0 answers 5xx at 10x the rate the one-day 99% availability SLO allows, over the last 6 hours and over the last 30 minutes (5xx ratio of 3% or more). At this burn the whole day's error budget is gone in about 8 hours. The alert needs at least 30 requests in the last 6 hours, so one failed request on an idle local route cannot fire it."
+              runbook_url: https://iqvo.github.io/process-path-management/docs/operations/runbook
+              dashboard_url: http://localhost:3000/d/warehouse-process-path-management
+
+  # (d) latency: 80% of the requests are slower than the 400 ms bucket (burn 16).
+  - name: latency 80 percent slow fires the fast (critical) and the slow (warning) alert
+    interval: 1m
+    input_series:
+      - series: 'kong_upstream_latency_ms_bucket{service="httproute.warehouse-systems.process-path-management.0", le="400.0"}'
+        values: '0+12x40'
+      - series: 'kong_upstream_latency_ms_bucket{service="httproute.warehouse-systems.process-path-management.0", le="+Inf"}'
+        values: '0+60x40'
+      - series: 'kong_upstream_latency_ms_count{service="httproute.warehouse-systems.process-path-management.0"}'
+        values: '0+60x40'
+      # (e) healthy MCP route of the same context and a healthy route of another context.
+      - series: 'kong_upstream_latency_ms_bucket{service="httproute.warehouse-systems.process-path-management-mcp.0", le="400.0"}'
+        values: '0+60x40'
+      - series: 'kong_upstream_latency_ms_bucket{service="httproute.warehouse-systems.process-path-management-mcp.0", le="+Inf"}'
+        values: '0+60x40'
+      - series: 'kong_upstream_latency_ms_count{service="httproute.warehouse-systems.process-path-management-mcp.0"}'
+        values: '0+60x40'
+      - series: 'kong_upstream_latency_ms_bucket{service="httproute.warehouse-systems.order-management.0", le="400.0"}'
+        values: '0+60x40'
+      - series: 'kong_upstream_latency_ms_bucket{service="httproute.warehouse-systems.order-management.0", le="+Inf"}'
+        values: '0+60x40'
+      - series: 'kong_upstream_latency_ms_count{service="httproute.warehouse-systems.order-management.0"}'
+        values: '0+60x40'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: WarehouseApiLatencyBurnFast
+        exp_alerts:
+          - exp_labels:
+              context: process-path-management
+              severity: critical
+              service: httproute.warehouse-systems.process-path-management.0
+            exp_annotations:
+              summary: "Process Path Management: API latency SLO burning fast (day's budget gone in ~100 minutes)"
+              description: "Kong route httproute.warehouse-systems.process-path-management.0 is missing the 500 ms upstream latency target at 16x the rate the one-day 95% latency SLO allows, over the last hour and over the last 5 minutes (slow ratio of 72% or more). At this burn the whole day's error budget is gone in about 100 minutes. Kong's histogram has no 500 ms bucket, so the nearest boundary, le=400.0 (400 ms), is used: a request between 400 and 500 ms counts as slow. The alert needs at least 30 requests in the last hour, so one slow request on an idle local route cannot fire it."
+              runbook_url: https://iqvo.github.io/process-path-management/docs/operations/runbook
+              dashboard_url: http://localhost:3000/d/warehouse-process-path-management
+      - eval_time: 40m
+        alertname: WarehouseApiLatencyBurnSlow
+        exp_alerts:
+          - exp_labels:
+              context: process-path-management
+              severity: warning
+              service: httproute.warehouse-systems.process-path-management.0
+            exp_annotations:
+              summary: "Process Path Management: API latency SLO burning slowly (day's budget gone in ~8 hours)"
+              description: "Kong route httproute.warehouse-systems.process-path-management.0 is missing the 500 ms upstream latency target at 16x the rate the one-day 95% latency SLO allows, over the last 6 hours and over the last 30 minutes (slow ratio of 15% or more). At this burn the whole day's error budget is gone in about 8 hours. Kong's histogram has no 500 ms bucket, so the nearest boundary, le=400.0 (400 ms), is used: a request between 400 and 500 ms counts as slow. The alert needs at least 30 requests in the last 6 hours, so one slow request on an idle local route cannot fire it."
+              runbook_url: https://iqvo.github.io/process-path-management/docs/operations/runbook
+              dashboard_url: http://localhost:3000/d/warehouse-process-path-management
+
+  # (d) 20% slow: burn 4, slow alert only.
+  - name: latency 20 percent slow fires only the slow alert
+    interval: 1m
+    input_series:
+      - series: 'kong_upstream_latency_ms_bucket{service="httproute.warehouse-systems.process-path-management.0", le="400.0"}'
+        values: '0+48x40'
+      - series: 'kong_upstream_latency_ms_bucket{service="httproute.warehouse-systems.process-path-management.0", le="+Inf"}'
+        values: '0+60x40'
+      - series: 'kong_upstream_latency_ms_count{service="httproute.warehouse-systems.process-path-management.0"}'
+        values: '0+60x40'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: WarehouseApiLatencyBurnFast
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: WarehouseApiLatencyBurnSlow
+        exp_alerts:
+          - exp_labels:
+              context: process-path-management
+              severity: warning
+              service: httproute.warehouse-systems.process-path-management.0
+            exp_annotations:
+              summary: "Process Path Management: API latency SLO burning slowly (day's budget gone in ~8 hours)"
+              description: "Kong route httproute.warehouse-systems.process-path-management.0 is missing the 500 ms upstream latency target at 4x the rate the one-day 95% latency SLO allows, over the last 6 hours and over the last 30 minutes (slow ratio of 15% or more). At this burn the whole day's error budget is gone in about 8 hours. Kong's histogram has no 500 ms bucket, so the nearest boundary, le=400.0 (400 ms), is used: a request between 400 and 500 ms counts as slow. The alert needs at least 30 requests in the last 6 hours, so one slow request on an idle local route cannot fire it."
+              runbook_url: https://iqvo.github.io/process-path-management/docs/operations/runbook
+              dashboard_url: http://localhost:3000/d/warehouse-process-path-management
+
+  # (e) healthy traffic everywhere (the MCP route of the same context and
+  # another context's route included) fires none of the four alerts.
+  - name: healthy routes fire nothing
+    interval: 1m
+    input_series:
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.process-path-management.0", code="200"}'
+        values: '0+60x40'
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.process-path-management-mcp.0", code="200"}'
+        values: '0+60x40'
+      - series: 'kong_http_requests_total{service="httproute.warehouse-systems.order-management.0", code="200"}'
+        values: '0+60x40'
+      - series: 'kong_upstream_latency_ms_bucket{service="httproute.warehouse-systems.process-path-management.0", le="400.0"}'
+        values: '0+60x40'
+      - series: 'kong_upstream_latency_ms_count{service="httproute.warehouse-systems.process-path-management.0"}'
+        values: '0+60x40'
+      - series: 'kong_upstream_latency_ms_bucket{service="httproute.warehouse-systems.process-path-management-mcp.0", le="400.0"}'
+        values: '0+60x40'
+      - series: 'kong_upstream_latency_ms_count{service="httproute.warehouse-systems.process-path-management-mcp.0"}'
+        values: '0+60x40'
+      - series: 'kong_upstream_latency_ms_bucket{service="httproute.warehouse-systems.order-management.0", le="400.0"}'
+        values: '0+60x40'
+      - series: 'kong_upstream_latency_ms_count{service="httproute.warehouse-systems.order-management.0"}'
+        values: '0+60x40'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: WarehouseApiAvailabilityBurnFast
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: WarehouseApiAvailabilityBurnSlow
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: WarehouseApiLatencyBurnFast
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: WarehouseApiLatencyBurnSlow
+        exp_alerts: []
