@@ -82,6 +82,19 @@ locals {
         # cluster must not be able to talk to a real retail network.
         networkMode = "stub"
 
+        # ON since 2026-10-17 (gap K19): this context's outbox now drains to
+        # `warehouse.network-fulfillment.events`, which is what its OWN
+        # analytics projector, `/reports/acknowledgement` and the console's
+        # network-fulfillment report read -- until now they all stared at an
+        # empty/absent stream because the publisher logged instead of
+        # publishing. No integration consumer of `networkorder.*` exists
+        # anywhere, and that is deliberate (Published Language, facts only);
+        # the earlier "publisher stays log" note below is superseded by this.
+        # The one thing that would ALSO flip this (chart `kafka.enabled`) is
+        # still not used, because KAFKA_BROKERS is already set explicitly in
+        # the extraEnv block below.
+        eventPublisher = "kafka"
+
         # The one upstream this context calls. order-management IS in
         # local.services, so its Service name comes from the same
         # convention every other in-cluster REST URL here uses.
