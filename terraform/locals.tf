@@ -96,7 +96,7 @@ locals {
     }
     # product-master: the product master data context (SKU identity,
     # dimensions, handling classification; product-master ADRs 0001-0004). Its
-    # env (EVENT_PUBLISHER, KAFKA_BROKERS, LEGACY_IMPORT_CONSUMER_GROUP,
+    # env (EVENT_PUBLISHER, KAFKA_BROKERS,
     # OUTBOX_RELAY_INTERVAL) all have DEDICATED chart values, so they live in
     # helm-values/product-master.yaml, NOT in local.sync_edge_env (setting both
     # would render duplicate env entries). It publishes

@@ -54,12 +54,6 @@ config:
   # refuses to render otherwise.
   eventPublisher: "kafka"
   outboxRelayInterval: "1s"
-  # ADR 0003 legacy classification importer (reads warehouse.inventory.events).
-  # A FIXED, stable id: a rescheduled pod resumes from its committed offsets; a
-  # brand-new group starts at the earliest retained message, so the first
-  # rollout imports the whole legacy history (deduped on the CloudEvents id).
-  # Empty would switch the importer OFF.
-  legacyImportConsumerGroup: "product-master-legacy-import"
 
 kafka:
   enabled: true
