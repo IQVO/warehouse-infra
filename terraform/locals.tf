@@ -143,7 +143,7 @@ locals {
     # Dockerfile and charts/slotting-optimization, so this entry is the whole
     # registration -- the initdb role/database (templates/init-databases.sql.tftpl),
     # the <name>-db Secret and PgBouncer entry (postgres.tf, pgbouncer.tf), the
-    # image build (services.tf), the ArgoCD Application (argocd-apps.tf) and the
+    # image build and the ArgoCD Application (modules/application) and the
     # Kong route ${var.api_path_prefix}/slotting-optimization (the chart's own
     # gatewayApi HTTPRoute, switched on by services.tf) all derive from it.
     # Its env (EVENT_PUBLISHER, KAFKA_BROKERS, DEMAND/PRODUCT/LAYOUT_MODE + their
@@ -163,7 +163,7 @@ locals {
     }
   }
 
-  # GitHub owner of the repo ArgoCD clones per service (argocd-apps.tf). The
+  # GitHub owner of the repo ArgoCD clones per service (applications.tf). The
   # fleet repos were transferred claudioed -> IQVO on 2026-10-03; the older
   # services keep resolving through GitHub's transfer redirect from
   # github.com/IQVO/<name>. warehouse-planning was created directly under
@@ -178,30 +178,22 @@ locals {
   }
 
   # Per-service database passwords are GENERATED, never committed. Each service
-  # gets a random 24-char password (see random_password.service_db in
-  # postgres.tf); the value lives only in Terraform state, which is gitignored.
-  # This keeps credentials out of version control so the repo is safe to publish.
-  service_passwords = merge(
-    {
-      for name in keys(local.services) :
-      name => random_password.service_db[name].result if !contains(local.bounded_context_names, name)
-    },
-    # Registered through modules/bounded-context (bounded-contexts.tf). A
-    # literal key on purpose: `module.bounded_context[name]` would make this
-    # local wait for the WHOLE module (its Application included), and the
-    # Postgres release reads this map.
-    {
-      "order-management" = module.bounded_context["order-management"].db_password
-    },
-  )
+  # gets a random 24-char password inside modules/application, read here
+  # through local.app_db_passwords (applications.tf); the value lives only
+  # in Terraform state, which is gitignored. This keeps credentials out of
+  # version control so the repo is safe to publish.
+  service_passwords = {
+    for name in keys(local.services) :
+    name => local.app_db_passwords[name]
+  }
 
   # sslmode=disable: the Postgres release runs without TLS inside the cluster.
   # Traffic between service pods and Postgres (or, since pgbouncer.tf, PgBouncer)
   # is not meshed either (both live in an un-injected namespace), which is fine
   # for a laptop.
   #
-  # This map holds the REAL connection string each service receives (services.tf
-  # feeds it into the chart's DATABASE_URL Secret), so it must carry the same
+  # This map holds the same connection string modules/application writes
+  # into each service's <name>-db Secret (DATABASE_URL), with the same
   # generated password the initdb script set on the role. It is exposed only
   # through the `database_urls` output, which is marked sensitive.
   #
@@ -217,38 +209,6 @@ locals {
   database_urls = {
     for name, svc in local.services :
     name => "postgres://${svc.user}:${local.service_passwords[name]}@${local.pgbouncer_host}:${local.pgbouncer_port}/${svc.db}?sslmode=disable"
-  }
-
-  # DIRECT (non-pooled, session-mode) Postgres DSN for the SAME 9 OLTP
-  # databases as database_urls above -- same dbname/user/password, only the
-  # host:port differs (Postgres's own Service, not PgBouncer's). Added to
-  # fix a fleet-wide production-blocking bug found during Phase 4 load-test
-  # validation (see docs/scalability/pgbouncer-connection-pooling.md's
-  # follow-up section and order-management's own ADR documenting this):
-  # every OLTP service's golang-migrate postgres driver takes a
-  # session-scoped `SELECT pg_advisory_lock($1)` to serialize concurrent
-  # migration runs at boot, and PgBouncer's `transaction`-pooling mode
-  # (pgbouncer.tf, deliberately left unchanged by this fix -- pool_mode
-  # stays "transaction" for all real app traffic) does not support
-  # session-scoped state: each statement within one logical client session
-  # can land on a DIFFERENT real backend connection, so the advisory lock
-  # never behaves as a real mutex and losing replicas crash-loop with
-  # `pq: unnamed prepared statement does not exist` / `pq: canceling
-  # statement due to statement timeout`. This is the exact same "migrations
-  # need a direct/session connection, app traffic goes through the pooler"
-  # split this repo already uses for analytics_database_urls below (which
-  # were never routed through PgBouncer at all, for the unrelated reason of
-  # low QPS -- this local is the OLTP-side counterpart, added specifically
-  # for the golang-migrate boot step, NOT a general-purpose bypass of
-  # PgBouncer for OLTP runtime traffic).
-  #
-  # Consumed by postgres.tf's kubernetes_secret.service_db as a SECOND key
-  # (MIGRATIONS_DATABASE_URL) alongside the existing DATABASE_URL key --
-  # DATABASE_URL itself is completely unchanged (still PgBouncer), so this
-  # is purely additive and does not alter runtime traffic behavior at all.
-  direct_database_urls = {
-    for name, svc in local.services :
-    name => "postgres://${svc.user}:${local.service_passwords[name]}@${local.postgres_host}:${local.postgres_port}/${svc.db}?sslmode=disable"
   }
 
   # ---------------------------------------------------------------------
@@ -327,9 +287,9 @@ locals {
     # integration topic), cmd/product-projector (writer, admin :8091, group
     # product-master-analytics) and cmd/product-reports (read-only reader,
     # :8092), role/database product_master_analytics. Same image as the api and
-    # mcp binaries (one build_and_load). Its analytical migrations live in a
-    # top-level analytics/migrations/, already hashed by services.tf's
-    # service_source_hash. Same one-time SQL caveat as warehouse-planning above.
+    # mcp binaries (one image build). Its analytical migrations live in a
+    # top-level analytics/migrations/, already hashed by modules/application's
+    # default image hash. Same one-time SQL caveat as warehouse-planning above.
     "product-master",
     # Added (inbound-receiving ADR 0006): the receiving performance and
     # accuracy data product -- the `warehouse.inbound-receiving.analytics`
@@ -337,9 +297,9 @@ locals {
     # (writer, admin :8091, group inbound-receiving-analytics) and
     # cmd/inbound-reports (read-only reader, :8092), role/database
     # inbound_receiving_analytics. Same image as the api and mcp binaries (one
-    # build_and_load). Its analytical migrations live in a top-level
-    # analytics/migrations/, already hashed by services.tf's
-    # service_source_hash. Same one-time SQL caveat as warehouse-planning above.
+    # image build). Its analytical migrations live in a top-level
+    # analytics/migrations/, already hashed by modules/application's default
+    # image hash. Same one-time SQL caveat as warehouse-planning above.
     "inbound-receiving",
   ])
 

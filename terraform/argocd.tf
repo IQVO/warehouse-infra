@@ -1,7 +1,8 @@
 # ---------------------------------------------------------------------------
-# ArgoCD: the GitOps control plane for the fleet's bounded-context service
-# charts (see argocd-apps.tf for the ApplicationSet that actually deploys
-# them). This file only bootstraps ArgoCD itself.
+# ArgoCD: the GitOps control plane for the fleet's application charts
+# (modules/application creates the one Application per application that
+# actually deploys them; applications.tf registers them). This file only
+# bootstraps ArgoCD itself.
 #
 # Deliberately NOT istio-injection=enabled -- ArgoCD talks to the Kubernetes
 # API and to each service repo's Git remote over the internet; it has no

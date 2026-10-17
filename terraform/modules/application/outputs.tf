@@ -9,7 +9,7 @@ output "frontend_image_tag" {
 }
 
 output "db_password" {
-  description = "Generated OLTP role password. The platform's initdb script and PgBouncer userlist consume it until ADR 0002 phase 4."
+  description = "Generated OLTP role password. The platform's initdb script and PgBouncer userlist consume it (local.app_db_passwords) until ADR 0002 phase 4."
   value       = local.db_password
   sensitive   = true
 }
