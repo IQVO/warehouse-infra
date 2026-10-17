@@ -46,15 +46,18 @@ locals {
   # admin console + the entrypoint's own backend-reachability check.
   pgbouncer_admin_user = "postgres"
 
-  # Conservative per-database REAL Postgres connection ceiling. Sized well
-  # under max_connections=100 in aggregate even with every OLTP database
-  # active at once: 9 databases (the 8 in local.services plus
-  # network-fulfillment) * 12 = 108 in the absolute worst case of every
-  # pool simultaneously saturated, which the ADR's "not every service is
-  # ever at 100% at the same instant" real-world accounting treats as an
-  # acceptable soft ceiling for a laptop cluster -- see the design doc for
-  # the full per-database budget table and why 12 (not 15) was chosen as
-  # the conservative end of the requested 10-15 range.
+  # Conservative per-database REAL Postgres connection ceiling. Aggregate
+  # worst case = (databases pooled below) * 12: 14 databases as of
+  # 2026-10-17 (the 12 in local.services plus network-fulfillment and
+  # network-inventory-planning) * 12 = 168, which EXCEEDS the Postgres
+  # chart's stock max_connections=100 -- so postgres.tf now raises
+  # max_connections to 250, restoring real headroom above the pooled
+  # ceiling (the original "9 * 12 = 108, acceptable soft ceiling"
+  # accounting went stale as contexts were added and would have surfaced
+  # as refused server connections under simultaneous pool saturation).
+  # See the design doc for the full per-database budget table and why 12
+  # (not 15) was chosen as the conservative end of the requested 10-15
+  # range.
   pgbouncer_oltp_pool_size = 12
 
   # Every OLTP database that should be reached THROUGH PgBouncer rather
@@ -276,6 +279,17 @@ resource "kubernetes_deployment" "pgbouncer" {
             }
             period_seconds    = 10
             failure_threshold = 3
+            # The k8s default probe timeout is 1s, which a busy PgBouncer
+            # (every OLTP pool in the fleet churning at once, e.g. a mass
+            # rollout restart) regularly exceeds just to answer SHOW POOLS.
+            # A 1s flake here cascades: readiness flips, then liveness
+            # follows the same 1s path. 5s keeps the probe meaningful
+            # (it still fails fast when PgBouncer is genuinely wedged)
+            # without restarting the fleet's single connection pooler on
+            # load spikes. Incident: 71 restarts by 2026-10-17, each death
+            # resetting in-flight and booting connections across every
+            # service at once.
+            timeout_seconds = 5
           }
 
           liveness_probe {
@@ -284,11 +298,17 @@ resource "kubernetes_deployment" "pgbouncer" {
             }
             period_seconds    = 15
             failure_threshold = 6 # loose on purpose -- do not restart on one transient Postgres blip, same fleet convention every service chart's own livenessProbe already uses
+            timeout_seconds   = 5 # see readiness_probe: the 1s default killed this pod under load (exit 137 after probe SIGTERMs), 2026-10-17
           }
 
           resources {
-            requests = { cpu = "100m", memory = "64Mi" }
-            limits   = { cpu = "500m", memory = "256Mi" }
+            # 256Mi was survivable at 10 services; at 14 contexts x (api +
+            # mcp + sweep) OLTP clients, mass-restart reconnect storms and
+            # the sibling e2e harness's docker load pushed the process past
+            # it repeatedly (see the incident note above). 1Gi is still
+            # tiny next to the 35GiB node.
+            requests = { cpu = "100m", memory = "256Mi" }
+            limits   = { cpu = "500m", memory = "1Gi" }
           }
         }
 

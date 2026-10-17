@@ -140,6 +140,14 @@ resource "helm_release" "postgresql" {
     }
 
     primary = {
+      # Raise Postgres' own max_connections above the pooled server-side
+      # worst case (see pgbouncer.tf's budget comment: 14 OLTP databases
+      # x pool_size 12 = 168 > the chart's stock max_connections=100).
+      # 250 restores real headroom; at this fleet's actual load (24/100
+      # observed 2026-10-17) the extra slots stay idle and cost only
+      # memory on the 35GiB kind node.
+      extendedConfiguration = "max_connections = 250"
+
       persistence = {
         enabled = var.postgres_persistence_enabled
         # The chart's own default is 8Gi, sized for a real deployment. 3Gi is
