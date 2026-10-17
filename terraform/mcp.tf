@@ -72,10 +72,11 @@ locals {
     # Added for slotting-optimization's own MCP server (read-only cmd/mcp,
     # chart PR #20): exposure at /api/mcp/<context> is the platform's HOST
     # CONTRACT (every context's MCP server reachable through Kong) and is
-    # deliberately decoupled from warehouse-ops-agent consumption — no
-    # ops-agent upstream is wired yet, and none is needed for the route to
-    # exist. Membership here switches on mcp.enabled + mcp.route via
-    # services.tf, exactly like the other contexts.
+    # deliberately decoupled from warehouse-ops-agent consumption -- the
+    # route exists whether or not any consumer does. The ops-agent consumes
+    # it since warehouse-ops-agent #151 (the `slottingOptimization`
+    # upstream in ops-agent.tf). Membership here switches on mcp.enabled +
+    # mcp.route via services.tf, exactly like the other contexts.
     "slotting-optimization",
     # network-inventory-planning: cmd/mcp merged (NIP ADR 0008) -- READ-ONLY
     # (get_transfer, list_transfers, find_stuck_transfers,
