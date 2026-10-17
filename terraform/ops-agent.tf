@@ -152,6 +152,12 @@ locals {
         # (var.deploy_mcp_servers=false) leaves the transfer watch unwired
         # (its /transfer-watch/* routes answer 503).
         networkInventoryPlanning = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["network-inventory-planning"] : "" }
+        # slotting-optimization (warehouse-ops-agent #151, ADR 0024): chart
+        # value upstreams.slottingOptimization.endpoint -> env
+        # SLOTTING_OPTIMIZATION_MCP_ENDPOINT. Read tools only (its MCP
+        # server is read-only). Empty (var.deploy_mcp_servers=false) leaves
+        # the client unwired.
+        slottingOptimization = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["slotting-optimization"] : "" }
       }
       # Real, in-cluster REST base URLs for the console-bff order-lifecycle
       # fan-out (cmd/agent/main.go's restclient wiring) — these ARE live
