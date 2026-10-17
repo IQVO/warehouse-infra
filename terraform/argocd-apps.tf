@@ -188,6 +188,46 @@ resource "kubectl_manifest" "network_inventory_planning_application" {
   ]
 }
 
+resource "kubectl_manifest" "ecosystem_application" {
+  count = var.deploy_frontends ? 1 : 0
+
+  yaml_body = yamlencode({
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = local.ecosystem_release_name
+      namespace = kubernetes_namespace.argocd.metadata[0].name
+    }
+    spec = {
+      project = "default"
+      source = {
+        # Created directly under IQVO (no claudioed redirect) -- see
+        # local.argocd_repo_owner in locals.tf.
+        repoURL        = "https://github.com/IQVO/ecosystem.git"
+        targetRevision = "develop"
+        path           = "charts/ecosystem"
+        helm = {
+          valuesObject = local.argocd_ecosystem_values
+        }
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = var.apps_namespace
+      }
+      syncPolicy = {
+        automated = {
+          prune    = true
+          selfHeal = true
+        }
+      }
+    }
+  })
+
+  depends_on = [
+    helm_release.argocd,
+  ]
+}
+
 resource "kubectl_manifest" "console_application" {
   count = var.deploy_frontends ? 1 : 0
 

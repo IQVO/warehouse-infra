@@ -131,6 +131,30 @@ locals {
     ],
   ))), 0, 12) : ""
 
+  # The EventCatalog catalog (IQVO/ecosystem): a static Astro SSG like the
+  # console, but rebuilt from specs/ + generators rather than Vite. Hash covers
+  # every build input: contracts, generated pages, generator scripts, config,
+  # packaging and public assets.
+  ecosystem_source_hash = var.deploy_frontends ? substr(sha256(join("", concat(
+    [for f in sort(fileset("${path.module}/../../ecosystem/specs", "**")) : filesha256("${path.module}/../../ecosystem/specs/${f}")],
+    [for f in sort(fileset("${path.module}/../../ecosystem/domains", "**")) : filesha256("${path.module}/../../ecosystem/domains/${f}")],
+    [for f in sort(fileset("${path.module}/../../ecosystem/channels", "**")) : filesha256("${path.module}/../../ecosystem/channels/${f}")],
+    [for f in sort(fileset("${path.module}/../../ecosystem/users", "**")) : filesha256("${path.module}/../../ecosystem/users/${f}")],
+    [for f in sort(fileset("${path.module}/../../ecosystem/public", "**")) : filesha256("${path.module}/../../ecosystem/public/${f}")],
+    [for f in sort(fileset("${path.module}/../../ecosystem/scripts", "**")) : filesha256("${path.module}/../../ecosystem/scripts/${f}")],
+    [
+      filesha256("${path.module}/../../ecosystem/package.json"),
+      filesha256("${path.module}/../../ecosystem/package-lock.json"),
+      filesha256("${path.module}/../../ecosystem/Dockerfile"),
+      filesha256("${path.module}/../../ecosystem/nginx.conf"),
+      filesha256("${path.module}/../../ecosystem/eventcatalog.config.js"),
+      filesha256("${path.module}/../../ecosystem/eventcatalog.styles.css"),
+      filesha256("${path.module}/../../ecosystem/catalog.contexts.mjs"),
+      filesha256("${path.module}/../../ecosystem/catalog.markdown.mjs"),
+      filesha256("${path.module}/../../ecosystem/.dockerignore"),
+    ],
+  ))), 0, 12) : ""
+
   console_chart_path   = "${path.module}/../../warehouse-console/charts/warehouse-console"
   console_release_name = "warehouse-console"
 
@@ -181,6 +205,28 @@ locals {
 
   console_service_host = "${local.console_release_name}.${var.apps_namespace}.svc.cluster.local"
 
+  ecosystem_release_name = "ecosystem"
+  ecosystem_chart_path   = "${path.module}/../../ecosystem/charts/ecosystem"
+  ecosystem_service_host = "${local.ecosystem_release_name}.${var.apps_namespace}.svc.cluster.local"
+
+  ecosystem_helm_values = {
+    image = {
+      repository = "warehouse/ecosystem-frontend"
+      tag        = "local-${local.ecosystem_source_hash}"
+      pullPolicy = "IfNotPresent"
+    }
+
+    service = {
+      type       = "ClusterIP"
+      port       = 80
+      targetPort = 8080
+    }
+
+    ingress = {
+      enabled = false
+    }
+  }
+
   # The browser-facing API origin the console publishes in /config.json. This
   # is KONG's host endpoint -- a different origin from the page itself, which
   # is exactly why Kong needs the exact-origin CORS policy in kong-cors.tf.
@@ -229,6 +275,24 @@ resource "null_resource" "build_and_load_console" {
   }
 }
 
+resource "null_resource" "build_and_load_ecosystem" {
+  count = var.deploy_frontends ? 1 : 0
+
+  depends_on = [kind_cluster.warehouse]
+
+  triggers = {
+    source_hash = local.ecosystem_source_hash
+    image       = "warehouse/ecosystem-frontend:local-${local.ecosystem_source_hash}"
+    cluster     = var.cluster_name
+  }
+
+  # Same shape as the console: the catalog is the repo root. The script's
+  # uikit named BuildKit context is unused by this Dockerfile and harmless.
+  provisioner "local-exec" {
+    command = "${path.module}/../scripts/build-and-load-frontend.sh 'ecosystem' '.' 'local-${local.ecosystem_source_hash}' '${var.cluster_name}'"
+  }
+}
+
 # ---------------------------------------------------------------------------
 # warehouse-console: its own Helm release.
 # ---------------------------------------------------------------------------
@@ -255,9 +319,11 @@ locals {
     # here fails config parsing and the container never starts. Resolving
     # upstreams at REQUEST time (rather than once at boot) is what stops a
     # redeployed frontend pod 502-ing until the gateway itself restarts.
-    dns_resolver         = var.cluster_dns_ip
-    console_service_host = local.console_service_host
-    console_service_port = 80
+    dns_resolver           = var.cluster_dns_ip
+    ecosystem_service_host = local.ecosystem_service_host
+    ecosystem_service_port = 80
+    console_service_host   = local.console_service_host
+    console_service_port   = 80
     remotes = [
       for name, fe in local.frontend_remotes : {
         context      = name
