@@ -76,6 +76,28 @@ http {
     }
 
 %{ endfor ~}
+    # ---- the EventCatalog (ecosystem) ----
+    # Built with Astro base "/catalog/", so every asset and internal link it
+    # emits already carries the prefix: plain proxying, no rewrite. Like the
+    # MFE remotes, its own nginx does the byte serving; this is bytes only.
+    location = /catalog {
+      return 301 /catalog/;
+    }
+
+    location ^~ /catalog/ {
+      set $upstream_ecosystem ${ecosystem_service_host};
+      # Strip the public /catalog/ prefix: the catalog's Astro base prefixes
+      # every emitted URL, but the files live at the dist root -- same
+      # strip-and-serve shape as the /mfes/<context>/ remotes above.
+      rewrite ^/catalog/(.*)$ /$1 break;
+      proxy_pass http://$upstream_ecosystem:${ecosystem_service_port};
+      proxy_http_version 1.1;
+      proxy_set_header Host              $host;
+      proxy_set_header X-Real-IP         $remote_addr;
+      proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     # ---- the console shell ----
     # Last, and a prefix match on "/", so every more specific /mfes/<context>/
     # location above wins. The shell's own nginx applies the SPA fallback, so a

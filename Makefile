@@ -6,11 +6,9 @@
 
 TF_DIR := terraform
 
-# The fifteen Helm charts this repo deploys, taken directly from
-# terraform/locals.tf's local.services chart_path values plus
-# ops-agent.tf's local.ops_agent_chart_path and warehouse-console's own
-# chart (frontends.tf). Keep this list in sync with those files — it is
-# not auto-discovered.
+# The Helm charts this repo deploys: the application registry in
+# terraform/apps.yaml (one chart per application). Keep this list in
+# sync with it — it is not auto-discovered.
 CHARTS := \
 	../inventory-storage/charts/inventory-storage \
 	../wes-work-planning/charts/wes-work-planning \
@@ -26,7 +24,8 @@ CHARTS := \
 	../slotting-optimization/charts/slotting-optimization \
 	../network-inventory-planning/charts/network-inventory-planning \
 	../warehouse-ops-agent/charts/warehouse-ops-agent \
-	../warehouse-console/charts/warehouse-console
+	../warehouse-console/charts/warehouse-console \
+	../ecosystem/charts/ecosystem
 
 .PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test check check-all
 
@@ -35,7 +34,10 @@ help:
 	@echo ""
 	@echo "  help            Print this list of targets (default target)"
 	@echo "  tf-fmt-check    terraform fmt -check -recursive -diff (from $(TF_DIR)/)"
-	@echo "  tf-validate     terraform init -backend=false + terraform validate"
+	@echo "  tf-validate     terraform init -backend=false + terraform validate, in each of the three layers"
+	@echo "  cluster-plan|apply, platform-plan|apply   one layer (ARGS=... goes to terraform)"
+	@echo "  app-plan|apply APP=<name>   one application's own state (terraform/20-apps, workspace <name>)"
+	@echo "  apps-plan|apply  every application of terraform/apps.yaml, one after the other"
 	@echo "  helm-lint       helm lint on every chart in \$$(CHARTS) — workforce-management"
 	@echo "                  and warehouse-planning need a dummy database.url, wired in below"
 	@echo "  shellcheck      shellcheck --severity=warning on scripts/*.sh"
@@ -58,8 +60,26 @@ help:
 tf-fmt-check:
 	cd $(TF_DIR) && terraform fmt -check -recursive -diff
 
+# The three layers of ADR 0007. Validation needs no state: terraform_remote_state
+# is only read by plan.
+TF_LAYERS := 00-cluster 10-platform 20-apps
+
 tf-validate:
-	cd $(TF_DIR) && terraform init -backend=false -input=false >/dev/null && terraform validate
+	@for l in $(TF_LAYERS); do \
+		echo "==> $$l"; \
+		(cd $(TF_DIR)/$$l && terraform init -backend=false -input=false >/dev/null && terraform validate) || exit 1; \
+	done
+
+# ---- Running Terraform: one layer, or one application's state (ADR 0003, 0007).
+# ARGS is passed to terraform, e.g. `make app-plan APP=product-master ARGS=-refresh=false`.
+cluster-plan cluster-apply platform-plan platform-apply: ; @scripts/tf.sh $(word 1,$(subst -, ,$@)) $(word 2,$(subst -, ,$@)) $(ARGS)
+
+app-plan app-apply:
+	@test -n "$(APP)" || { echo "usage: make $@ APP=<application of terraform/apps.yaml>"; exit 2; }
+	@scripts/tf.sh app $(APP) $(subst app-,,$@) $(ARGS)
+
+apps-plan apps-apply:
+	@scripts/tf.sh apps $(subst apps-,,$@) $(ARGS)
 
 helm-lint:
 	@if ! command -v helm >/dev/null 2>&1; then \
@@ -120,6 +140,7 @@ alert-rules-check:
 # HTTP fake of facility-layout, so no cluster is needed.
 seed-scripts-test:
 	python3 scripts/test_seed_transfer_capability.py
+	python3 scripts/test_seed_transfer_lanes.py
 
 # The fast self-correction loop: run this after every change, before committing.
 check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test
@@ -129,9 +150,12 @@ check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observ
 check-all: check
 
 # --- agent harness (harness-template v3) -----------------------------------
-.PHONY: check-fast guide-lint harness-test
+.PHONY: cluster-plan cluster-apply platform-plan platform-apply app-plan app-apply apps-plan apps-apply check-fast secret-files-check guide-lint harness-test
 # Fast local gate used by the agent Stop hook (this repo's own quick checks).
-check-fast: tf-fmt-check shellcheck chart-selector-check observability-check
+check-fast: tf-fmt-check shellcheck chart-selector-check observability-check secret-files-check
+
+secret-files-check: ## no tracked plan, state, tfvars, kubeconfig or API key (the repo is public)
+	./scripts/check-no-secret-files.sh
 
 guide-lint: ## lint agent guides: skills load, references resolve, context budget
 	python3 scripts/harness/guide_lint.py

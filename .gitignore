@@ -1,8 +1,24 @@
 # Terraform working state — this is a local, disposable environment.
 terraform/.terraform/
 terraform/.terraform.lock.hcl
+terraform/*/.terraform/
+terraform/*/.terraform.lock.hcl
 terraform/terraform.tfstate
 terraform/terraform.tfstate.*
 terraform/kubeconfig
 terraform/*.tfvars
+# Plans and workspace states hold every secret in clear text; the repo is public.
+*.tfplan
+terraform/terraform.tfstate.d/
+terraform/*/terraform.tfstate*
+terraform/*/terraform.tfstate.d/
+terraform/*/*.tfvars
+terraform/*/kubeconfig
+# terraform/20-apps (ADR 0007 step 2) is its own Terraform root, with its
+# own working-state directory and lock file -- same reasons as the root's
+# patterns above, one directory level deeper.
+terraform/*/.terraform/
+terraform/*/.terraform.lock.hcl
+!terraform/terraform.tfvars.example
 .claude/settings.local.json
+__pycache__/

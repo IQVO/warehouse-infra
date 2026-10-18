@@ -10,7 +10,7 @@ Every CI job in `.github/workflows/ci.yml` is one Makefile target in `Makefile`,
 | Command | What it guards | Typical failure |
 |---|---|---|
 | `make tf-fmt-check` | `terraform fmt -check -recursive -diff` from `terraform/` | whitespace/alignment. Fix with `terraform -chdir=terraform fmt -recursive` |
-| `make tf-validate` | `terraform init -backend=false` then `terraform validate` | "Inconsistent conditional result types" = the two ternary branches in `terraform/services.tf` have different key sets; add the missing key with an inert value (`enabled = false`, `extraEnv = []`) to the other branch. Also a missing `helm-values/<svc>.yaml` |
+| `make tf-validate` | `terraform init -backend=false` then `terraform validate` in each layer (`00-cluster`, `10-platform`, `20-apps`) | "Inconsistent conditional result types" = the two branches of a ternary have different key sets; add the missing key with an inert value to the other branch. A missing `helm-values/<app>.yaml` or `kind-resources/<app>.yaml` fails `terraform plan` (the module's precondition), not validate |
 | `make helm-lint` | `helm lint` on every chart in `CHARTS` (sibling repos' charts) | needs `helm`; workforce-management needs a dummy `database.url`, already wired in the Makefile |
 | `make shellcheck` | `shellcheck --severity=warning scripts/*.sh` | needs `shellcheck` on PATH |
 | `make chart-selector-check` | `scripts/check-chart-selectors.py` renders every chart with analytics, frontend and MCP enabled and asserts each Service selects EXACTLY ONE Deployment | `Service <ctx> selects N Deployments`: a component template lacks `app.kubernetes.io/component` in its selector. Needs `helm` and PyYAML |

@@ -79,7 +79,7 @@ wes-work-planning `0005_outbox`.
 
 Partition counts to recreate with: **8 partitions, replication factor 1**
 for every business topic (`docs/kafka-partition-scaleup.md`;
-`terraform/kafka.tf` sets the broker default `num.partitions = 8`).
+`terraform/10-platform/kafka.tf` sets the broker default `num.partitions = 8`).
 `__consumer_offsets` is never touched.
 
 ---
@@ -123,7 +123,7 @@ done
 ## 2. Freeze ArgoCD auto-sync
 
 Every service Application has `syncPolicy.automated.selfHeal = true`
-(`terraform/argocd-apps.tf`), so a manual `kubectl scale` is reverted
+(`terraform/modules/application`), so a manual `kubectl scale` is reverted
 within seconds. Suspend auto-sync for the cutover window:
 
 ```bash
@@ -342,8 +342,8 @@ with new CloudEvents UUIDs and can be left as is.
 
 ## 7. Deploy the new images
 
-Images are NOT pulled from a registry. `terraform/services.tf` (and
-`network-fulfillment.tf`) run `scripts/build-and-load.sh`, which
+Images are NOT pulled from a registry. `terraform/modules/application`
+runs `scripts/build-and-load.sh`, which
 `docker build`s each service from its LOCAL checkout at
 `~/warehouse-systems/<repo>` (`${path.module}/../../<repo>`) and
 `kind load`s it; the image tag is a hash of that checkout's `*.go` +
@@ -386,8 +386,8 @@ done   # every line: sdk=1 flat=0
 ```bash
 cd ~/warehouse-systems/warehouse-infra
 git checkout -q develop && git pull -q --ff-only origin develop
-terraform -chdir=terraform plan  -out=cutover.plan
-terraform -chdir=terraform apply cutover.plan
+scripts/tf.sh platform plan  -out=cutover.plan
+scripts/tf.sh platform apply cutover.plan
 ```
 
 The apply rebuilds every service whose source hash changed (all nine do),

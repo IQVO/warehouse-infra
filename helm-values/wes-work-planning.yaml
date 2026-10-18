@@ -10,16 +10,13 @@
 # database; wiring a migrate-on-boot step belongs in the service repo, not here.
 #
 # Kafka: publish-only. Live now that warehouse-infra runs a real Kafka
-# release (kafka.tf) — see warehouse-infra terraform/kafka.tf.
+# release (kafka.tf) — see warehouse-infra terraform/10-platform/kafka.tf.
 #
 # Analytics: the projector+reports pair (ADR-0010) is turned on here.
-# terraform/services.tf feeds analytics.database.projectorUrl/reportsUrl from
-# a Terraform-generated role (see locals.tf's analytics_database_urls); the
-# database/role itself is created by hand against the live Postgres instance
-# the same way wes_work_planning's own OLTP migrations are (see the KNOWN GAP
-# note above and init-databases.sql.tftpl — initdb only runs on a truly empty
-# data directory, so an already-initialized cluster needs the new CREATE
-# ROLE/DATABASE statements applied manually once).
+# analytics.database.existingSecret names the wes-work-planning-analytics-db
+# Secret modules/application writes from a Terraform-generated role
+# (applications.tf); the database/role itself is created by
+# modules/application's provisioning Job (ADR 0005), as for every application.
 
 replicaCount: 1
 
@@ -29,11 +26,15 @@ config:
 
 kafka:
   enabled: true
-  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
-
 analytics:
   enabled: true
 
+  database:
+    existingSecret: wes-work-planning-analytics-db
+  reports:
+    route:
+      enabled: true
+      path: /api/wes-work-planning/reports
 livenessProbe:
   httpGet:
     path: /healthz
@@ -49,3 +50,84 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 5
   failureThreshold: 6
+
+# Formerly computed by terraform/services.tf (ADR 0002 phase 3, docs/adr/0002-application-delivery-boundary.md).
+# Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
+# _platform.yaml; image tags from Terraform (the Application's valuesObject).
+database:
+  existingSecret: wes-work-planning-db
+# Env with no dedicated chart value (the chart renders extraEnv into the api
+# container). Every consumer binary defaults its *_MODE to "permissive" (never
+# reaches the network); in THIS cluster every supplier is deployed, so leaving the
+# default silently degrades behaviour. Suppliers are addressed by their in-cluster
+# Service (port 80). Never set here an env var the chart already renders from a
+# dedicated value: a duplicate env entry breaks ArgoCD's diff (ComparisonError
+# "doesn't match $setElementOrder list", found live 2026-10-05).
+extraEnv:
+  # Process paths come from process-path-management's events (cutover
+  # 2026-09-06), not from a mounted file: pathCatalogue.enabled stays false.
+  # Rollback: pathCatalogue.enabled true with the catalogue as
+  # pathCatalogue.content, and drop this entry (docs/rollback-switches.md).
+  - name: PATH_CATALOGUE_SOURCE
+    value: kafka
+  # Product classification from a local copy of product-master's
+  # ProductClassified (product-master ADR 0003 stage D, wes-work-planning
+  # ADR-0035): a STABLE consumer group shared by every replica. "http" was
+  # removed from the binary and fails at boot.
+  - name: PRODUCT_CLASSIFICATION_MODE
+    value: kafka
+  - name: PRODUCT_CLASSIFICATION_CONSUMER_GROUP
+    value: wes-work-planning-product-classification
+  - name: TRAVEL_DISTANCE_MODE
+    value: http
+  - name: FACILITY_LAYOUT_BASE_URL
+    value: http://facility-layout.warehouse-systems.svc.cluster.local:80
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/wes-work-planning-frontend
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/wes-work-planning
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/wes-work-planning
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/wes-work-planning
+          pathType: Prefix
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+mcp:
+  enabled: true
+  # cmd/mcp (ADR-0035) reads the SAME product_classification_copy table
+  # cmd/wes maintains (read-only, no consumer group), so work released through
+  # the release_next_work tool carries the same hazmat/fragile hints.
+  extraEnv:
+    - name: PRODUCT_CLASSIFICATION_MODE
+      value: kafka
+  route:
+    enabled: true
+    path: /api/mcp/wes-work-planning
+pathCatalogue:
+  content: ''
+  enabled: false
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

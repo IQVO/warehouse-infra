@@ -21,11 +21,15 @@ config:
 
 kafka:
   enabled: true
-  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
-
 analytics:
   enabled: true
 
+  database:
+    existingSecret: workforce-management-analytics-db
+  reports:
+    route:
+      enabled: true
+      path: /api/workforce-management/reports
 livenessProbe:
   httpGet:
     path: /healthz
@@ -41,3 +45,80 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 5
   failureThreshold: 6
+
+# Formerly computed by terraform/services.tf (ADR 0002 phase 3, docs/adr/0002-application-delivery-boundary.md).
+# Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
+# _platform.yaml; image tags from Terraform (the Application's valuesObject).
+database:
+  existingSecret: workforce-management-db
+# Env with no dedicated chart value (the chart renders extraEnv into the api
+# container). Every consumer binary defaults its *_MODE to "permissive" (never
+# reaches the network); in THIS cluster every supplier is deployed, so leaving the
+# default silently degrades behaviour. Suppliers are addressed by their in-cluster
+# Service (port 80). Never set here an env var the chart already renders from a
+# dedicated value: a duplicate env entry breaks ArgoCD's diff (ComparisonError
+# "doesn't match $setElementOrder list", found live 2026-10-05).
+extraEnv:
+  # Process paths come from process-path-management's events (cutover
+  # 2026-09-06), not from a mounted file: pathCatalogue.enabled stays false.
+  # Rollback: pathCatalogue.enabled true with the catalogue as
+  # pathCatalogue.content, and drop this entry (docs/rollback-switches.md).
+  - name: PATH_CATALOGUE_SOURCE
+    value: kafka
+  # permissive is fail-LOUD here: every POST /shift-plans returned 503
+  # (ADR-0014; found live 2026-09-07).
+  - name: INSTALLED_CAPACITY_MODE
+    value: http
+  - name: FULFILLMENT_EXECUTION_BASE_URL
+    value: http://fulfillment-execution.warehouse-systems.svc.cluster.local:80
+  # ProposePathPlan's measured rates come from an event-fed cache of
+  # labor-performance's TaskPerformanceRecorded (ADR-0019). The BASE_URL below
+  # stays only as the rollback value for LABOR_PERFORMANCE_MODE=http (R10,
+  # docs/rollback-switches.md).
+  - name: LABOR_PERFORMANCE_MODE
+    value: kafka-cache
+  - name: LABOR_PERFORMANCE_BASE_URL
+    value: http://labor-performance.warehouse-systems.svc.cluster.local:80
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/workforce-management-frontend
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/workforce-management
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/workforce-management
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/workforce-management
+          pathType: Prefix
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/workforce-management
+pathCatalogue:
+  content: ''
+  enabled: false
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

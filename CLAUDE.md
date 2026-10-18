@@ -3,36 +3,53 @@
 Terraform + Helm deployment of the entire `warehouse-systems` fleet onto a
 local `kind` cluster named `warehouse`. This repo owns the cluster's
 existence, not any bounded context's business logic: one Terraform root
-module plus per-service values; each service's chart lives in that
-service's own repo.
+module (plus the `application` child module, ADR 0002 and ADR 0004) and
+per-service values; each service's chart lives in that service's own repo.
 
 > **Study project.** Personal DDD/hexagonal/Kubernetes learning exercise. Not
 > a production system; no uptime or support guarantee.
 
 ## What this repo deploys
 
-`terraform/locals.tf`'s `local.services` map is the **single source of
-truth** for what gets deployed. It does NOT auto-discover sibling repos: a
-new bounded-context repo must be added by hand and its own `charts/<repo>/`
-must already exist. Read that file before answering "what does the cluster
-know about".
+`terraform/apps.yaml` (the application registry; `terraform/20-apps/main.tf`
+turns each entry into module inputs) is the **single
+source of truth** for what gets deployed. It does NOT auto-discover sibling
+repos: a new repo must be added by hand and its own `charts/<repo>/` must
+already exist. Read it and `terraform/10-platform/locals.tf` before answering "what does
+the cluster know about".
 
 ```
-terraform/             Root module: services, Kafka, Postgres + PgBouncer, MCP, ArgoCD,
-                       dashboards, the Nginx/Kong localhost edge
-helm-values/           Per-service STATIC values (computed layer in services.tf wins)
+terraform/00-cluster/  The kind cluster (own state)
+terraform/10-platform/ Kafka, Postgres + PgBouncer, Istio, ArgoCD, observability, the Nginx/Kong
+                       localhost edge (own state)
+terraform/20-apps/     One workspace and state per application (modules/application)
+terraform/modules/application/  One application's platform contract (DB, Secrets, images, Application)
+helm-values/           Every application's complete Helm values; ArgoCD reads them from develop (ADR 0002 D2)
 config/process-paths/  Seed data for scripts/seed-process-paths.py
 scripts/               up/down, smoke test, exposure-policy gate, chart selector check
 docs/                  Analytics governance, observability, edge decision, CloudEvents cutover
+docs/adr/              Architecture decision records (index: docs/adr/README.md)
 .github/workflows/ci.yml   terraform, helm-lint, shellcheck, chart-selector-check, guide-lint
 Makefile               make check / check-fast / check-all mirror ci.yml 1:1
 ```
+
+## Architecture decisions
+
+Decisions live in `docs/adr/` (index: `docs/adr/README.md`). A change that
+alters a recorded decision ships its ADR in the same PR.
+`docs/adr/0002-application-delivery-boundary.md` sets the boundary: an
+application's Kubernetes objects belong in its own chart, never in
+Terraform. Read its Rollout section before restructuring `terraform/`.
+`docs/adr/0007-state-split-in-four-steps.md` splits `terraform/` into the layers
+`00-cluster`, `10-platform` and `20-apps` (one state per application).
+`docs/adr/0004-one-application-registry.md` makes every application one
+instance of `terraform/modules/application`.
 
 ## Non-negotiables (short form; detail loads from `.claude/rules/` when you touch the files)
 
 1. **`terraform apply` does NOT pick up chart-template changes.** The source
    hash covers Go source, migrations, Dockerfile and go.mod/go.sum only.
-   ArgoCD (`terraform/argocd-apps.tf`) installs each chart from the service
+   ArgoCD (an Application per instance of `terraform/modules/application`) installs each chart from the service
    repo's GitHub `develop`. NOTE: the older recipe here (`terraform taint
    helm_release.service[...]`) is obsolete; that resource no longer exists.
 2. **Images are built from the LOCAL sibling checkout, not `origin/develop`.**
@@ -42,26 +59,36 @@ Makefile               make check / check-fast / check-all mirror ci.yml 1:1
    live.** Image tags are content-derived (`local-<hash12>`); never
    simplify them back to a fixed `local` tag (frontends included). Confirm
    with `kubectl rollout status` and the live image tag.
-4. **Adding to `analytics_services` / `mcp_services` on a Postgres that
-   already has data does nothing alone** (initdb runs once on an empty data
-   dir): create the role/DB by hand. See the `add-or-change-a-service` skill.
-5. **`terraform validate`: both branches of a ternary must have the same
-   key set**, even when one side is inert.
-6. **The computed layer in `terraform/services.tf` OVERRIDES
-   `helm-values/*.yaml`.** Per-service env with no chart value goes in
-   `local.sync_edge_env`; an `extraEnv` in a helm-values file is silently dropped.
+4. **Roles and databases come from Jobs, not from SQL.** `modules/database`
+   creates each application's role and database on every apply, on an empty
+   or a populated Postgres, and sets the role's password to the generated one
+   (ADR 0005, `docs/adr/0005-database-provisioning-by-jobs.md`). Never add
+   application SQL to the Postgres release or a PgBouncer file; removing an
+   application leaves its database, so drop it by hand with the user's OK.
+   See the `add-or-change-a-service` skill.
+5. **Application values deploy from GitHub `develop`, not from a local
+   apply.** `helm-values/<app>.yaml` is the application's whole configuration
+   (after `_platform.yaml`, before `kind-resources/<app>.yaml`); a change
+   reaches the cluster on merge, through an ArgoCD sync. Check it with
+   `helm template` first (`helm-values/_README.md`). Never a credential or an
+   image tag in a values file.
+6. **Never set an env var twice.** `extraEnv` is only for env the chart has
+   no dedicated value for; a duplicate env entry breaks ArgoCD's diff.
 7. **Every `*_MODE` env var defaults to `permissive` if unset.** Wire `MODE`
-   + `BASE_URL` in `local.sync_edge_env` in the SAME PR as a new sync edge.
+   + `BASE_URL` in the consumer's values file in the SAME PR as a new sync edge.
 8. **Every chart `Service` must select exactly ONE Deployment** (scope
    `selectorLabels` by `app.kubernetes.io/component`). Run
    `make chart-selector-check` before touching selector/label wiring.
-9. **`terraform destroy` leaves ~60 phantom resources in state.** Back up
-   the tfstate, confirm `kind get clusters` is empty, then `terraform state rm`
-   each, before re-applying.
+9. **Never `terraform destroy` the cluster.** It leaves ~60 phantom resources
+   in state. `scripts/down.sh` deletes the kind cluster and drops the layers'
+   state instead; recreate with `scripts/up.sh` (three layers, in order).
 10. **Delete tracked files with `git rm -r <path>`, never bare `rm -rf`.**
-11. **Worktrees have no tfstate and no sibling repos.** Copy the real
-    `terraform.tfstate` in, scope plan/apply with `-target=`, copy it back
-    after an apply, and symlink siblings (see `deploy-local-checkout`). Never
+11. **Worktrees have no tfstate and no sibling repos.** Copy the real layer
+    states in (`00-cluster`, `10-platform`, the application workspaces you
+    need), plan one application with `scripts/tf.sh app <name> plan`, copy the
+    state back after an apply, and symlink siblings (see
+    `deploy-local-checkout`). Never apply from a checkout older than the
+    layered layout (ADR 0007): the old root no longer has a state. Never
     apply, destroy or run SQL/kubectl mutations against the live cluster
     without the user's go-ahead.
 
@@ -88,7 +115,8 @@ one through the other (`docs/exposure/localhost-edge-topology.md`). Run
 make check-fast         # tf-fmt-check + shellcheck + chart-selector-check (agent Stop hook)
 make check              # + tf-validate + helm-lint (mirrors ci.yml); check-all is an alias
 make guide-lint         # agent-guide lint (blocking in CI)
-terraform -chdir=terraform plan      # see deploy-local-checkout before apply
+scripts/tf.sh platform plan          # layers: cluster | platform | app <name> | apps (see deploy-local-checkout before apply)
+make app-plan APP=<name>             # one application's own state
 bash scripts/up.sh | down.sh | smoke-test.sh | test-exposure-policy.sh
 ```
 

@@ -29,6 +29,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: python3 scripts/harness/guide_lint.py
       - run: python3 scripts/harness/repo_lint.py
+      - run: ./scripts/check-no-secret-files.sh
       - run: python3 scripts/harness/test_hook.py
       - run: python3 scripts/harness/test_repo_lint.py
 
@@ -124,6 +125,11 @@ jobs:
           path: warehouse-console
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/ecosystem
+          ref: develop
+          path: ecosystem
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/warehouse-ui-kit
           ref: develop
           path: warehouse-ui-kit
@@ -175,7 +181,9 @@ jobs:
   # CLASSIFICATION: UNIT TESTS (post-deploy seed scripts)
   # scripts/seed-transfer-capability.py against a stdlib fake of
   # facility-layout's REST contract (idempotency, dry run, UNSPECIFIED
-  # never written, 409 concurrent-modification retry, non-zero exit).
+  # never written, 409 concurrent-modification retry, non-zero exit);
+  # scripts/seed-transfer-lanes.py against fakes of facility-layout + NIP
+  # (nearest-neighbour lanes, idempotency, drift update, unmanaged lanes).
   # Stdlib only: the runner's preinstalled python3 is enough.
   # ============================================================
   seed-scripts:
@@ -191,7 +199,7 @@ jobs:
   # Every chart this repo deploys lives in a SIBLING repo, so this job
   # checks out all eleven (ten service repos + warehouse-console) next to
   # this one, exactly matching the local dev layout the Makefile's CHARTS
-  # variable and terraform/locals.tf's chart_path values already assume.
+  # variable already assumes.
   # develop is checked out for each sibling (not main) to match what a
   # contributor testing against their own in-progress fleet changes would
   # see; this job re-runs on push to develop/main too so a sibling's own
@@ -284,6 +292,11 @@ jobs:
           repository: IQVO/warehouse-console
           ref: develop
           path: warehouse-console
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/ecosystem
+          ref: develop
+          path: ecosystem
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: v3.16.4
@@ -386,6 +399,11 @@ jobs:
           repository: IQVO/warehouse-console
           ref: develop
           path: warehouse-console
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/ecosystem
+          ref: develop
+          path: ecosystem
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: v3.16.4

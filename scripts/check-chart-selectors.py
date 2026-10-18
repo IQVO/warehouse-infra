@@ -23,8 +23,7 @@ happens to select more than intended).
 Run from anywhere; paths below are relative to `terraform/` (this script
 lives in `scripts/`, but is invoked via `cd terraform && python3
 ../scripts/check-chart-selectors.py` from the Makefile / CI job so the
-chart paths match `terraform/locals.tf`'s own `../../<repo>/charts/<repo>`
-convention).
+chart paths match the sibling layout `../../<repo>/charts/<repo>`).
 
 Exit 0 if every Service selects exactly one Deployment; exit 1 (with the
 offending Service(s) named) otherwise.
@@ -39,9 +38,9 @@ RELEASE_NAME = "chart-conformance-check"
 # Every service-owning chart in the fleet, keyed by its path relative to
 # terraform/, with the --set flags needed to render every optional
 # component that adds its own Deployment+Service pair. Keep this list in
-# sync with terraform/locals.tf's local.services chart_path values plus
-# ops-agent.tf/frontends.tf (same discipline the Makefile's CHARTS
-# variable already follows) -- it is not auto-discovered.
+# sync with the application registry in terraform/20-apps/main.tf
+# (same discipline the Makefile's CHARTS variable already follows) -- it is
+# not auto-discovered.
 CHARTS: dict[str, dict[str, str]] = {
     "../../order-management/charts/order-management": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
@@ -123,6 +122,7 @@ CHARTS: dict[str, dict[str, str]] = {
     # not because they're currently at risk of this specific bug shape.
     "../../warehouse-ops-agent/charts/warehouse-ops-agent": {},
     "../../warehouse-console/charts/warehouse-console": {},
+    "../../ecosystem/charts/ecosystem": {},
 }
 
 

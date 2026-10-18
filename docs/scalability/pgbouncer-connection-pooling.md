@@ -6,10 +6,22 @@ Implemented (this branch). Phase 3 scalability follow-up, triggered directly
 by order-management's ADR-0026 (`order-management/docs/docs/adr/0026-*.md`,
 merged in PR #110).
 
+## Update 2026-10-18 (ADR 0005)
+
+PgBouncer no longer lists any database or role by name. `pgbouncer.ini` has one
+`*` fallback entry with `pool_size=12`, so every database is pooled with the
+same size as before, and `userlist.txt` holds only the superuser and the
+`pgbouncer_auth` lookup role. Clients are authenticated with `auth_query`
+(`pgbouncer.get_auth()`, `templates/pgbouncer-auth.sql`), so a new application
+changes neither file. Where this document mentions `[databases]` entries per
+database or the `pgbouncer_oltp_services` map, read "the `*` entry"; the
+pooling decisions below are unchanged. The role and database themselves are
+created by `modules/database`, not by an initdb script.
+
 ## Context
 
 `warehouse-infra` runs **one** Postgres release (Bitnami chart,
-`terraform/postgres.tf`) with `max_connections` at its unmodified default
+`terraform/10-platform/postgres.tf`) with `max_connections` at its unmodified default
 of **100**, shared by every one of this fleet's 10 backend services. Each
 service has its own logical database + role on that same server
 (`terraform/locals.tf`'s `local.services` map, plus `network-fulfillment.tf`
@@ -63,7 +75,7 @@ catalog does not include a `pgbouncer` chart (unlike `postgresql`/`kafka`,
 both still free and both already used elsewhere in this repo). The
 `bitnamilegacy/pgbouncer` **image** itself is still pullable (same registry
 override pattern `postgres.tf`/`kafka.tf` already use for their own
-images), so `terraform/pgbouncer.tf` hand-rolls the
+images), so `terraform/10-platform/pgbouncer.tf` hand-rolls the
 Deployment/Service/Secret directly in Terraform — the same pattern
 `terraform/frontends.tf`'s `kubernetes_deployment.web_gateway` already uses
 in this repo for the (also chart-less) Nginx web gateway. This keeps the
@@ -74,7 +86,7 @@ that does not exist.
 
 ### Per-database pool sizing
 
-`terraform/pgbouncer.tf`'s `local.pgbouncer_oltp_pool_size = 12` — every
+`terraform/10-platform/pgbouncer.tf`'s `local.pgbouncer_oltp_pool_size = 12` — every
 OLTP database gets its own `[databases]` entry in `pgbouncer.ini` with
 `pool_size=12`, well inside the requested 10-15 range and conservative
 end of it. Aggregate worst case across every OLTP database this fleet has
@@ -180,7 +192,7 @@ credentials. Confirmed directly against order-management (see
 
 ### Readiness / liveness / startup probes
 
-PgBouncer's own Deployment (`terraform/pgbouncer.tf`) uses `SHOW POOLS`
+PgBouncer's own Deployment (`terraform/10-platform/pgbouncer.tf`) uses `SHOW POOLS`
 against its built-in `pgbouncer` admin pseudo-database for all three
 probes (`startup_probe`, `readiness_probe`, `liveness_probe`), not a bare
 TCP-port-open check. A bare port probe can report "ready" while PgBouncer
@@ -270,3 +282,28 @@ actually indicates readiness, not a proxy for it).
 - Consider `replicas > 1` for the PgBouncer Deployment (with a
   `PodDisruptionBudget`) if this cluster ever needs to tolerate a node
   failure, not just a pod restart, without an OLTP-path blip.
+
+## 2026-10-17: restart incident and retune
+
+The single PgBouncer pod had accumulated 71 restarts by 2026-10-17. Cause
+chain, verified live: both probes ran with the Kubernetes default `timeout:
+1s`, which a busy PgBouncer (fleet-wide mass reconnects during rollouts and
+e2e-harness load on the shared node) regularly exceeds just to answer `SHOW
+POOLS`; six liveness misses later kubelet SIGTERMs the pod, and with the
+process slow to drain under load it exits 137. Every death resets in-flight
+and booting connections for ALL services at once, which is what pushes
+individual services' 5x15s boot retries into exit-1 CrashLoops (observed
+restart counts over three days: labor-performance 105, slotting-optimization
+85, inbound-receiving 78, product-master 68, warehouse-planning 67).
+
+Fixes (this PR): probe `timeout_seconds = 5` on readiness and liveness;
+memory 64Mi/256Mi -> 256Mi/1Gi (the fleet grew from 10 to 14 pooled
+contexts). Budget correction: the pooled server-side worst case is now
+14 databases x pool_size 12 = 168, ABOVE the Postgres chart's stock
+`max_connections=100`, so postgres.tf raises it to 250 — the original
+"9 x 12 = 108 soft ceiling" accounting had gone stale as contexts were
+added. `replicas > 1` stays a future option (see above); it does not fix
+probe fragility and would add load to an already CPU-saturated worker node.
+Verification after apply: pgbouncer restart count flat over a rollout
+restart, services' boot logs free of `read: connection reset by peer`
+storms, `SHOW POOLS` under `kubectl exec` answering well under 5s.

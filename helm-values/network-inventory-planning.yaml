@@ -1,0 +1,72 @@
+# network-inventory-planning: complete Helm values (ADR 0002 D2). Formerly computed in
+# terraform/10-platform/network-inventory-planning.tf; see that file's git history (before ADR 0002
+# phase 3) for the reasoning behind each block.
+# Platform facts come from _platform.yaml, the kind CPU overlay from kind-resources/,
+# the image tags from Terraform (the Application's valuesObject). Credentials never
+# appear here: the chart reads the network-inventory-planning-db and
+# network-inventory-planning-analytics-db Secrets (existingSecret).
+analytics:
+  database:
+    existingSecret: network-inventory-planning-analytics-db
+  enabled: true
+  reports:
+    route:
+      enabled: true
+      path: /api/network-inventory-planning/reports
+config:
+  outboxRelayEnabled: 'true'
+  transferDispatchCptOffset: 3h
+  transferDispatchPathId: dispatch-transfer
+  transferPickCptOffset: 2h
+  transferPickPathId: pick
+database:
+  existingSecret: network-inventory-planning-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/network-inventory-planning-frontend
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/network-inventory-planning
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/network-inventory-planning
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/network-inventory-planning
+          pathType: Prefix
+kafka:
+  capacityPlanConsumerGroup: network-inventory-planning-capacity-plan
+  enabled: true
+  siteCapabilityConsumerGroup: network-inventory-planning-site-capability
+  siteSkuDemandConsumerGroup: network-inventory-planning-site-sku-demand
+  transferFactConsumerGroup: network-inventory-planning-transfer-fact
+  transferReplyConsumerGroup: network-inventory-planning-transfer-reply
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/network-inventory-planning
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP
