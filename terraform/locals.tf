@@ -149,9 +149,9 @@ locals {
     # ABC velocity with stickiness and human approval; slotting-optimization
     # docs/adr). Gap fix D10 (2026-10-12): the repo already ships its
     # Dockerfile and charts/slotting-optimization, so this entry is the whole
-    # registration -- the initdb role/database (templates/init-databases.sql.tftpl),
-    # the <name>-db Secret and PgBouncer entry (postgres.tf, pgbouncer.tf), the
-    # image build and the ArgoCD Application (modules/application) and the
+    # registration -- the role and database (provisioned by modules/application),
+    # the <name>-db Secret, the image build and the ArgoCD Application
+    # (modules/application) and the
     # Kong route ${var.api_path_prefix}/slotting-optimization (the chart's own
     # gatewayApi HTTPRoute, switched on in helm-values/slotting-optimization.yaml)
     # derive from it and that file. Its env (EVENT_PUBLISHER, KAFKA_BROKERS,
@@ -186,16 +186,6 @@ locals {
     "slotting-optimization" = "IQVO"
   }
 
-  # Per-service database passwords are GENERATED, never committed. Each service
-  # gets a random 24-char password inside modules/application, read here
-  # through local.app_db_passwords (applications.tf); the value lives only
-  # in Terraform state, which is gitignored. This keeps credentials out of
-  # version control so the repo is safe to publish.
-  service_passwords = {
-    for name in keys(local.services) :
-    name => local.app_db_passwords[name]
-  }
-
   # sslmode=disable: the Postgres release runs without TLS inside the cluster.
   # Traffic between service pods and Postgres (or, since pgbouncer.tf, PgBouncer)
   # is not meshed either (both live in an un-injected namespace), which is fine
@@ -203,7 +193,7 @@ locals {
   #
   # This map holds the same connection string modules/application writes
   # into each service's <name>-db Secret (DATABASE_URL), with the same
-  # generated password the initdb script set on the role. It is exposed only
+  # generated password the provisioning Job set on the role. It is exposed only
   # through the `database_urls` output, which is marked sensitive.
   #
   # Routed through PgBouncer (pgbouncer.tf), not directly at Postgres, since
@@ -217,7 +207,7 @@ locals {
   # PgBouncer -- see the design doc's "why analytics stays direct" section.
   database_urls = {
     for name, svc in local.services :
-    name => "postgres://${svc.user}:${local.service_passwords[name]}@${local.pgbouncer_host}:${local.pgbouncer_port}/${svc.db}?sslmode=disable"
+    name => "postgres://${svc.user}:${module.application[name].db_password}@${local.pgbouncer_host}:${local.pgbouncer_port}/${svc.db}?sslmode=disable"
   }
 
   # ---------------------------------------------------------------------
@@ -284,10 +274,9 @@ locals {
     # and mcp binaries (one build_and_load resource, no new image). The chart
     # values it needs (analytics.* including the <name>-reports Kong route)
     # live in helm-values/warehouse-planning.yaml like every sibling's; the
-    # analytics database, its Secret and the postgres.tf init-job template
-    # pick it up from this one entry. On an
-    # already-populated Postgres the new role/database are NOT created by
-    # `terraform apply` (initdb never re-runs): see the PR runbook.
+    # analytics database, its Secret and the role and database
+    # (modules/application's provisioning Job) pick it up from this one entry,
+    # on a fresh or a populated Postgres alike.
     "warehouse-planning",
     # Added (product-master ADR 0006): the master data quality data product --
     # the `warehouse.product-master.analytics` stream (same outbox as the
@@ -337,7 +326,7 @@ locals {
   # receive it as a value: they read the Secret (existingSecret).
   analytics_database_urls = {
     for name in local.analytics_services :
-    name => "postgres://${local.analytics_db_info[name].user}:${local.app_analytics_db_passwords[name]}@${local.postgres_host}:${local.postgres_port}/${local.analytics_db_info[name].db}?sslmode=disable"
+    name => "postgres://${local.analytics_db_info[name].user}:${module.application[name].analytics_db_password}@${local.postgres_host}:${local.postgres_port}/${local.analytics_db_info[name].db}?sslmode=disable"
   }
 }
 

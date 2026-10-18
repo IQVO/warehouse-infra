@@ -233,12 +233,8 @@ is `SlotPlanApproved` → wes-work-planning (its inbound consumer, on whenever i
 `RELOCATE` task → `TaskCompleted` → inventory-storage's TaskCompleted consumer
 (`config.taskCompletedConsumerMode=kafka`) relocates the stock and raises
 `StockRelocated` → slotting-optimization. It needs the `RELOCATE` process path
-(post-deploy seed step 1). Two things a first `terraform apply` will
-not do on its own: (1) initdb never re-runs on a populated Postgres, so create
-the role/database once by hand, mirroring `templates/init-databases.sql.tftpl`
-with the password from `module.application["slotting-optimization"]`'s
-generated `db_password` (`terraform console`, never printed in a log);
-(2) its chart does not render the Kong plugins yet (no `kong-plugins.yaml`), so
+(post-deploy seed step 1). One thing a first `terraform apply` will
+not do on its own: its chart does not render the Kong plugins yet (no `kong-plugins.yaml`), so
 `scripts/test-exposure-policy.sh` section 11 flags its HTTPRoute and Kong
 exports no `kong_http_requests_total` series for it until that chart change
 lands in slotting-optimization.
@@ -355,32 +351,10 @@ contract (image build/load, database secrets, ArgoCD Application) by
 `terraform/modules/application`, its configuration (Kong routes for the API and
 `/reports`, MCP, console remote, analytics) by
 `helm-values/network-inventory-planning.yaml`; `terraform/network-inventory-planning.tf`
-keeps its database names. Two things a plain
+keeps its database names. One thing a plain
 `terraform apply` does NOT do on an already-populated cluster:
 
-1. **Databases and roles (two of them).** Postgres runs its init script once, on an
-   empty data directory. On a live cluster create, against the primary as the
-   superuser, the OLTP and the analytics database, each with its own owner role and
-   the passwords from `terraform output -raw network_inventory_planning_db_password`
-   and `terraform output -raw network_inventory_planning_analytics_db_password`
-   (the same statements `templates/init-databases.sql.tftpl` renders):
-
-   ```sql
-   CREATE ROLE network_inventory_planning WITH LOGIN PASSWORD '<db_password>';
-   CREATE DATABASE network_inventory_planning WITH OWNER network_inventory_planning ENCODING 'UTF8';
-   REVOKE ALL ON DATABASE network_inventory_planning FROM PUBLIC;
-   GRANT CONNECT, TEMPORARY ON DATABASE network_inventory_planning TO network_inventory_planning;
-
-   CREATE ROLE network_inventory_planning_analytics WITH LOGIN PASSWORD '<analytics_db_password>';
-   CREATE DATABASE network_inventory_planning_analytics WITH OWNER network_inventory_planning_analytics ENCODING 'UTF8';
-   REVOKE ALL ON DATABASE network_inventory_planning_analytics FROM PUBLIC;
-   GRANT CONNECT, TEMPORARY ON DATABASE network_inventory_planning_analytics TO network_inventory_planning_analytics;
-   ```
-
-   Do this before ArgoCD syncs the pods. No PgBouncer step is needed: `pgbouncer.tf`
-   already renders the OLTP role into its userlist on apply, and the analytics database
-   is reached directly (never through PgBouncer).
-2. **The dispatch path.** NIP releases the dispatch leg with
+1. **The dispatch path.** NIP releases the dispatch leg with
    `TRANSFER_DISPATCH_PATH_ID=dispatch-transfer`. process-path-management is the
    catalogue's source of truth (the YAML under `config/process-paths/` is frozen) and
    declares the `DISPATCH` family in `catalogue/paths.json` (its ADR 0035: matchPrefix
@@ -585,8 +559,8 @@ That runs `terraform init` + `terraform apply`, which in order:
 
 1. creates the kind cluster (control-plane + worker) with the Kong port
    mappings,
-2. installs **PostgreSQL** and creates the four databases via
-   `primary.initdb.scripts`,
+2. installs **PostgreSQL** (empty: each application's role and database are
+   created later by a Job, see "Databases"),
 3. installs **istio-base**, then **istiod** (base first — it owns the CRDs
    istiod's manifests reference),
 4. installs **Kong**,
@@ -683,11 +657,16 @@ live tables for the ports you actually applied.
 
 ## Databases
 
-One PostgreSQL release, four logical databases, four least-privilege owners.
-Created by a Terraform-templated init script
-(`terraform/templates/init-databases.sql.tftpl`) fed to the chart's
-`primary.initdb.scripts` — reproducible from a clean `terraform apply`, never a
-manual step.
+One PostgreSQL release, one logical database per application (and one more per
+analytics read side), each with its own least-privilege owner role. They are
+created by a Kubernetes Job per role (`terraform/modules/database`, run by
+`terraform/modules/application`; [ADR 0005](docs/adr/0005-database-provisioning-by-jobs.md)):
+the same apply creates them on an empty cluster or a populated one, sets the
+role's password to the one Terraform generated, and holds the `Application`
+back until they exist. No SQL is written by hand, and removing an application
+never drops its data. The PgBouncer in front lists no database: it resolves any
+name and checks credentials against Postgres. The table below is the original
+set; `terraform/locals.tf` is the full list.
 
 | Bounded context         | Database                | Owning role             |
 |-------------------------|-------------------------|-------------------------|
@@ -714,13 +693,11 @@ kubectl -n warehouse-data exec -it postgres-postgresql-0 -- \
 **Storage now persists across pod restarts by default.**
 `postgres_persistence_enabled` defaults to `true` (as of 2026-09-26 — data
 durability was decided to matter more here than the old
-reproducible-from-any-state disposability). One real consequence: initdb
-scripts only run against an EMPTY data directory, so once a PVC exists, a
-NEW logical database added to `local.services`/`local.analytics_services`
-will NOT be created automatically on a pod restart — you have to run the
-manual `CREATE ROLE`/`CREATE DATABASE` steps documented for that case (see
-this repo's operational notes / the fleet skill's "initdb never re-runs"
-pitfall). Set `-var postgres_persistence_enabled=false` to go back to the
+reproducible-from-any-state disposability). Data now survives a pod
+restart, and so does a stale database or role: removing an application leaves
+its database behind (drop it by hand). A new application needs no SQL on a
+populated volume, because its Job creates the role and database on the next
+apply (ADR 0005). Set `-var postgres_persistence_enabled=false` to go back to the
 old ephemeral emptyDir behavior, e.g. for a disposable CI/throwaway
 cluster.
 
@@ -858,13 +835,12 @@ ArgoCD itself) and each application's platform contract, but it runs no
 Application renders its chart with the value files in `helm-values/`
 (ADR 0002 D2).
 
-**Registering a new database-backed service is three steps** (the
+**Registering a new database-backed service is two steps** (the
 `add-or-change-a-service` skill has the detail): add it to
-`terraform/locals.tf`'s `local.services` map, add its literal line to
-`local.app_passwords` in `terraform/applications.tf` (the plan fails until you
-do), and add `helm-values/<service>.yaml` plus
-`helm-values/kind-resources/<service>.yaml` (the plan fails while either is
-missing). The map feeds the application registry in
+`terraform/locals.tf`'s `local.services` map, and add
+`helm-values/<service>.yaml` plus `helm-values/kind-resources/<service>.yaml`
+(the plan fails while either is missing). Its role and database come with it
+(ADR 0005). The map feeds the application registry in
 `terraform/applications.tf`, which gives every entry one instance of
 `terraform/modules/application`
 ([ADR 0004](docs/adr/0004-one-application-registry.md)). Applications with a
@@ -1134,9 +1110,9 @@ warehouse-infra/
     ├── moved-applications.tf    # state moves onto the module (ADR 0002 D3)
     ├── outputs.tf
     ├── modules/
-    │   └── application/         # one application's platform contract: DB passwords, Secrets, images, Application
-    └── templates/
-        └── init-databases.sql.tftpl
+    │   ├── application/         # one application's platform contract: DB passwords, Secrets, images, Application
+    │   └── database/            # one role and database, created by a Job (ADR 0005)
+    └── templates/               # pgbouncer.ini, userlist, pgbouncer-auth.sql
 ```
 
 ---

@@ -4,22 +4,17 @@
 ;
 ; Plaintext-password entries ("user" "password") rather than pre-hashed
 ; SCRAM/MD5 secrets -- PgBouncer hashes them on the fly for both the
-; client<->pgbouncer and pgbouncer<->postgres legs, and this is the ONLY
-; format Terraform can populate without a second round-trip to read back
-; each role's real rolpassword hash from a live Postgres after initdb runs.
-; The plaintext value itself lives only in Terraform state (gitignored,
-; same posture as every other generated password in this repo -- see
-; postgres.tf's header) and in this rendered file inside a Kubernetes
-; Secret, never in a tracked file.
+; client<->pgbouncer and pgbouncer<->postgres legs. The plaintext value lives
+; only in Terraform state (gitignored, same posture as every other generated
+; password in this repo) and in this rendered file inside a Kubernetes Secret,
+; never in a tracked file.
 ;
-; Every service's OWN role/password is listed here (needed so PgBouncer can
-; open the real server-side connection to Postgres as that role) plus the
-; Postgres superuser, which doubles as PgBouncer's admin_users entry for the
-; `pgbouncer` pseudo-database admin console (SHOW POOLS etc., used by both
-; the readiness probe and manual operator inspection).
+; Two entries, and no application (ADR 0005): the Postgres superuser, which
+; doubles as PgBouncer's admin_users entry for the `pgbouncer` pseudo-database
+; admin console (SHOW POOLS etc., used by the readiness probe and by manual
+; operator inspection), and the lookup role PgBouncer connects as to run
+; auth_query. Every application role is authenticated from Postgres itself.
 ; ---------------------------------------------------------------------------
 
 "${admin_user}" "${admin_password}"
-%{ for name, svc in services ~}
-"${svc.user}" "${svc.password}"
-%{ endfor ~}
+"${auth_user}" "${auth_password}"

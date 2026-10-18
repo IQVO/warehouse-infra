@@ -55,9 +55,13 @@ instance of `terraform/modules/application`.
    live.** Image tags are content-derived (`local-<hash12>`); never
    simplify them back to a fixed `local` tag (frontends included). Confirm
    with `kubectl rollout status` and the live image tag.
-4. **Adding to `local.services` / `analytics_services` on a Postgres that
-   already has data does nothing alone** (initdb runs once on an empty data
-   dir): create the role/DB by hand. See the `add-or-change-a-service` skill.
+4. **Roles and databases come from Jobs, not from SQL.** `modules/database`
+   creates each application's role and database on every apply, on an empty
+   or a populated Postgres, and sets the role's password to the generated one
+   (ADR 0005, `docs/adr/0005-database-provisioning-by-jobs.md`). Never add
+   application SQL to the Postgres release or a PgBouncer file; removing an
+   application leaves its database, so drop it by hand with the user's OK.
+   See the `add-or-change-a-service` skill.
 5. **Application values deploy from GitHub `develop`, not from a local
    apply.** `helm-values/<app>.yaml` is the application's whole configuration
    (after `_platform.yaml`, before `kind-resources/<app>.yaml`); a change

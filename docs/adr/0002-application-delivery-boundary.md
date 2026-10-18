@@ -16,7 +16,9 @@ derive route paths and `parentRefs` from their name, so each context's file
 states its routes (the `parentRefs` come from `_platform.yaml`); and where
 a platform fact is a Terraform variable (the Kong namespace, the host ports),
 Terraform checks `_platform.yaml` against it with a precondition instead of
-reading it. Phases 4 to 6 open.
+reading it. Phase 4 implemented by [ADR 0005](0005-database-provisioning-by-jobs.md),
+which decides the database provisioning mechanism: a Job per role, and a
+PgBouncer that lists no application. Phases 5 and 6 open.
 
 ## Context
 

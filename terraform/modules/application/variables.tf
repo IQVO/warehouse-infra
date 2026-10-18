@@ -120,3 +120,16 @@ variable "analytics_database" {
   })
   default = null
 }
+
+variable "postgres" {
+  description = "How to reach the platform's Postgres (ADR 0005): host, port, namespace, the superuser Secret and the psql image. Required when database or analytics_database is set: the module creates the role and the database through a Job and waits for it before it creates the Application."
+  type = object({
+    host              = string
+    port              = number
+    namespace         = string
+    admin_secret_name = string
+    admin_secret_key  = string
+    image             = string
+  })
+  default = null
+}
