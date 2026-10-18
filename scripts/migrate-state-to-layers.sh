@@ -51,7 +51,10 @@ if pgrep -f '^terraform (plan|apply|destroy|state|import)' >/dev/null 2>&1; then
   die "a terraform process is running; wait for it (it may hold the state lock)"
 fi
 
-# state commands never read the configuration; any directory works.
+# `terraform state` loads the configuration of the directory it runs in, which
+# needs its modules installed; -backend=false because only the local files below
+# are involved.
+(cd "${tf_dir}/10-platform" && terraform init -backend=false -input=false >/dev/null)
 tf() { (cd "${tf_dir}/10-platform" && terraform "$@"); }
 
 # Moves keep no backups: the source is untouched and holds everything.

@@ -38,7 +38,14 @@ run_in() {
   case "${cmd}" in
     plan | apply | destroy | refresh | import)
       extra+=(-lock-timeout=300s)
-      [[ -f "${tf_dir}/terraform.tfvars" ]] && extra+=("-var-file=${tf_dir}/terraform.tfvars")
+      # `terraform apply <planfile>` refuses variables: the plan already holds them.
+      local saved_plan=0 a
+      if [[ "${cmd}" == apply ]]; then
+        for a in "${@:2}"; do [[ "${a}" != -* ]] && saved_plan=1; done
+      fi
+      if [[ "${saved_plan}" -eq 0 && -f "${tf_dir}/terraform.tfvars" ]]; then
+        extra+=("-var-file=${tf_dir}/terraform.tfvars")
+      fi
       ;;
   esac
   # -reconfigure: `make tf-validate` initialises every layer with -backend=false,

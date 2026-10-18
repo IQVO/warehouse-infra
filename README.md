@@ -865,13 +865,12 @@ workspace into one instance of `terraform/modules/application`
 [ADR 0007](docs/adr/0007-state-split-in-four-steps.md)). `make app-apply
 APP=<name>` after adding an entry:
 
-> **ADR 0007 status**: steps 1 to 3 are merged: the registry
-> (`terraform/apps.yaml`), `terraform/20-apps` (one workspace per application)
-> and the layer split (`00-cluster`, `10-platform`). The live state is moved
-> into the layers by `scripts/migrate-state-to-layers.sh`, one run for all of
-> them ([ADR 0008](docs/adr/0008-one-migration-for-the-layers.md)); until
-> the maintainer has run it, the layers have no state and nothing applies from
-> a checkout of this layout. Step 4 (cleanup) is open.
+> **ADR 0007 status**: done. The registry (`terraform/apps.yaml`),
+> `terraform/20-apps` (one workspace per application) and the layers
+> `00-cluster` and `10-platform` are merged, and the live state was moved into
+> them on 2026-10-18 by `scripts/migrate-state-to-layers.sh`
+> ([ADR 0008](docs/adr/0008-one-migration-for-the-layers.md)). A checkout older
+> than that layout must not apply: its root has no state any more.
 
 1. Builds and side-loads the new service's image (the module's
    `null_resource.build_and_load`).

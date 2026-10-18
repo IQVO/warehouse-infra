@@ -21,10 +21,10 @@ which decides the database provisioning mechanism: a Job per role, and a
 PgBouncer that lists no application. Phase 5 implemented by
 [ADR 0006](0006-declarative-gateway-api.md): the Gateway API objects are
 `kubectl_manifest` resources with a vendored CRD bundle. Phase 6 is cut into
-four steps by [ADR 0007](0007-state-split-in-four-steps.md); step 1 (the
-registry file `terraform/apps.yaml`) is merged, step 2 (`terraform/20-apps`) is merged, step 3
-(`00-cluster`, `10-platform`) comes with one migration of the live state
-([ADR 0008](0008-one-migration-for-the-layers.md)), step 4 is open.
+four steps by [ADR 0007](0007-state-split-in-four-steps.md); all four are done
+(the registry file `terraform/apps.yaml`, `terraform/20-apps`, `00-cluster` and
+`10-platform` with one migration of the live state, [ADR 0008](0008-one-migration-for-the-layers.md),
+and the cleanup), so phases 1 to 6 are complete (2026-10-18).
 
 ## Context
 
