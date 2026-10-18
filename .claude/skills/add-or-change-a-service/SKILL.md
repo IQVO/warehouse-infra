@@ -1,6 +1,6 @@
 ---
 name: add-or-change-a-service
-description: Register a new application, or change how an existing one is configured, in warehouse-infra (application registry, local.services, analytics_services, helm-values files, sync-edge env, rollback switches). Use when adding a service to local.services or local.other_applications, editing helm-values/<app>.yaml or _platform.yaml, or adding per-service env or a *_MODE/BASE_URL pair.
+description: Register a new application, or change how an existing one is configured, in warehouse-infra (application registry apps.yaml, helm-values files, sync-edge env, rollback switches). Use when adding an application to terraform/apps.yaml, editing helm-values/<app>.yaml or _platform.yaml, or adding per-service env or a *_MODE/BASE_URL pair.
 ---
 
 # Add or change an application in warehouse-infra
@@ -15,11 +15,11 @@ Nothing is auto-discovered.
 ## 1. Register a new application
 
 1. Its chart must already exist in its own repo at `charts/<repo>/`, with every Service selecting by `app.kubernetes.io/component`.
-2. Registry entry:
-   - A database-backed context with the shared database naming: an entry in `local.services` (`terraform/locals.tf`: `db`, `user`, `port`, `path`, `chart_path`; copy a neighbour). `local.service_applications` picks it up. Nothing else is registered by hand: the module creates its role and database in Postgres through a Job (ADR 0005).
-   - Anything else: an explicit entry in `local.other_applications` (`terraform/applications.tf`). Static sites declare `frontend = { dir = ".", values_key = "image" }`; an image pulled from a registry is `image = null`.
-3. If it has a projector/reports pair: add it to `local.analytics_services` (`terraform/locals.tf`), which gives it an analytics database and the `<svc>-analytics-db` Secret. Do not add network-fulfillment there: `analytics_db_info` indexes `local.services[name]` and throws a plan-time KeyError.
-4. If its repo ships a frontend remote: add it to `local.frontend_remotes` (`terraform/frontends.tf`) for the image build and the web gateway route.
+2. Registry entry in `terraform/apps.yaml` (its header documents every field). Copy a neighbour:
+   - A database-backed context: `kind: service`, `database: true`. Names follow the convention (dashes become underscores); nothing else is registered by hand, the module creates its role and database in Postgres through a Job (ADR 0005).
+   - Anything else: `kind: other`. Static sites say `build_image: false` and `site: true`; an image pulled from a registry says `build_image: false`. A secret whose value comes from a Terraform variable goes in `local.application_secrets` (`terraform/applications.tf`).
+3. If it has a projector/reports pair: `analytics: true` (or `analytics: { secret_keys: [...] }` when its chart reads fewer keys than the default pair). That gives it the analytics database and the `<svc>-analytics-db` Secret.
+4. If its repo ships a frontend remote: `frontend_remote: <module-federation name>` for the image build and the web gateway route.
 5. Values: create `helm-values/<app>.yaml` (its complete configuration: copy a sibling's routes, MCP, analytics, Kong plugin blocks) and `helm-values/kind-resources/<app>.yaml` (generated CPU overlay; see that directory's README). The plan fails while either is missing. Credentials come from `existingSecret` (`<app>-db`, `<app>-analytics-db`), never a value; image tags never appear here.
 6. Keep the hand-maintained chart lists in sync: `CHARTS` in the `Makefile` and `CHARTS` in `scripts/check-chart-selectors.py`.
 

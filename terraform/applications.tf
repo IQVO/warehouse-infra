@@ -11,14 +11,11 @@
 # images and its ArgoCD Application. Every Kubernetes object of the
 # application itself comes from its own chart.
 #
-# Registering an application:
-#   - a database-backed context with the shared database naming goes in
-#     local.services (locals.tf) and is picked up below automatically;
-#   - anything else gets its own entry in local.other_applications;
-#   - either way its configuration is helm-values/<name>.yaml plus
-#     helm-values/kind-resources/<name>.yaml (ADR 0002 D2), which ArgoCD
-#     reads from this repo's develop: the plan fails while either is
-#     missing.
+# Registering an application: one entry in apps.yaml (ADR 0007; the file's
+# header documents the fields) plus its configuration, helm-values/<name>.yaml
+# and helm-values/kind-resources/<name>.yaml (ADR 0002 D2), which ArgoCD reads
+# from this repo's develop: the plan fails while either is missing. The module
+# inputs below are derived from the entry.
 #
 # The moved blocks in moved-applications.tf map every pre-module address
 # onto the module, so applying them only rewrites state addresses: no
@@ -35,127 +32,54 @@ locals {
     direct_port = local.postgres_port
   }
 
-  service_applications = {
-    for name, svc in local.services : name => {
-      deploy = var.deploy_services
+  # Secrets whose values come from Terraform variables, not from Git.
+  # warehouse-ops-agent-anthropic (ops-agent.tf's header).
+  application_secrets = {
+    "warehouse-ops-agent" = {
+      anthropic = { ANTHROPIC_API_KEY = var.anthropic_api_key }
+    }
+  }
+
+  # Source hashes of the static sites (frontends.tf).
+  site_source_hash = {
+    "warehouse-console" = local.console_source_hash
+    "ecosystem"         = local.ecosystem_source_hash
+  }
+
+  # Module inputs, one per registry entry (apps.yaml documents the fields).
+  applications = {
+    for name, a in local.registry : name => {
+      deploy = try(a.deploy_with, "services") == "frontends" ? var.deploy_frontends : var.deploy_services
       chart = {
-        repo_url = "https://github.com/${lookup(local.argocd_repo_owner, name, "claudioed")}/${name}.git"
+        repo_url = "https://github.com/${try(a.repo_owner, "claudioed")}/${name}.git"
         path     = "charts/${name}"
       }
-      image    = {}
-      frontend = contains(keys(local.frontend_remotes), name) ? { source_hash = local.frontend_source_hash[name] } : null
-      database = merge(local.oltp_endpoints, { name = svc.db, user = svc.user })
+      # The module's default hash covers every file the Dockerfile copies in,
+      # migrations included. {} builds the image; null means it comes from a
+      # registry or is the static site below.
+      image = try(a.build_image, true) ? {} : null
+      frontend = try(a.site, false) ? (
+        var.deploy_frontends ? { source_hash = local.site_source_hash[name], dir = ".", values_key = "image" } : null
+        ) : (
+        contains(keys(local.frontend_remotes), name) ? { source_hash = local.frontend_source_hash[name] } : null
+      )
+      database = try(a.database, false) ? merge(local.oltp_endpoints, {
+        name = replace(name, "-", "_")
+        user = replace(name, "-", "_")
+      }) : null
       # The <name>-analytics-db Secret the chart reads through
       # analytics.database.existingSecret (analytics.existingSecret for
       # slotting-optimization), set in its helm-values file.
-      analytics_database = contains(local.analytics_services, name) ? {
-        name        = local.analytics_db_info[name].db
-        user        = local.analytics_db_info[name].user
+      analytics_database = try(a.analytics, false) != false ? {
+        name        = "${replace(name, "-", "_")}_analytics"
+        user        = "${replace(name, "-", "_")}_analytics"
         host        = local.postgres_host
         port        = local.postgres_port
-        secret_keys = ["ANALYTICS_DATABASE_URL", "ANALYTICS_READER_DATABASE_URL"]
+        secret_keys = try(a.analytics.secret_keys, ["ANALYTICS_DATABASE_URL", "ANALYTICS_READER_DATABASE_URL"])
       } : null
-      secrets = {}
+      secrets = lookup(local.application_secrets, name, {})
     }
   }
-
-  other_applications = {
-    "network-inventory-planning" = {
-      deploy = var.deploy_services
-      chart = {
-        repo_url = "https://github.com/IQVO/network-inventory-planning.git"
-        path     = "charts/network-inventory-planning"
-      }
-      # The module's default hash covers both migration trees its Dockerfile
-      # copies into the image (internal/**/migrations, analytics/migrations).
-      image    = {}
-      frontend = contains(keys(local.frontend_remotes), "network-inventory-planning") ? { source_hash = local.frontend_source_hash["network-inventory-planning"] } : null
-      database = merge(local.oltp_endpoints, {
-        name = local.network_inventory_planning_db_name
-        user = local.network_inventory_planning_db_user
-      })
-      analytics_database = {
-        name = local.network_inventory_planning_analytics_db_name
-        user = local.network_inventory_planning_analytics_db_user
-        host = local.postgres_host
-        port = local.postgres_port
-      }
-      secrets = {}
-    }
-
-    "network-fulfillment" = {
-      deploy = var.deploy_services
-      chart = {
-        repo_url = "https://github.com/IQVO/network-fulfillment.git"
-        path     = "charts/network-fulfillment"
-      }
-      # The module's default hash covers migrations/ (OLTP, plus
-      # migrations/analytics), which its Dockerfile copies into the image.
-      image    = {}
-      frontend = contains(keys(local.frontend_remotes), "network-fulfillment") ? { source_hash = local.frontend_source_hash["network-fulfillment"] } : null
-      database = merge(local.oltp_endpoints, {
-        name = local.network_fulfillment_db_name
-        user = local.network_fulfillment_db_user
-      })
-      analytics_database = {
-        name = local.network_fulfillment_analytics_db_name
-        user = local.network_fulfillment_analytics_db_user
-        host = local.postgres_host
-        port = local.postgres_port
-        # Its chart's analytics-secret.yaml reads this one key only.
-        secret_keys = ["ANALYTICS_DATABASE_URL"]
-      }
-      secrets = {}
-    }
-
-    # Its image comes from a registry (var.ops_agent_image_repository), not
-    # from a local build.
-    "warehouse-ops-agent" = {
-      deploy = var.deploy_services
-      chart = {
-        repo_url = "https://github.com/IQVO/warehouse-ops-agent.git"
-        path     = "charts/warehouse-ops-agent"
-      }
-      image              = null
-      frontend           = null
-      database           = null
-      analytics_database = null
-      # warehouse-ops-agent-anthropic (ops-agent.tf's header).
-      secrets = {
-        anthropic = { ANTHROPIC_API_KEY = var.anthropic_api_key }
-      }
-    }
-
-    # The console shell and the EventCatalog ARE static sites: their one
-    # image is built from the repo root and its tag goes to image.tag.
-    "warehouse-console" = {
-      deploy = var.deploy_frontends
-      chart = {
-        repo_url = "https://github.com/IQVO/warehouse-console.git"
-        path     = "charts/warehouse-console"
-      }
-      image              = null
-      frontend           = var.deploy_frontends ? { source_hash = local.console_source_hash, dir = ".", values_key = "image" } : null
-      database           = null
-      analytics_database = null
-      secrets            = {}
-    }
-
-    "ecosystem" = {
-      deploy = var.deploy_frontends
-      chart = {
-        repo_url = "https://github.com/IQVO/ecosystem.git"
-        path     = "charts/ecosystem"
-      }
-      image              = null
-      frontend           = var.deploy_frontends ? { source_hash = local.ecosystem_source_hash, dir = ".", values_key = "image" } : null
-      database           = null
-      analytics_database = null
-      secrets            = {}
-    }
-  }
-
-  applications = merge(local.service_applications, local.other_applications)
 
   # Values Terraform itself owns, for the Application's valuesObject. Every
   # application's configuration lives in its value files (helm-values/,

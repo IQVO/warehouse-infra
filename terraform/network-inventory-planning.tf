@@ -32,22 +32,19 @@
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# OLTP database names. modules/application creates the role and the database
-# in Postgres with its generated password (ADR 0005), on a fresh or a
-# populated cluster alike.
+# OLTP database: network_inventory_planning, derived from the registry entry
+# (apps.yaml). modules/application creates the role and the database in
+# Postgres with its generated password (ADR 0005), on a fresh or a populated
+# cluster alike.
 # ---------------------------------------------------------------------------
-locals {
-  network_inventory_planning_db_user = "network_inventory_planning"
-  network_inventory_planning_db_name = "network_inventory_planning"
-}
-
 output "network_inventory_planning_route" {
   description = "Kong/Gateway path this context's REST surface is reachable on."
   value       = "${var.api_path_prefix}/network-inventory-planning"
 }
 
 # ---------------------------------------------------------------------------
-# Analytics database names (NIP ADR 0009): the saga-health data product's own
+# Analytics database (NIP ADR 0009), network_inventory_planning_analytics: the
+# saga-health data product's own
 # analytical Postgres database. The module generates its password and writes
 # the network-inventory-planning-analytics-db Secret (ANALYTICS_DATABASE_URL
 # and ANALYTICS_READER_DATABASE_URL, the same DIRECT DSN for both: the
@@ -57,11 +54,6 @@ output "network_inventory_planning_route" {
 # Same as the OLTP database above: modules/application creates the role and the
 # database (ADR 0005).
 # ---------------------------------------------------------------------------
-locals {
-  network_inventory_planning_analytics_db_user = "network_inventory_planning_analytics"
-  network_inventory_planning_analytics_db_name = "network_inventory_planning_analytics"
-}
-
 # Reports route: DELETED (fleet decision 2026-10-13) — the chart's own
 # reports-route.yaml renders it (/api/<context>/reports -> /reports), switched
 # on by the analytics.reports.route values in its helm-values file.
