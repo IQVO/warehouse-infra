@@ -11,9 +11,8 @@
 # topic resources), so nothing to declare for the new topic.
 #
 # Every key below is a DEDICATED chart value (charts/warehouse-planning/values.yaml
-# renders each one to its env var), so none of this belongs in
-# local.sync_edge_env -- an `extraEnv` in THIS file would be silently dropped by
-# the computed layer (see helm-values/_README.md and terraform/locals.tf).
+# renders each one to its env var), so none of this belongs in extraEnv
+# (a duplicate env entry breaks ArgoCD's diff).
 #
 # Startup: runs golang-migrate before serving, over MIGRATIONS_DATABASE_URL (the
 # direct, non-pooled DSN Terraform puts in the <svc>-db Secret); DATABASE_URL
@@ -22,20 +21,17 @@
 # Analytics read side (warehouse-planning ADR 0005): planning-projector (the only
 # writer of the SEPARATE warehouse_planning_analytics database) and
 # planning-reports (read-only, Service warehouse-planning-reports, routed by
-# Kong at /api/warehouse-planning/reports by services.tf like every sibling).
-# Both ship in the SAME image as the api (one build_and_load). The DSNs never
+# Kong at /api/warehouse-planning/reports, analytics.reports.route below).
+# Both ship in the SAME image as the api (one image build). The DSNs never
 # appear here: modules/application writes them into the
-# warehouse-planning-analytics-db Secret and services.tf points
-# analytics.database.existingSecret at it (merged over this block), so
-# only the static bits live here. Needs warehouse-planning's chart `analytics:`
+# warehouse-planning-analytics-db Secret, which
+# analytics.database.existingSecret names. Needs warehouse-planning's chart `analytics:`
 # block on its develop branch (ArgoCD installs the chart from there); before
 # that merge these values are ignored. The role/database are NOT created by a
 # plain apply on an already-populated Postgres: see the infra PR runbook.
 #
-# The console remote (capacity_mfe, web/) is NOT set here: terraform/services.tf
-# computes `frontend` (enabled + content-addressed image tag) for every context
-# in local.frontend_remotes, and a `frontend:` key in this file would be
-# overridden.
+# The console remote (capacity_mfe, web/): frontend below; its
+# content-addressed image tag comes from Terraform (local.frontend_remotes).
 
 replicaCount: 1
 
@@ -57,40 +53,73 @@ config:
 
 kafka:
   enabled: true
-  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
-
-# Order-demand consumer (warehouse-planning ADR 0004). Both keys are DEDICATED
-# chart values (templates/deployment.yaml renders DEMAND_CONSUMER_GROUP and
-# DEMAND_SITE_ID from them), so they live here and NOT in local.sync_edge_env:
-# setting both would double-render the env var.
-#   consumerGroup: a FIXED, STABLE id (never per-pod/per-run): a rescheduled pod
-#     resumes from its committed offsets. A group with no committed offset
-#     starts from the earliest retained message, so the first rollout rebuilds
-#     the read model from the topic's history. Empty would switch the feature
-#     OFF (no consumer, behaviour unchanged).
-#   siteId: order-management's orders carry no fulfillment site, so ALL consumed
-#     demand is attributed to this ONE site -- the `location` planning already
-#     uses for labor/facility data, and the site order-management matches
-#     planned capacity against (its PLANNED_CAPACITY_SITE_ID / DEFAULT_SITE_ID).
-#     Keep the two equal (SIM1) or a plan finds no demand (422, never silent).
-# Requires warehouse-planning's chart `demand:` block (warehouse-planning#19) on
-# its develop branch -- ArgoCD installs the chart from there; before that merge
-# these two values are ignored (harmless, but the consumer stays off).
 demand:
   consumerGroup: "warehouse-planning-demand"
   siteId: "SIM1"
 
-# Analytics read side (ADR 0005). `enabled` is also set by Terraform's computed
-# layer (services.tf, contains(local.analytics_services, name)); repeated here so
-# this file is the readable source of truth, exactly as the siblings do. The
-# projector's consumer group is a FIXED, stable id (fleet charter naming
+# Analytics read side (ADR 0005). The projector's consumer group is a FIXED, stable id (fleet charter naming
 # `<ctx>-analytics`): a restarted pod resumes from its committed offsets, and a
 # brand-new group rebuilds the model from the topic's history. Pinned here equal
 # to the binary's/chart's default so a rename in code cannot silently orphan the
 # committed offsets. The DSNs come from the warehouse-planning-analytics-db
-# Secret (database.existingSecret, computed layer, shallow-merged over this
-# block; disjoint keys).
+# Secret (analytics.database.existingSecret).
 analytics:
   enabled: true
   projector:
     consumerGroup: "warehouse-planning-analytics"
+  database:
+    existingSecret: warehouse-planning-analytics-db
+  reports:
+    route:
+      enabled: true
+      path: /api/warehouse-planning/reports
+
+# Formerly computed by terraform/services.tf (ADR 0002 phase 3, docs/adr/0002-application-delivery-boundary.md).
+# Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
+# _platform.yaml; image tags from Terraform (the Application's valuesObject).
+database:
+  existingSecret: warehouse-planning-db
+extraEnv: []
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/warehouse-planning-frontend
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/warehouse-planning
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/warehouse-planning
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/warehouse-planning
+          pathType: Prefix
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/warehouse-planning
+pathCatalogue:
+  content: ''
+  enabled: false
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

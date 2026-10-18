@@ -1,6 +1,6 @@
 # kind CPU-request overlay for ecosystem (generated from ecosystem/charts/ecosystem/values.yaml on develop).
 # Same reason as every other app: one kind worker, ~10 CPUs, chart defaults would over-request.
-# Merged INTO the Application's helm.valuesObject by terraform/kind-overlay.tf.
+# The Application's last value file (ADR 0002 D2); Helm deep-merges it.
 resources:
   requests:
     cpu: 25m

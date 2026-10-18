@@ -13,7 +13,7 @@
 #     DOCKER_BUILDKIT=1 is forced rather than left to the machine's default
 #
 # Invoked by Terraform (null_resource.build_and_load_frontend in
-# terraform/frontends.tf), and safe to run by hand:
+# terraform/modules/application), and safe to run by hand:
 #     ./scripts/build-and-load-frontend.sh order-management web local-abc123 warehouse
 set -euo pipefail
 

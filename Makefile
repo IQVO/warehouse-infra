@@ -6,11 +6,9 @@
 
 TF_DIR := terraform
 
-# The fifteen Helm charts this repo deploys, taken directly from
-# terraform/locals.tf's local.services chart_path values plus
-# ops-agent.tf's local.ops_agent_chart_path and warehouse-console's own
-# chart (frontends.tf). Keep this list in sync with those files — it is
-# not auto-discovered.
+# The Helm charts this repo deploys: the application registry in
+# terraform/applications.tf (one chart per application). Keep this list in
+# sync with it — it is not auto-discovered.
 CHARTS := \
 	../inventory-storage/charts/inventory-storage \
 	../wes-work-planning/charts/wes-work-planning \

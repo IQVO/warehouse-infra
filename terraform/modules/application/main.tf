@@ -8,7 +8,8 @@
 #   - the local image build(s), tagged by content so ArgoCD sees a new tag on
 #     every rebuild
 #   - the ArgoCD Application that installs the chart from the application's
-#     own repo
+#     own repo with its value files from this repo (helm-values/, ADR 0002
+#     D2); its valuesObject carries only the image tags
 #
 # Every Kubernetes object of the application itself (Deployments, Services,
 # HTTPRoutes, KongPlugins, ...) comes from that chart, never from here.
@@ -36,8 +37,18 @@ locals {
   image_tag          = var.image == null ? null : "local-${substr(local.source_hash, 0, 12)}"
   frontend_image_tag = var.frontend == null ? null : "local-${var.frontend.source_hash}"
 
-  # The values the Application carries: the caller's, plus the tags of the
-  # images built here. Setting the tags inside the module keeps the caller's
+  # The application's configuration lives in value files in this repo
+  # (ADR 0002 D2), lowest precedence first: the platform facts, the
+  # application's own file, the kind CPU overlay.
+  value_files = [
+    "$values/${var.values.dir}/_platform.yaml",
+    "$values/${var.values.dir}/${var.name}.yaml",
+    "$values/${var.values.dir}/kind-resources/${var.name}.yaml",
+  ]
+
+  # The valuesObject, which ArgoCD gives precedence over the value files:
+  # only what Terraform owns (var.helm_values) plus the tags of the images
+  # built here. Setting the tags inside the module keeps the caller's
   # values independent of this module's outputs.
   application_values = merge(
     var.helm_values,
@@ -174,14 +185,22 @@ resource "kubectl_manifest" "application" {
     }
     spec = {
       project = "default"
-      source = {
-        repoURL        = var.chart.repo_url
-        targetRevision = var.chart.target_revision
-        path           = var.chart.path
-        helm = {
-          valuesObject = local.application_values
-        }
-      }
+      sources = [
+        {
+          repoURL        = var.chart.repo_url
+          targetRevision = var.chart.target_revision
+          path           = var.chart.path
+          helm = {
+            valueFiles   = local.value_files
+            valuesObject = local.application_values
+          }
+        },
+        {
+          repoURL        = var.values.repo_url
+          targetRevision = var.values.target_revision
+          ref            = "values"
+        },
+      ]
       destination = {
         server    = "https://kubernetes.default.svc"
         namespace = var.apps_namespace
@@ -194,6 +213,18 @@ resource "kubectl_manifest" "application" {
       }
     }
   })
+
+  # ArgoCD reads the value files from GitHub, so a missing one would only
+  # surface as a failed sync. Fail the plan instead.
+  lifecycle {
+    precondition {
+      condition = alltrue([
+        for f in ["_platform.yaml", "${var.name}.yaml", "kind-resources/${var.name}.yaml"] :
+        fileexists("${var.values.local_dir}/${f}")
+      ])
+      error_message = "${var.name}: every value file must exist in ${var.values.dir}/ (_platform.yaml, ${var.name}.yaml, kind-resources/${var.name}.yaml)."
+    }
+  }
 
   # The chart's pods mount these Secrets; create them first.
   depends_on = [

@@ -1,0 +1,85 @@
+# warehouse-ops-agent: complete Helm values (ADR 0002 D2), formerly computed in
+# terraform/ops-agent.tf (see its git history for each block's reasoning).
+
+# The image (repository, tag, pullPolicy) is NOT here: Terraform sets it in the
+# Application's valuesObject from var.ops_agent_image_repository/var.ops_agent_image_tag,
+# which the operator overrides locally in terraform.tfvars.
+# The Anthropic API key is never a value: credentials.existingSecret points at the
+# warehouse-ops-agent-anthropic Secret Terraform creates (modules/application `secrets`).
+# llm.mode "shadow" needs that key; terraform/ops-agent.tf's check block warns when it is
+# empty.
+credentials:
+  existingSecret: warehouse-ops-agent-anthropic
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/warehouse-ops-agent
+      pathType: PathPrefix
+  stripPath: true
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/warehouse-ops-agent
+          pathType: Prefix
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+llm:
+  mode: shadow
+prometheus:
+  url: http://prometheus-server.observability.svc.cluster.local:9090
+reportsUrls:
+  facilityLayout: http://facility-layout-reports.warehouse-systems.svc.cluster.local:80
+  fulfillmentExecution: http://fulfillment-execution-reports.warehouse-systems.svc.cluster.local:80
+  inventoryStorage: http://inventory-storage-reports.warehouse-systems.svc.cluster.local:80
+  laborPerformance: http://labor-performance-reports.warehouse-systems.svc.cluster.local:80
+  orderManagement: http://order-management-reports.warehouse-systems.svc.cluster.local:80
+  wesWorkPlanning: http://wes-work-planning-reports.warehouse-systems.svc.cluster.local:80
+  workforceManagement: http://workforce-management-reports.warehouse-systems.svc.cluster.local:80
+restUrls:
+  fulfillmentExecution: http://fulfillment-execution.warehouse-systems.svc.cluster.local:80
+  inventoryStorage: http://inventory-storage.warehouse-systems.svc.cluster.local:80
+  orderManagement: http://order-management.warehouse-systems.svc.cluster.local:80
+  wesWorkPlanning: http://wes-work-planning.warehouse-systems.svc.cluster.local:80
+runtimeSignals:
+  lokiUrl: http://loki.observability.svc.cluster.local:3100
+service:
+  port: 80
+  targetPort: 8095
+  type: ClusterIP
+upstreams:
+  facilityLayout:
+    endpoint: http://facility-layout-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  fulfillmentExecution:
+    endpoint: http://fulfillment-execution-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  inboundReceiving:
+    endpoint: http://inbound-receiving-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  inventoryStorage:
+    endpoint: http://inventory-storage-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  laborPerformance:
+    endpoint: http://labor-performance-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  networkInventoryPlanning:
+    endpoint: http://network-inventory-planning-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  orderManagement:
+    endpoint: http://order-management-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  processPathManagement:
+    endpoint: http://process-path-management-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  productMaster:
+    endpoint: http://product-master-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  slottingOptimization:
+    endpoint: http://slotting-optimization-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  warehousePlanning:
+    endpoint: http://warehouse-planning-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  wesWorkPlanning:
+    endpoint: http://wes-work-planning-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  workforceManagement:
+    endpoint: http://workforce-management-mcp.warehouse-systems.svc.cluster.local:8090/mcp

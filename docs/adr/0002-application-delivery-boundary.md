@@ -8,9 +8,15 @@ order-management and network-inventory-planning) merged and its state moves
 recorded on the cluster's state (2026-10-17). Phase 2 implemented by
 [ADR 0004](0004-one-application-registry.md), which renames the module to
 `modules/application`; its state moves recorded on the cluster's state
-(2026-10-17). Phase 3 in progress: every chart already accepted
-`existingSecret`, so the analytics DSNs moved into module-owned Secrets
-first (2026-10-17); value files in Git follow. Phases 4 to 6 open.
+(2026-10-17). Phase 3 merged (2026-10-17) in two steps: the analytics DSNs
+moved into module-owned Secrets (every chart already accepted
+`existingSecret`), then every Application became two-source with its value
+files in `helm-values/`. Two parts of D2 are not done yet: charts do not
+derive route paths and `parentRefs` from their name, so each context's file
+states its routes (the `parentRefs` come from `_platform.yaml`); and where
+a platform fact is a Terraform variable (the Kong namespace, the host ports),
+Terraform checks `_platform.yaml` against it with a precondition instead of
+reading it. Phases 4 to 6 open.
 
 ## Context
 

@@ -5,9 +5,8 @@
 # objects (see kong.tf's header comment on that original choice). This
 # migrates every service in local.services (plus warehouse-ops-agent, see
 # ops-agent.tf) from Ingress to the Kubernetes Gateway API's HTTPRoute,
-# chart-rendered via each service's own `gatewayApi` values block --
-# services.tf and ops-agent.tf compute those values the same way they
-# already computed `ingress`.
+# chart-rendered via each service's own `gatewayApi` values block (its
+# helm-values file; the parentRefs come from helm-values/_platform.yaml).
 #
 # HISTORY (kept because the root cause below is easy to re-trip on a future
 # Kong/KIC upgrade): this started as a single-service pilot on
@@ -158,6 +157,22 @@ resource "null_resource" "gateway_class" {
 resource "null_resource" "gateway" {
   count = var.deploy_gateway_api ? 1 : 0
 
+  # Every application's routes attach to the parentRefs in
+  # helm-values/_platform.yaml: they must name this Gateway's namespace and
+  # listener.
+  lifecycle {
+    precondition {
+      condition = alltrue([
+        for ref in concat(
+          local.platform.gatewayApi.parentRefs,
+          local.platform.mcp.route.parentRefs,
+          local.platform.analytics.reports.route.parentRefs,
+        ) : ref.name == local.gateway_name && ref.namespace == var.kong_namespace && ref.sectionName == "http"
+      ])
+      error_message = "helm-values/_platform.yaml parentRefs must all point at Gateway ${local.gateway_name} in namespace ${var.kong_namespace}, listener http."
+    }
+  }
+
   depends_on = [null_resource.gateway_class]
 
   triggers = {
@@ -196,7 +211,9 @@ resource "null_resource" "gateway" {
 }
 
 locals {
-  gateway_name = "warehouse-gateway"
+  # A platform fact the application charts read from
+  # helm-values/_platform.yaml (ADR 0002 D2), so it is read from there.
+  gateway_name = local.platform.gatewayApi.parentRefs[0].name
 }
 
 output "gateway_api_installed" {

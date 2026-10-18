@@ -18,6 +18,14 @@
 # ---------------------------------------------------------------------------
 
 locals {
+  # Platform facts every application chart reads (ADR 0002 D2): the Gateway
+  # parentRefs, the Kafka brokers, Kong's traces endpoint and CORS origin.
+  # helm-values/_platform.yaml is their one source; Terraform reads them from
+  # there and preconditions on the platform resources they describe
+  # (gateway-api.tf, kafka.tf, observability.tf, frontends.tf) fail the plan
+  # when a variable would install the platform somewhere else.
+  platform = yamldecode(file("${path.module}/../helm-values/_platform.yaml"))
+
   postgres_release_name = "postgres"
   postgres_host         = "${local.postgres_release_name}-postgresql.${var.data_namespace}.svc.cluster.local"
   postgres_port         = 5432
@@ -81,10 +89,10 @@ locals {
     }
     # warehouse-planning: capacity planning. Its env (EVENT_PUBLISHER, KAFKA_BROKERS,
     # the two consumer-group ids, OUTBOX_RELAY_INTERVAL) all have DEDICATED chart
-    # values, so they live in helm-values/warehouse-planning.yaml, NOT in
-    # local.sync_edge_env (that map is only for env with no chart value; setting
-    # both would render duplicate env entries). It joins mcp_services (cmd/mcp
-    # merged; see terraform/mcp.tf) and analytics_services (its analytics read
+    # values, so they live in helm-values/warehouse-planning.yaml, NOT in its
+    # extraEnv (setting both would render duplicate env entries). Its MCP
+    # server (cmd/mcp) is switched on in that file, and it joins
+    # analytics_services (its analytics read
     # side, warehouse-planning ADR 0005: projector + reports + a separate
     # warehouse_planning_analytics database).
     "warehouse-planning" = {
@@ -98,12 +106,12 @@ locals {
     # dimensions, handling classification; product-master ADRs 0001-0004). Its
     # env (EVENT_PUBLISHER, KAFKA_BROKERS,
     # OUTBOX_RELAY_INTERVAL) all have DEDICATED chart values, so they live in
-    # helm-values/product-master.yaml, NOT in local.sync_edge_env (setting both
+    # helm-values/product-master.yaml, NOT in its extraEnv (setting both
     # would render duplicate env entries). It publishes
     # warehouse.product-master.events (ProductClassified is what the
     # classification readers -- inventory-storage, order-management,
     # wes-work-planning, fulfillment-execution -- keep local copies of; ADR 0003
-    # stage D). It joins mcp_services (cmd/mcp merged; see terraform/mcp.tf),
+    # stage D). Its MCP server (cmd/mcp) is on in its values file; it joins
     # analytics_services (product-master ADR 0006: product-projector +
     # product-reports + a separate product_master_analytics database) and
     # frontend_remotes (productmaster_mfe, web/; terraform/frontends.tf).
@@ -119,14 +127,14 @@ locals {
     # (EVENT_PUBLISHER, KAFKA_BROKERS, OUTBOX_RELAY_INTERVAL, PRODUCT_MODE +
     # PRODUCT_CONSUMER_GROUP, DOCK_DOOR_MODE + DOCK_DOOR_CONSUMER_GROUP) all
     # have DEDICATED chart values, so they live in
-    # helm-values/inbound-receiving.yaml, NOT in local.sync_edge_env (setting
+    # helm-values/inbound-receiving.yaml, NOT in its extraEnv (setting
     # both would render duplicate env entries). It publishes
     # warehouse.inbound-receiving.events; inventory-storage consumes the
     # receipt events from it and books StockReceived (inventory-storage ADR
     # 0037: config.inboundReceiptConsumerGroup). It consumes
     # warehouse.product-master.events (SKU copy) and warehouse.facility.events
-    # (inbound dock-door copy). It joins mcp_services (cmd/mcp; see
-    # terraform/mcp.tf), analytics_services (inbound-receiving ADR 0006:
+    # (inbound dock-door copy). Its MCP server (cmd/mcp) is on in its values
+    # file; it joins analytics_services (inbound-receiving ADR 0006:
     # inbound-projector + inbound-reports + a separate
     # inbound_receiving_analytics database) and frontend_remotes
     # (inbound_mfe, web/; terraform/frontends.tf).
@@ -145,13 +153,13 @@ locals {
     # the <name>-db Secret and PgBouncer entry (postgres.tf, pgbouncer.tf), the
     # image build and the ArgoCD Application (modules/application) and the
     # Kong route ${var.api_path_prefix}/slotting-optimization (the chart's own
-    # gatewayApi HTTPRoute, switched on by services.tf) all derive from it.
-    # Its env (EVENT_PUBLISHER, KAFKA_BROKERS, DEMAND/PRODUCT/LAYOUT_MODE + their
-    # consumer groups) all have DEDICATED chart values, so they live in
-    # helm-values/slotting-optimization.yaml, NOT in local.sync_edge_env. Its
-    # migrations live under internal/ (matched by services.tf's
-    # internal/**/migrations/** term). IN mcp_services (its read-only cmd/mcp;
-    # see terraform/mcp.tf -- the ops-agent consumes it, ops-agent.tf) and IN
+    # gatewayApi HTTPRoute, switched on in helm-values/slotting-optimization.yaml)
+    # derive from it and that file. Its env (EVENT_PUBLISHER, KAFKA_BROKERS,
+    # DEMAND/PRODUCT/LAYOUT_MODE + their consumer groups) all have DEDICATED
+    # chart values in that file, not extraEnv. Its migrations live under
+    # internal/ (matched by modules/application's default image hash). Its
+    # read-only cmd/mcp is switched on in its values file (the ops-agent
+    # consumes it) and it is IN
     # analytics_services (its ADR 0006 analytics read side,
     # cmd/slotting-projector + cmd/slotting-reports, since repo PR #37), but
     # NOT in frontend_remotes (no web/ remote).
@@ -265,21 +273,19 @@ locals {
     # day) in the same PR that closed this fleet's last remaining
     # analytics gap -- 8 of 8 backend contexts now have one. Every
     # downstream local (analytics_db_info, the module's analytics database
-    # and Secret in applications.tf) and the postgres.tf init-job template and
-    # services.tf's `contains(local.analytics_services, each.key)` gate
-    # already derive from this single set, so no other file needs a
-    # change to pick this service up.
+    # and Secret in applications.tf) and the postgres.tf init-job template
+    # derive from this single set; the chart's analytics.* values live in
+    # its helm-values file.
     "process-path-management",
     # Added (warehouse-planning ADR 0005): the analytics read side -- the
     # `warehouse.warehouse-planning.analytics` stream, cmd/planning-projector
     # (writer) and cmd/planning-reports (read-only reader, role/database
     # warehouse_planning_analytics) -- ships in the SAME image as the OLTP api
     # and mcp binaries (one build_and_load resource, no new image). The chart
-    # values it needs (analytics.database.existingSecret) are the same ones
-    # every sibling chart takes, so services.tf's
-    # `contains(local.analytics_services, name)` branch, the postgres.tf
-    # init-job template, the <name>-reports Kong route (services.tf) and
-    # ops-agent's reports URL all pick it up from this one entry. On an
+    # values it needs (analytics.* including the <name>-reports Kong route)
+    # live in helm-values/warehouse-planning.yaml like every sibling's; the
+    # analytics database, its Secret and the postgres.tf init-job template
+    # pick it up from this one entry. On an
     # already-populated Postgres the new role/database are NOT created by
     # `terraform apply` (initdb never re-runs): see the PR runbook.
     "warehouse-planning",
@@ -311,10 +317,9 @@ locals {
     # binaries (one image build; its analytical migrations live in a
     # top-level analytics/migrations/, already covered by
     # modules/application's default hash_globs). Its chart takes the
-    # single-DSN shape (analytics.existingSecret -- services.tf), NOT the
-    # analytics.database.* pair, and ships no reports Kong
-    # route; see services.tf. Same one-time SQL caveat as
-    # warehouse-planning above.
+    # single-DSN shape (analytics.existingSecret, in its helm-values file),
+    # NOT the analytics.database.* pair, and ships no reports Kong route.
+    # Same one-time SQL caveat as warehouse-planning above.
     "slotting-optimization",
   ])
 
@@ -334,141 +339,6 @@ locals {
     for name in local.analytics_services :
     name => "postgres://${local.analytics_db_info[name].user}:${local.app_analytics_db_passwords[name]}@${local.postgres_host}:${local.postgres_port}/${local.analytics_db_info[name].db}?sslmode=disable"
   }
-
-  # ---------------------------------------------------------------------
-  # Process-path catalogue (ADR-0017 in fulfillment-execution / ADR-0012 in
-  # wes-work-planning / ADR-0013 in workforce-management): these three
-  # services read a boot-time-required YAML file (PATH_CATALOGUE_FILE) that
-  # declares the fleet's process paths and their required capabilities. It
-  # is a PUBLISHED LANGUAGE owned by warehouse-infra (same reasoning as the
-  # `services` map above: a fact about what exists in THIS deployment, not
-  # business logic belonging to any one bounded context) -- read from disk
-  # once here and fed identically into all three charts' pathCatalogue.content
-  # so they can never disagree about what paths exist.
-  #
-  # SUPERSEDED AND FROZEN (cutover 2026-09-06; var.deploy_process_path_kafka_source
-  # now defaults to true): the source of truth for process paths is
-  # process-path-management (its own bounded context, in local.services
-  # above), which publishes ProcessPathCreated/Updated/Deactivated onto
-  # warehouse.process-path-management.events. Its store was seeded from
-  # this file by scripts/seed-process-paths.py (idempotent, re-runnable).
-  # Each of the three consumers ships a PATH_CATALOGUE_SOURCE=file|kafka
-  # switch; with the flag true each consumer's pathCatalogue.enabled is
-  # false (no file mount) and PATH_CATALOGUE_SOURCE=kafka is injected via
-  # extraEnv (see services.tf), and process-path-management's own
-  # config.eventPublisher is "kafka".
-  #
-  # DO NOT EDIT config/process-paths/sortable-fc.yaml to change the fleet's
-  # paths any more -- define/revise them through process-path-management's
-  # REST API. The file is kept ONLY as the rollback payload for
-  # var.deploy_process_path_kafka_source=false. Deleting the file, this
-  # block, and the consumers' filecatalog loaders is a follow-up once the
-  # kafka source has soaked for a full cycle.
-  # ---------------------------------------------------------------------------
-  # Synchronous HTTP edges between contexts (the fleet's Customer/Supplier
-  # REST calls). Every consumer binary defaults its *_MODE to "permissive"
-  # (never reaches the network), which is the right default for a bare
-  # `go run` -- but in THIS cluster every supplier is deployed, so leaving
-  # the defaults in place silently degrades real behaviour:
-  #
-  #   - workforce-management INSTALLED_CAPACITY_MODE=permissive is fail-LOUD:
-  #     every POST /shift-plans returned 503 (ADR-0014 there) -- found live
-  #     on 2026-09-07 while verifying the outbox rollout.
-  #   - wes-work-planning / fulfillment-execution
-  #     PRODUCT_CLASSIFICATION_MODE=permissive is fail-open: WorkReleased
-  #     never carries hazmat/fragile hints, so no station gating happens.
-  #     The classification edge is no longer HTTP (product-master ADR 0003
-  #     stage D; wes-work-planning ADR-0035, fulfillment-execution ADR-0039):
-  #     both now keep a local copy of product-master's ProductClassified from
-  #     warehouse.product-master.events, so the mode is "kafka" with a STABLE
-  #     PRODUCT_CLASSIFICATION_CONSUMER_GROUP (shared by every replica: the
-  #     copy is durable in Postgres and the upsert is version-guarded). "http"
-  #     was REMOVED from both binaries and now FAILS AT BOOT, and neither
-  #     reads INVENTORY_STORAGE_BASE_URL any more, so both entries are gone.
-  #     Neither chart has a dedicated value for these, hence extraEnv here.
-  #     (order-management and inventory-storage DO have dedicated values: see
-  #     their helm-values files.)
-  #   - workforce-management LABOR_PERFORMANCE_MODE=permissive: ProposePathPlan
-  #     always proposes 0 heads (no measured rate).
-  #
-  # order-management's inventory-storage edge was already wired (its
-  # helm-values file); inventory-storage's facility-layout edge moved to
-  # Kafka (var.deploy_facility_events_integration). This map covers the
-  # rest, keyed by consumer, injected via each chart's extraEnv. Suppliers
-  # are addressed by their in-cluster Service (port 80).
-  #
-  # NOTE: services.tf's computed merge sets `extraEnv` for EVERY service
-  # (it must -- both branches of the catalogue ternary need the same key
-  # set), and that computed layer overrides the helm-values/*.yaml file.
-  # So an extraEnv entry in a helm-values file is silently dropped; any
-  # per-service env that has no dedicated chart value MUST live here.
-  #
-  # labor-performance's EVENT_PUBLISHER originally lived here as an
-  # extraEnv entry because its chart didn't render that variable. The
-  # chart now natively templates it (config.eventPublisher), so the env
-  # is set via that key in services.tf instead -- an extraEnv
-  # EVENT_PUBLISHER on top of the chart's own rendered one produces a
-  # DUPLICATE env entry in the Deployment, which breaks ArgoCD's
-  # three-way diff (ComparisonError "doesn't match $setElementOrder
-  # list", app stuck Unknown/Progressing; found live 2026-10-05 when the
-  # adr-conformance chart changes landed).
-  # ---------------------------------------------------------------------------
-  sync_edge_env = {
-    "wes-work-planning" = [
-      { name = "PRODUCT_CLASSIFICATION_MODE", value = "kafka" },
-      { name = "PRODUCT_CLASSIFICATION_CONSUMER_GROUP", value = "wes-work-planning-product-classification" },
-      { name = "TRAVEL_DISTANCE_MODE", value = "http" },
-      { name = "FACILITY_LAYOUT_BASE_URL", value = "http://facility-layout.${var.apps_namespace}.svc.cluster.local:80" },
-    ]
-    "fulfillment-execution" = [
-      { name = "PRODUCT_CLASSIFICATION_MODE", value = "kafka" },
-      { name = "PRODUCT_CLASSIFICATION_CONSUMER_GROUP", value = "fulfillment-execution-product-classification" },
-      # Station-location role check (FE ADR-0024, gap R8), ON since
-      # 2026-10-17: RegisterStation validates a supplied locationCode against
-      # facility-layout and rejects a KNOWN non-WorkCenter role (an unknown
-      # location still passes -- fail-open by design). Registration-time only,
-      # never on the task hot path.
-      { name = "LOCATION_ROLE_MODE", value = "http" },
-      { name = "FACILITY_LAYOUT_BASE_URL", value = "http://facility-layout.${var.apps_namespace}.svc.cluster.local:80" },
-    ]
-    "workforce-management" = [
-      { name = "INSTALLED_CAPACITY_MODE", value = "http" },
-      { name = "FULFILLMENT_EXECUTION_BASE_URL", value = "http://fulfillment-execution.${var.apps_namespace}.svc.cluster.local:80" },
-      # LABOR_PERFORMANCE_MODE=kafka-cache (workforce-management ADR-0019):
-      # ProposePathPlan's measured-rate + observed-idle-share enrichment now
-      # comes from an event-fed local cache of labor-performance's
-      # warehouse.labor-performance.events (TaskPerformanceRecorded), not a
-      # synchronous GET per request. LABOR_PERFORMANCE_BASE_URL is kept below
-      # only as the rollback value if this ever needs to flip back to "http".
-      { name = "LABOR_PERFORMANCE_MODE", value = "kafka-cache" },
-      { name = "LABOR_PERFORMANCE_BASE_URL", value = "http://labor-performance.${var.apps_namespace}.svc.cluster.local:80" },
-    ]
-  }
-
-  # Env for a context's MCP Deployment (chart value mcp.extraEnv), for env with
-  # no dedicated chart value -- same rule as sync_edge_env above, which only
-  # reaches the api container. services.tf's mcp block adds `extraEnv` ONLY for
-  # a service listed here, so no other chart's values change.
-  #
-  # wes-work-planning's cmd/mcp (ADR-0035) reads PRODUCT_CLASSIFICATION_MODE too:
-  # with "kafka" and DATABASE_URL it reads the SAME product_classification_copy
-  # table cmd/wes maintains (read-only, it never starts the consumer, so no
-  # consumer group), so a WorkReleased raised through the release_next_work
-  # tool carries the same hazmat/fragile hints as one raised over REST. Unset,
-  # it stays permissive (no hints).
-  mcp_extra_env = {
-    "wes-work-planning" = [
-      { name = "PRODUCT_CLASSIFICATION_MODE", value = "kafka" },
-    ]
-  }
-
-  path_catalogue_services = [
-    "fulfillment-execution",
-    "wes-work-planning",
-    "workforce-management",
-  ]
-
-  path_catalogue_content = file("${path.module}/../config/process-paths/sortable-fc.yaml")
 }
 
 # ---------------------------------------------------------------------------

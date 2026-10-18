@@ -1,11 +1,16 @@
 # kind CPU-request overlays
 
-One file per ArgoCD Application, merged INTO the Application's `helm.valuesObject` by
-`terraform/kind-overlay.tf` (explicit merge at resources/mcp/frontend and analytics.projector/reports).
-Helm then deep-merges valuesObject over the chart `values.yaml`, so only `requests.cpu` changes.
+One file per ArgoCD Application: the LAST of its three value files (ADR 0002 D2,
+`docs/adr/0002-application-delivery-boundary.md`):
 
-Not as a separate `helm.values` string: ArgoCD v2.13 renders ONLY `valuesObject` when both are set, so a
-`values` string is silently ignored (warehouse-infra#81 shipped that form; found live 2026-10-14).
+1. `helm-values/_platform.yaml`
+2. `helm-values/<app>.yaml`
+3. `helm-values/kind-resources/<app>.yaml` (this directory)
+
+Helm deep-merges value files over the chart's `values.yaml`, so an overlay changes only
+`requests.cpu`. ArgoCD reads these files from this repo's GitHub `develop`: an overlay change
+deploys on merge, through an ArgoCD sync, with no `terraform apply`. The Terraform plan fails
+while an application's overlay file is missing (`terraform/modules/application`).
 
 Why: the local kind cluster is ONE worker node with the Docker VM's 10 CPUs. The charts request 50-100m CPU
 per container (about 10 cores for ~76 app containers) while measured use is ~10% of that. Every Deployment
