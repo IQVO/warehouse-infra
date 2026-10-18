@@ -846,6 +846,18 @@ Application renders its chart with the value files in `helm-values/`
 [ADR 0007](docs/adr/0007-state-split-in-four-steps.md)). A `terraform apply`
 after adding an entry:
 
+> **ADR 0007 status**: step 1 (the registry, `terraform/apps.yaml`) is
+> merged and live. Step 2 (`terraform/20-apps`, one Terraform CLI workspace
+> per application, reading the platform through `terraform_remote_state`)
+> exists in the repository but **no application has been migrated to it
+> yet** — `terraform/applications.tf` below is still the only place any
+> application's resources actually live. Migrating one application:
+> `scripts/migrate-app-state.sh <name> --go-ahead` (dry-run without the
+> flag), one at a time, only after this repo's `terraform/` has been applied
+> at least once since `terraform/20-apps` was merged (it reads `terraform/`'s
+> new `platform` output). Steps 3 (splitting `00-cluster`/`10-platform` out
+> of this root) and 4 (cleanup) are still open.
+
 1. Builds and side-loads the new service's image (the module's
    `null_resource.build_and_load`).
 2. Creates its `<service>-db` Secret directly (the module's
@@ -1106,7 +1118,10 @@ warehouse-infra/
     ├── argocd.tf                # ArgoCD release (helm-values/argocd.yaml)
     ├── applications.tf          # the application registry: one modules/application instance each (ADR 0004)
     ├── moved-applications.tf    # state moves onto the module (ADR 0002 D3)
-    ├── outputs.tf
+    ├── outputs.tf                # includes `platform`, what terraform/20-apps reads (ADR 0007 step 2)
+    ├── 20-apps/                  # ADR 0007 step 2: one Terraform workspace per application (not yet migrated into)
+    │   ├── providers.tf          # reads cluster credentials via terraform_remote_state, not a resource
+    │   └── main.tf               # one module.application instance, chosen by terraform.workspace
     ├── modules/
     │   ├── application/         # one application's platform contract: DB passwords, Secrets, images, Application
     │   └── database/            # one role and database, created by a Job (ADR 0005)

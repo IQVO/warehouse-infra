@@ -3,6 +3,52 @@ output "cluster_name" {
   value       = kind_cluster.warehouse.name
 }
 
+# ---------------------------------------------------------------------------
+# The platform contract `terraform/20-apps` reads through
+# `terraform_remote_state` (ADR 0007 step 2, ADR 0003 decision 4). One
+# object, so the application layer never names an individual platform
+# resource: every field here is a value `terraform/applications.tf` already
+# passes into `module.application`, moved to a boundary a second state can
+# cross. Until ADR 0007 step 3 splits 00-cluster/10-platform out of this root,
+# this module IS "the platform" for that purpose.
+#
+# sensitive: the client certificate/key authenticate as the cluster's
+# admin -- same credential providers.tf already uses, just re-exposed for a
+# second Terraform process to read.
+# ---------------------------------------------------------------------------
+output "platform" {
+  description = "Everything terraform/20-apps needs from this state: cluster credentials, namespaces, Postgres/PgBouncer endpoints, Gateway readiness and the frontend image-hash inputs. Read via terraform_remote_state, never by resource address."
+  value = {
+    cluster_name = kind_cluster.warehouse.name
+    kube_context = local.kube_context
+
+    cluster_endpoint           = kind_cluster.warehouse.endpoint
+    cluster_ca_certificate     = kind_cluster.warehouse.cluster_ca_certificate
+    cluster_client_certificate = kind_cluster.warehouse.client_certificate
+    cluster_client_key         = kind_cluster.warehouse.client_key
+
+    apps_namespace   = kubernetes_namespace.apps.metadata[0].name
+    data_namespace   = kubernetes_namespace.data.metadata[0].name
+    argocd_namespace = helm_release.argocd.namespace
+
+    postgres       = local.postgres
+    pgbouncer_host = local.pgbouncer_host
+    pgbouncer_port = local.pgbouncer_port
+
+    gateway_ready = local.gateway_ready
+
+    # Frontend build inputs computed here because they are content hashes
+    # over sibling-repo sources, not platform resources; ADR 0007's context
+    # flags this as a layer the eventual cleanup (step 4) still owes a home.
+    frontend_source_hash = local.frontend_source_hash
+    site_source_hash = {
+      "warehouse-console" = local.console_source_hash
+      "ecosystem"         = local.ecosystem_source_hash
+    }
+  }
+  sensitive = true
+}
+
 output "kube_context" {
   description = "kubectl context for the cluster."
   value       = local.kube_context
