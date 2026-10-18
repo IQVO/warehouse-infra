@@ -34,8 +34,9 @@
 # product-reports (read-only, :8092, Service product-master-reports, routed by
 # Kong at /api/product-master/reports by services.tf like every sibling). Both
 # ship in the SAME image as the api (one build_and_load). The DSNs
-# (analytics.database.projectorUrl/reportsUrl) are computed by Terraform
-# (services.tf, from local.analytics_services) and merged over this block, so
+# never appear here: modules/application writes them into the
+# <ctx>-analytics-db Secret and services.tf points analytics.database.existingSecret
+# at it (merged over this block), so
 # only the static bits live here. The role/database are NOT created by a plain
 # apply on an already-populated Postgres: see the infra PR runbook.
 #
@@ -65,8 +66,8 @@ kafka:
 # projector's consumer group (ANALYTICS_CONSUMER_GROUP) is a FIXED, stable id
 # (fleet charter naming `<ctx>-analytics`), pinned equal to the chart's default
 # so a rename there cannot silently orphan the committed offsets. The DSNs come
-# from the computed layer (database.projectorUrl / reportsUrl), shallow-merged
-# over this block (disjoint keys).
+# from the <ctx>-analytics-db Secret (database.existingSecret, computed layer,
+# shallow-merged over this block; disjoint keys).
 analytics:
   enabled: true
   projector:
