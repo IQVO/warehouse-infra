@@ -1,30 +1,17 @@
 # ---------------------------------------------------------------------------
-# warehouse-ops-agent — a different shape from the other seven services: NO
-# database, NO Kafka. A stateless MCP-client aggregator / console-bff fan-out
-# reading the other services over plain REST + (eventually) MCP. See its own
-# repo's charts/warehouse-ops-agent for the chart; this file is the
-# environment overlay, same division of responsibility as helm-values/*.yaml
-# for the database-backed services in services.tf.
-#
-# MCP upstreams (upstreams.* in its chart) are wired from terraform/mcp.tf
-# when var.deploy_mcp_servers is true: each of the five contexts' `<svc>-mcp`
-# Service endpoints. This is the agent's actual actuator surface (its
-# ADR 0004); before 2026-09-07 no MCP server existed in the cluster and
-# every endpoint here was empty. Static-bearer MCP auth (the credentials.*
-# ReadKey values that used to ride alongside these endpoints) was removed
-# fleet-wide (2026-09-09) -- the upstream chart's own credentials.* ReadKey
-# fields and Secret/env wiring were dropped in the same PR, so this
-# Terraform side keeps only the endpoints; no keys are needed to call them.
+# warehouse-ops-agent — a different shape from the database-backed contexts:
+# NO database, NO Kafka. A stateless MCP-client aggregator / console-bff
+# fan-out reading the other services over plain REST and MCP. Its chart lives
+# in its own repo, its configuration (MCP upstream endpoints, reports URLs,
+# LLM mode) in helm-values/warehouse-ops-agent.yaml (ADR 0002 D2), and its
+# Application and Anthropic-key Secret come from modules/application
+# (applications.tf). Static-bearer MCP auth was removed fleet-wide
+# (2026-09-09): the endpoints need no keys.
 #
 # DECIDED 2026-09-26: no local build. This repo's `docker-publish` CI job
 # publishes to GHCR (ghcr.io/iqvo/warehouse-ops-agent), including a
-# `:latest` tag on every merge to main -- pulled straight from there now,
-# same as services.tf.
+# `:latest` tag on every merge to main.
 # ---------------------------------------------------------------------------
-
-locals {
-  ops_agent_chart_path = "${path.module}/../../warehouse-ops-agent/charts/warehouse-ops-agent"
-}
 
 # ---------------------------------------------------------------------------
 # ANTHROPIC_API_KEY — the warehouse-ops-agent-anthropic Secret, created by
@@ -61,12 +48,12 @@ locals {
 # ---------------------------------------------------------------------------
 check "anthropic_api_key_required_for_llm_mode" {
   assert {
-    condition     = local.ops_agent_helm_values.llm.mode == "off" || var.anthropic_api_key != ""
+    condition     = local.ops_agent_values_file.llm.mode == "off" || var.anthropic_api_key != ""
     error_message = <<-EOT
-      warehouse-ops-agent's LLM_MODE is "${local.ops_agent_helm_values.llm.mode}"
+      warehouse-ops-agent's LLM_MODE is "${local.ops_agent_values_file.llm.mode}"
       (not "off") but var.anthropic_api_key is empty. The chart will still
       apply, but the ops-agent pod will CrashLoopBackOff at startup with
-      "LLM_MODE=${local.ops_agent_helm_values.llm.mode} requires ANTHROPIC_API_KEY"
+      "LLM_MODE=${local.ops_agent_values_file.llm.mode} requires ANTHROPIC_API_KEY"
       (ADR-0004, cmd/agent/reasoner.go) until a real key is supplied, e.g.:
         export TF_VAR_anthropic_api_key="sk-ant-..."
       before the next `terraform apply`. Never set a real key in this repo's
@@ -76,11 +63,10 @@ check "anthropic_api_key_required_for_llm_mode" {
 }
 
 # ---------------------------------------------------------------------------
-# Full computed Helm values for warehouse-ops-agent, extracted from the
-# (now-removed) helm_release.ops_agent's `values` argument -- unchanged
-# content, pure refactor -- so the ArgoCD Application (modules/application)
-# reads from exactly the same computation. Mirrors services.tf's
-# local.service_full_values pattern for the 8 database-backed services.
+# warehouse-ops-agent's configuration lives in helm-values/warehouse-ops-agent.yaml
+# (ADR 0002 D2). Terraform owns only its image, chosen per machine through
+# terraform.tfvars, and passes it in the Application's valuesObject
+# (applications.tf's local.application_helm_values).
 # ---------------------------------------------------------------------------
 locals {
   # `:latest` -- this repo's docker-publish CI job pushes it on every merge
@@ -92,182 +78,20 @@ locals {
   # which needs admin:packages and cannot be done from Terraform.
   ops_agent_image_tag = "latest"
 
-  ops_agent_helm_values = merge(
-    {
-      image = {
-        repository = var.ops_agent_image_repository
-        tag        = var.ops_agent_image_tag != "" ? var.ops_agent_image_tag : local.ops_agent_image_tag
-        # Always for the GHCR default (a :latest tag only tracks the newest
-        # published image if the kubelet re-pulls it); IfNotPresent for a
-        # kind-loaded local image, which exists only in the nodes'
-        # containerd store and must never be pulled.
-        pullPolicy = var.ops_agent_image_repository == "ghcr.io/iqvo/warehouse-ops-agent" ? "Always" : "IfNotPresent"
-      }
+  ops_agent_terraform_values = {
+    image = {
+      repository = var.ops_agent_image_repository
+      tag        = var.ops_agent_image_tag != "" ? var.ops_agent_image_tag : local.ops_agent_image_tag
+      # Always for the GHCR default (a :latest tag only tracks the newest
+      # published image if the kubelet re-pulls it); IfNotPresent for a
+      # kind-loaded local image, which exists only in the nodes'
+      # containerd store and must never be pulled.
+      pullPolicy = var.ops_agent_image_repository == "ghcr.io/iqvo/warehouse-ops-agent" ? "Always" : "IfNotPresent"
+    }
+  }
 
-      service = {
-        type       = "ClusterIP"
-        port       = 80
-        targetPort = 8095
-      }
-
-      upstreams = {
-        wesWorkPlanning      = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["wes-work-planning"] : "" }
-        fulfillmentExecution = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["fulfillment-execution"] : "" }
-        inventoryStorage     = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["inventory-storage"] : "" }
-        workforceManagement  = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["workforce-management"] : "" }
-        facilityLayout       = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["facility-layout"] : "" }
-        # Second-wave upstreams (warehouse-ops-agent PR #44's mcpclients).
-        # labor-performance is actually CONSUMED as of PR #45 (ADR 0008,
-        # FlowBalanceAdvisory's utilization correlation) -- this entry
-        # is what makes that live, not just wired-but-unconsumed. The
-        # other two have no consuming use case yet; wired here anyway
-        # so the next one to graduate needs no infra change, matching
-        # the chart-side fix in warehouse-ops-agent PR #46.
-        orderManagement       = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["order-management"] : "" }
-        laborPerformance      = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["labor-performance"] : "" }
-        processPathManagement = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["process-path-management"] : "" }
-        # warehouse-planning (warehouse-ops-agent ADR 0013): the agent's
-        # outbound client calls ONLY its read tools (get_process_path_capacity,
-        # get_capacity_plan, get_storage_capacity, list_station_standards)
-        # even though that MCP server is read+write; the capacity-outlook
-        # section of the daily brief consumes get_process_path_capacity.
-        # An empty endpoint (var.deploy_mcp_servers=false) leaves the agent
-        # exactly as before: the client is not wired and the brief omits
-        # the section.
-        warehousePlanning = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["warehouse-planning"] : "" }
-        # product-master (warehouse-ops-agent #120): chart value
-        # upstreams.productMaster.endpoint -> env PRODUCT_MASTER_MCP_ENDPOINT.
-        # product-master's MCP server is read-only. Empty
-        # (var.deploy_mcp_servers=false) leaves the client unwired.
-        productMaster = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["product-master"] : "" }
-        # inbound-receiving (warehouse-ops-agent #125): chart value
-        # upstreams.inboundReceiving.endpoint. Read tools only. Empty
-        # (var.deploy_mcp_servers=false) leaves the client unwired. The
-        # optional config.inboundStaleReceiptAge is deliberately left UNSET
-        # (the agent's own default applies; no invented value here).
-        inboundReceiving = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["inbound-receiving"] : "" }
-        # network-inventory-planning (warehouse-ops-agent #119, ADR 0019):
-        # chart value upstreams.networkInventoryPlanning.endpoint -> env
-        # NETWORK_INVENTORY_PLANNING_MCP_ENDPOINT. Read tools only. Empty
-        # (var.deploy_mcp_servers=false) leaves the transfer watch unwired
-        # (its /transfer-watch/* routes answer 503).
-        networkInventoryPlanning = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["network-inventory-planning"] : "" }
-        # slotting-optimization (warehouse-ops-agent #151, ADR 0024): chart
-        # value upstreams.slottingOptimization.endpoint -> env
-        # SLOTTING_OPTIMIZATION_MCP_ENDPOINT. Read tools only (its MCP
-        # server is read-only). Empty (var.deploy_mcp_servers=false) leaves
-        # the client unwired.
-        slottingOptimization = { endpoint = var.deploy_mcp_servers ? local.mcp_endpoint["slotting-optimization"] : "" }
-      }
-      # Real, in-cluster REST base URLs for the console-bff order-lifecycle
-      # fan-out (cmd/agent/main.go's restclient wiring) — these ARE live
-      # today, unlike the MCP upstreams above.
-      restUrls = {
-        orderManagement      = "http://order-management.${var.apps_namespace}.svc.cluster.local:80"
-        inventoryStorage     = "http://inventory-storage.${var.apps_namespace}.svc.cluster.local:80"
-        wesWorkPlanning      = "http://wes-work-planning.${var.apps_namespace}.svc.cluster.local:80"
-        fulfillmentExecution = "http://fulfillment-execution.${var.apps_namespace}.svc.cluster.local:80"
-      }
-
-      # Real, in-cluster REST base URLs for the console-bff's WMS/WES
-      # dashboard fan-out (GET /console/reports/wms and /wes -- see
-      # warehouse-ops-agent PR #27). Each points at that context's own
-      # ANALYTICS reports Service -- a SEPARATE Deployment+Service from the
-      # OLTP one above, named "<service>-reports" by every analytics-enabled
-      # chart's own reportsFullname helper (see locals.tf's analytics_services
-      # set, which now includes all seven contexts). These are only live once
-      # `analytics.enabled=true` is actually applied for that service (which
-      # `contains(local.analytics_services, each.key)` in services.tf already
-      # gates) -- an entry here for a service whose analytics rollout hasn't
-      # applied yet just means the BFF's restclient gets a connection refused
-      # and that one dashboard section degrades to available:false, per its
-      # own documented per-section degradation contract. Not a crash.
-      reportsUrls = {
-        orderManagement      = "http://order-management-reports.${var.apps_namespace}.svc.cluster.local:80"
-        inventoryStorage     = "http://inventory-storage-reports.${var.apps_namespace}.svc.cluster.local:80"
-        wesWorkPlanning      = "http://wes-work-planning-reports.${var.apps_namespace}.svc.cluster.local:80"
-        fulfillmentExecution = "http://fulfillment-execution-reports.${var.apps_namespace}.svc.cluster.local:80"
-        workforceManagement  = "http://workforce-management-reports.${var.apps_namespace}.svc.cluster.local:80"
-        facilityLayout       = "http://facility-layout-reports.${var.apps_namespace}.svc.cluster.local:80"
-        laborPerformance     = "http://labor-performance-reports.${var.apps_namespace}.svc.cluster.local:80"
-      }
-
-      # ADR-0004 model-backed Reasoner. Real, in-cluster wiring per the
-      # user's 2026-09-26 decision: shadow mode runs the LLM reasoner
-      # alongside the deterministic policy without ever acting on the
-      # model's output alone (see cmd/agent/reasoner.go/FlowBalanceAdvisory).
-      # `credentials.existingSecret` points at the Terraform-managed
-      # Secret by its fixed, deterministic name (modules/application names
-      # it <name>-<key>; a resource attribute reference would make these
-      # values depend on the module that consumes them) -- never
-      # `credentials.anthropicApiKey` plaintext, which would land inside the
-      # ArgoCD Application CR's `helm.valuesObject` (see this file's
-      # ANTHROPIC_API_KEY header comment for why that matters).
-      credentials = {
-        existingSecret = "warehouse-ops-agent-anthropic"
-      }
-      llm = {
-        mode = "shadow"
-      }
-
-      # Runtime-signal readers for GET /runtime-signals (gap fix D24). The
-      # chart's own defaults are empty, which the agent treats as "no
-      # source": a stub Prometheus reader that reports every metric as 0
-      # and no Loki reader at all (`loki` listed in unavailableSources) --
-      # so the endpoint looked healthy while measuring nothing. Point both
-      # at the in-cluster Services this repo deploys (observability.tf's
-      # prometheus-server on 9090, logging.tf's loki on 3100). Each is empty
-      # when its stack is not deployed, which keeps the agent's documented
-      # safe degrade instead of a URL to a Service that does not exist.
-      prometheus = {
-        url = var.deploy_observability ? "http://${local.observability_dns.prometheus}:${local.prometheus_port}" : ""
-      }
-      runtimeSignals = {
-        lokiUrl = var.deploy_observability && var.deploy_logging ? "http://${local.loki_release}.${var.observability_namespace}.svc.cluster.local:3100" : ""
-      }
-
-      # Kong route. NO Ingress at all once Gateway API is on (see the
-      # gatewayApi block below) -- disabled-but-present would otherwise
-      # still create a Kong route object nothing removes.
-      ingress = {
-        enabled   = !var.deploy_gateway_api
-        className = "kong"
-        annotations = {
-          "konghq.com/strip-path" = "true"
-        }
-        hosts = [{
-          host = ""
-          paths = [{
-            path     = "${var.api_path_prefix}/warehouse-ops-agent"
-            pathType = "Prefix"
-          }]
-        }]
-      }
-    },
-    # Gateway API routing -- see gateway-api.tf's header for the full
-    # pilot history. warehouse-ops-agent isn't in local.services (it has
-    # no database, see this file's own header), so it gets its own
-    # gatewayApi block here rather than going through
-    # local.gateway_api_pilot_services.
-    var.deploy_gateway_api ? {
-      gatewayApi = {
-        enabled = true
-        parentRefs = [{
-          name        = local.gateway_name
-          namespace   = var.kong_namespace
-          sectionName = "http"
-        }]
-        hosts = [{
-          path     = "${var.api_path_prefix}/warehouse-ops-agent"
-          pathType = "PathPrefix"
-        }]
-        stripPath = true
-      }
-    } : {},
-    # Kong plugins (chart's kong-plugins.yaml; fleet decision 2026-10-13) —
-    # same values every bounded context gets via local.kong_chart_values.
-    local.kong_chart_values,
-  )
+  # The values file, read here only for the check below.
+  ops_agent_values_file = yamldecode(file("${path.module}/../helm-values/warehouse-ops-agent.yaml"))
 }
 
 # ---------------------------------------------------------------------------

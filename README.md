@@ -134,7 +134,7 @@ Every bounded-context service's OLTP pod listens on container port `8080`
 | Service (`warehouse-systems` ns)         | Service port → target | What it is |
 |--------------------------------------------|------------------------|------------|
 | `<service>` (12 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master, inbound-receiving, slotting-optimization) | `80 → 8080` | OLTP REST API, routed by Kong |
-| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — the 13 contexts in `mcp.tf`'s `local.mcp_services` (the 11 above plus network-fulfillment and network-inventory-planning) |
+| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — every context whose `helm-values/<context>.yaml` sets `mcp.enabled` (the 12 above plus network-fulfillment and network-inventory-planning) |
 | `<service>-reports`                        | `80 → 8092`             | Analytics read-only REST API (only where `analytics.enabled`, see `locals.tf`'s `analytics_services`) |
 | `<service>-frontend`                       | `80 → 8080`             | Module Federation remote, proxied by the web gateway at `/mfes/<context>/` |
 | `warehouse-console`                        | `80 → 8080`             | Console shell SPA, proxied by the web gateway at `/` |
@@ -180,14 +180,13 @@ in-cluster: `kubectl -n warehouse-systems port-forward svc/product-master-report
 The rest of product-master's deployment: the OLTP API (`EVENT_PUBLISHER=kafka`,
 legacy importer group `product-master-legacy-import`), the read-only MCP server
 `product-master-mcp` (read by `warehouse-ops-agent` through
-`PRODUCT_MASTER_MCP_ENDPOINT`, `ops-agent.tf`) and the console remote
-`product-master-frontend` (`productmaster_mfe`, `/mfes/product-master/`,
-`frontends.tf`). Its `ProductClassified` events on
+`PRODUCT_MASTER_MCP_ENDPOINT`, `helm-values/warehouse-ops-agent.yaml`) and the
+console remote `product-master-frontend` (`productmaster_mfe`,
+`/mfes/product-master/`, `helm-values/product-master.yaml`). Its `ProductClassified` events on
 `warehouse.product-master.events` feed local copies in inventory-storage
 (`productMasterConsumerGroup`, `helm-values/inventory-storage.yaml`) and in
 order-management, wes-work-planning and fulfillment-execution
-(`PRODUCT_CLASSIFICATION_MODE=kafka`, `helm-values/order-management.yaml` and
-`locals.tf`); no service reads classification from inventory-storage over REST
+(`PRODUCT_CLASSIFICATION_MODE=kafka`, each one's `helm-values/` file); no service reads classification from inventory-storage over REST
 any more.
 
 `inbound-receiving` (ASN, dock appointment, receipt) follows the same shape:
@@ -204,9 +203,9 @@ SKU copy from `warehouse.product-master.events`) and `DOCK_DOOR_MODE=kafka`
 (group `inbound-receiving-dock-doors`, inbound-door copy from
 `warehouse.facility.events`; `helm-values/inbound-receiving.yaml`). The
 read-only MCP server `inbound-receiving-mcp` is read by `warehouse-ops-agent`
-through `upstreams.inboundReceiving` (`ops-agent.tf`), and the console remote
-`inbound-receiving-frontend` is `inbound_mfe` at `/mfes/inbound-receiving/`
-(`frontends.tf`). The handover: inventory-storage consumes
+through `upstreams.inboundReceiving` (`helm-values/warehouse-ops-agent.yaml`),
+and the console remote `inbound-receiving-frontend` is `inbound_mfe` at
+`/mfes/inbound-receiving/` (`helm-values/inbound-receiving.yaml`). The handover: inventory-storage consumes
 `ReceiptLineReceived` from `warehouse.inbound-receiving.events`
 (`config.inboundReceiptConsumerGroup=inventory-storage-inbound-receipts`,
 `helm-values/inventory-storage.yaml`, inventory-storage ADR 0037) and books
@@ -309,19 +308,12 @@ MCP, analytics projector and reports, frontend, console); limits and memory keep
 the chart defaults, so a busy pod can still burst.
 
 * `helm-values/kind-resources/<app>.yaml` — one generated overlay per
-  Application (16 files plus a `README.md`). Regenerate it when a chart adds a
-  component with a CPU request above `25m`.
-* `terraform/kind-overlay.tf` — merges each overlay **into the Application's
-  `helm.valuesObject`** (explicitly at `resources`, `mcp`, `frontend` and
-  `analytics.projector` / `analytics.reports`, because Terraform's `merge()` is
-  shallow). `terraform/applications.tf` passes the merged
-  `local.argocd_*_values` to each application's module instance.
-* Not a separate `helm.values` string: ArgoCD v2.13 renders **only**
-  `valuesObject` when both are set, so a `values` string is silently ignored
-  ([#81](https://github.com/IQVO/warehouse-infra/pull/81) shipped that form;
-  [#82](https://github.com/IQVO/warehouse-infra/pull/82) fixed it).
+  Application (17 files plus a `README.md`), the LAST of its three value files
+  (ADR 0002 D2): Helm deep-merges it, so only `requests.cpu` changes. Regenerate
+  it when a chart adds a component with a CPU request above `25m`. A change
+  deploys on merge to `develop`, through an ArgoCD sync.
 
-After an apply, check that the containers request `25m` and that the node's
+After a sync, check that the containers request `25m` and that the node's
 requested CPU dropped:
 
 ```bash
@@ -342,8 +334,8 @@ environment must define are declared in its repository
 `REPLENISH`, each with its `intake`) and applied by its `scripts/seed_catalogue.py` — step 1 of the
 [post-deploy seeds](#post-deploy-seeds). fulfillment-execution,
 wes-work-planning, workforce-management and order-management read the catalogue
-from `warehouse.process-path-management.events`
-(`var.deploy_process_path_kafka_source = true`), not from a file.
+from `warehouse.process-path-management.events` (`PATH_CATALOGUE_SOURCE=kafka`
+in their `helm-values/` files), not from a file.
 
 `config/process-paths/sortable-fc.yaml` is the **frozen rollback target** of the
 retired file-based catalogue: four paths, no `RELOCATE`, no `intake` (the file
@@ -358,9 +350,12 @@ one-time YAML → process-path-management migration and is superseded by
 
 ## Network inventory planning (NIP) runbook
 
-`network-inventory-planning` is deployed by `terraform/network-inventory-planning.tf`
-(image build/load, database secrets, ArgoCD Application, Kong routes for the API and
-`/reports`, chart values incl. MCP, console remote and analytics). Two things a plain
+`network-inventory-planning` is deployed like every application: its platform
+contract (image build/load, database secrets, ArgoCD Application) by
+`terraform/modules/application`, its configuration (Kong routes for the API and
+`/reports`, MCP, console remote, analytics) by
+`helm-values/network-inventory-planning.yaml`; `terraform/network-inventory-planning.tf`
+keeps its database names. Two things a plain
 `terraform apply` does NOT do on an already-populated cluster:
 
 1. **Databases and roles (two of them).** Postgres runs its init script once, on an
@@ -776,12 +771,11 @@ it.
 only the environment.** There is exactly one copy of every manifest.
 
 > [ADR 0002](docs/adr/0002-application-delivery-boundary.md) extends this
-> decision: application configuration moves out of the Terraform computed
-> layer described below into value files that ArgoCD reads from this repo,
-> and every application is registered through one `application` module
-> ([ADR 0004](docs/adr/0004-one-application-registry.md), done: see
-> `terraform/applications.tf`). Until its other phases land, the split below
-> is what the code does.
+> decision: application configuration lives in value files that ArgoCD reads
+> from this repo (D2), and every application is registered through one
+> `application` module ([ADR 0004](docs/adr/0004-one-application-registry.md),
+> `terraform/applications.tf`). Both are done; the split below is what the code
+> does.
 
 All four services already ship a complete, well-formed Helm chart at
 `<service>/charts/<service>/` — Deployment, Service, ServiceAccount, ConfigMap,
@@ -794,14 +788,18 @@ So the split is:
 
 * `<service>/charts/<service>/` — **shape of the workload.** Owned by the team
   that owns the service. Unchanged by this task.
-* `warehouse-infra/helm-values/<service>.yaml` — **static environment config**
-  for this cluster: probe timings, event-publisher mode, Kafka settings.
-* `warehouse-infra/terraform/services.tf` — **computed environment config**:
-  image repository/tag, `database.existingSecret` (a pre-created Secret, not
-  a plaintext URL — see "Deploying a new bounded context" below), and the
-  Kong `ingress` block. Appended after the values file, so Terraform always
-  wins. Applied via an ArgoCD `Application` per service, not a direct
-  `helm_release` — see that section for why.
+* `warehouse-infra/helm-values/` — **the environment's configuration**, read by
+  ArgoCD from this repo's `develop` as three value files per Application:
+  `_platform.yaml` (Gateway parentRefs, Kafka brokers, Kong traces endpoint and
+  CORS origin), `<service>.yaml` (everything else: routes, MCP, analytics,
+  consumers, `existingSecret` names, sync-edge env) and
+  `kind-resources/<service>.yaml` (the CPU overlay). See `helm-values/_README.md`.
+* `warehouse-infra/terraform/` — **the platform contract**: the image build and
+  its content-derived tag (the Application's only `valuesObject`), the
+  `<service>-db` / `<service>-analytics-db` Secrets (pre-created, never a
+  plaintext URL — see "Deploying a new bounded context" below) and the ArgoCD
+  `Application` per service, not a direct `helm_release` — see that section
+  for why.
 
 `terraform/locals.tf` points each service at its chart via a relative
 `chart_path` (`${path.module}/../../<service>/charts/<service>`), consumed by
@@ -855,23 +853,25 @@ every application in `terraform/applications.tf`'s registry (the
 `warehouse-ops-agent`, `warehouse-console` and the EventCatalog: 17
 Applications). Terraform still bootstraps the
 platform (kind, Postgres, Kafka, Istio, Kong, the Nginx web gateway, and
-ArgoCD itself) and still computes every release's full environment values,
-but it no longer runs `helm install`/`upgrade` directly for any of them — it
-hands each one to ArgoCD instead.
+ArgoCD itself) and each application's platform contract, but it runs no
+`helm install`/`upgrade` and writes no application configuration: each
+Application renders its chart with the value files in `helm-values/`
+(ADR 0002 D2).
 
-**Registering a new service with the shared chart shape is two steps: add
-it to `terraform/locals.tf`'s `local.services` map, and add its literal
-`db_password` line to `local.app_db_passwords` in `terraform/applications.tf`**
-(the plan fails until you do). That map feeds BOTH `terraform/services.tf`'s
-`local.service_full_values` computation (database secret ref, Kong/Gateway
-route, analytics, MCP, and every other conditional block already documented
-there) AND the application registry in `terraform/applications.tf`, which
-gives every entry one instance of `terraform/modules/application`
-([ADR 0004](docs/adr/0004-one-application-registry.md)). Applications with
-their own chart shape (`warehouse-ops-agent`, `warehouse-console`, the
-EventCatalog, network-fulfillment, network-inventory-planning) get an
-explicit entry in `local.other_applications` instead, with values computed in
-their own file. A `terraform apply` after adding an entry:
+**Registering a new database-backed service is three steps** (the
+`add-or-change-a-service` skill has the detail): add it to
+`terraform/locals.tf`'s `local.services` map, add its literal line to
+`local.app_passwords` in `terraform/applications.tf` (the plan fails until you
+do), and add `helm-values/<service>.yaml` plus
+`helm-values/kind-resources/<service>.yaml` (the plan fails while either is
+missing). The map feeds the application registry in
+`terraform/applications.tf`, which gives every entry one instance of
+`terraform/modules/application`
+([ADR 0004](docs/adr/0004-one-application-registry.md)). Applications with a
+different database shape (`warehouse-ops-agent`, `warehouse-console`, the
+EventCatalog, network-fulfillment, network-inventory-planning) get an explicit
+entry in `local.other_applications` instead. A `terraform apply` after adding
+an entry:
 
 1. Builds and side-loads the new service's image (the module's
    `null_resource.build_and_load`).
@@ -879,7 +879,8 @@ their own file. A `terraform apply` after adding an entry:
    `kubernetes_secret.db`) — no chart ever sees a plaintext `DATABASE_URL`
    value through an ArgoCD `Application`'s Git/cluster-visible spec.
 3. Applies a new `Application` CR pointed at that service's own
-   `charts/<service>` in ITS OWN repo, with `syncPolicy.automated.prune` and
+   `charts/<service>` in ITS OWN repo, with this repo's `helm-values/` files
+   as its values (a second source, `ref: values`), `syncPolicy.automated.prune` and
    `.selfHeal` both on. ArgoCD picks it up, installs the release, and from
    then on continuously reconciles it — including reverting manual
    `kubectl` drift automatically, something the old one-shot `terraform
@@ -1101,8 +1102,9 @@ warehouse-infra/
 ├── README.md
 ├── docs/
 │   └── adr/                     # architecture decision records; index in docs/adr/README.md
-├── helm-values/                 # static per-service environment config (one file per service; excerpt)
+├── helm-values/                 # every application's Helm values, read by ArgoCD from develop (ADR 0002 D2; excerpt)
 │   ├── _README.md
+│   ├── _platform.yaml           # platform facts every chart reads (Gateway, Kafka, Kong traces/CORS)
 │   ├── inventory-storage.yaml
 │   ├── inbound-receiving.yaml
 │   ├── slotting-optimization.yaml
@@ -1122,14 +1124,12 @@ warehouse-infra/
     ├── versions.tf              # Terraform + provider pins
     ├── providers.tf             # kind / kubernetes / helm wiring
     ├── variables.tf             # every knob, with the reasoning for each pin
-    ├── locals.tf                # every bounded context in one map (local.services; product-master included)
+    ├── locals.tf                # local.services (database-backed contexts) and local.platform (_platform.yaml)
     ├── main.tf                  # kind cluster + namespaces
     ├── postgres.tf              # PostgreSQL release + 4 databases
     ├── istio.tf                 # istio-base -> istiod
     ├── kong.tf                  # Kong Gateway + Ingress Controller
-    ├── services.tf              # computed Helm values of the local.services contexts
     ├── argocd.tf                # ArgoCD release (helm-values/argocd.yaml)
-    ├── kind-overlay.tf          # merges helm-values/kind-resources/*.yaml into each valuesObject
     ├── applications.tf          # the application registry: one modules/application instance each (ADR 0004)
     ├── moved-applications.tf    # state moves onto the module (ADR 0002 D3)
     ├── outputs.tf

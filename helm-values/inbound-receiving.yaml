@@ -14,33 +14,28 @@
 # its .dlq need no declaration here.
 #
 # Every key below is a DEDICATED chart value (charts/inbound-receiving/values.yaml
-# renders each one to its env var), so none of this belongs in
-# local.sync_edge_env -- an `extraEnv` in THIS file would be silently dropped by
-# the computed layer (see helm-values/_README.md and terraform/locals.tf).
+# renders each one to its env var), so none of this belongs in extraEnv
+# (a duplicate env entry breaks ArgoCD's diff).
 #
 # Startup: runs golang-migrate before serving, over MIGRATIONS_DATABASE_URL (the
 # direct, non-pooled DSN Terraform puts in the <svc>-db Secret); DATABASE_URL
 # itself goes through PgBouncer.
 #
-# MCP (inbound-receiving ADR 0005): read-only tools, enabled by services.tf's
-# `contains(local.mcp_services, name)` gate; the ops-agent consumes it via the
-# `inboundReceiving` upstream in ops-agent.tf.
+# MCP (inbound-receiving ADR 0005): read-only tools (mcp.enabled below); the
+# ops-agent consumes it via the `inboundReceiving` upstream in
+# warehouse-ops-agent.yaml.
 #
 # Analytics read side (inbound-receiving ADR 0006): inbound-projector (the only
 # writer of the SEPARATE inbound_receiving_analytics database, admin :8091) and
 # inbound-reports (read-only, :8092, Service inbound-receiving-reports, routed by
-# Kong at /api/inbound-receiving/reports by services.tf like every sibling). Both
-# ship in the SAME image as the api (one build_and_load). The DSNs
-# never appear here: modules/application writes them into the
-# <ctx>-analytics-db Secret and services.tf points analytics.database.existingSecret
-# at it (merged over this block), so
-# only the static bits live here. The role/database are NOT created by a plain
+# Kong at /api/inbound-receiving/reports, analytics.reports.route below). Both
+# ship in the SAME image as the api (one image build). The DSNs never appear
+# here: modules/application writes them into the inbound-receiving-analytics-db
+# Secret, which analytics.database.existingSecret names. The role/database are NOT created by a plain
 # apply on an already-populated Postgres: see the infra PR runbook.
 #
-# The console remote (inbound_mfe, web/) is NOT set here:
-# terraform/services.tf computes `frontend` (enabled + content-addressed image
-# tag) for every context in local.frontend_remotes, and a `frontend:` key in
-# this file would be overridden.
+# The console remote (inbound_mfe, web/): frontend below; its content-addressed
+# image tag comes from Terraform (local.frontend_remotes).
 
 replicaCount: 1
 
@@ -70,17 +65,63 @@ config:
 
 kafka:
   enabled: true
-  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
-
-# Analytics read side (ADR 0006). `enabled` is also set by Terraform's computed
-# layer (services.tf, contains(local.analytics_services, name)); repeated here so
-# this file is the readable source of truth, exactly as the siblings do. The
-# projector's consumer group (ANALYTICS_CONSUMER_GROUP) is a FIXED, stable id
-# (fleet charter naming `<ctx>-analytics`), pinned equal to the chart's default
-# so a rename there cannot silently orphan the committed offsets. The DSNs come
-# from the <ctx>-analytics-db Secret (database.existingSecret, computed layer,
-# shallow-merged over this block; disjoint keys).
 analytics:
   enabled: true
   projector:
     consumerGroup: "inbound-receiving-analytics"
+  database:
+    existingSecret: inbound-receiving-analytics-db
+  reports:
+    route:
+      enabled: true
+      path: /api/inbound-receiving/reports
+
+# Formerly computed by terraform/services.tf (ADR 0002 phase 3, docs/adr/0002-application-delivery-boundary.md).
+# Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
+# _platform.yaml; image tags from Terraform (the Application's valuesObject).
+database:
+  existingSecret: inbound-receiving-db
+extraEnv: []
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/inbound-receiving-frontend
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/inbound-receiving
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/inbound-receiving
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/inbound-receiving
+          pathType: Prefix
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/inbound-receiving
+pathCatalogue:
+  content: ''
+  enabled: false
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

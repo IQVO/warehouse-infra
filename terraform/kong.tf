@@ -20,7 +20,7 @@
 # both reconcilers in the same controller process. This means Ingress and
 # HTTPRoute can coexist service-by-service during the migration -- no
 # fleet-wide flag day, and a service not yet migrated keeps routing exactly
-# as it always has via its existing `Ingress` object (services.tf).
+# as it always has via its existing `Ingress` object.
 #
 # Exposure: proxy Service is NodePort (there is no cloud load balancer here);
 # kind's extraPortMappings publish those NodePorts on the host. See main.tf.
@@ -46,7 +46,8 @@ resource "helm_release" "kong" {
       database = "off"
       # Tracing instrumentation is a PREREQUISITE for the opentelemetry
       # plugin the application charts now render (their kong-plugins.yaml,
-      # switched on by kong-plugins.tf's values): without it the plugin
+      # switched on in each helm-values file, endpoint in _platform.yaml):
+      # without it the plugin
       # accepts its config, pushes cleanly, and exports ZERO spans --
       # verified live by watching the collector's
       # otelcol_receiver_accepted_spans{transport="http"} counter stay flat

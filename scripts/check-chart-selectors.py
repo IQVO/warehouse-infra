@@ -39,9 +39,9 @@ RELEASE_NAME = "chart-conformance-check"
 # Every service-owning chart in the fleet, keyed by its path relative to
 # terraform/, with the --set flags needed to render every optional
 # component that adds its own Deployment+Service pair. Keep this list in
-# sync with terraform/locals.tf's local.services chart_path values plus
-# ops-agent.tf/frontends.tf (same discipline the Makefile's CHARTS
-# variable already follows) -- it is not auto-discovered.
+# sync with the application registry in terraform/applications.tf
+# (same discipline the Makefile's CHARTS variable already follows) -- it is
+# not auto-discovered.
 CHARTS: dict[str, dict[str, str]] = {
     "../../order-management/charts/order-management": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",

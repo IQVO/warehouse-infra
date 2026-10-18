@@ -1,48 +1,55 @@
 ---
 name: add-or-change-a-service
-description: Register a new bounded context, or change how an existing one is wired, in the warehouse-infra Terraform (services map, analytics and MCP lists, sync-edge env, helm-values, ArgoCD Application). Use when adding a service to local.services, analytics_services or mcp_services, adding per-service env or a *_MODE/BASE_URL pair, or editing a ternary in services.tf.
+description: Register a new application, or change how an existing one is configured, in warehouse-infra (application registry, local.services, analytics_services, helm-values files, sync-edge env, rollback switches). Use when adding a service to local.services or local.other_applications, editing helm-values/<app>.yaml or _platform.yaml, or adding per-service env or a *_MODE/BASE_URL pair.
 ---
 
-# Add or change a service in warehouse-infra
+# Add or change an application in warehouse-infra
 
-This repo owns the environment, not the workload: each service's chart lives in that service's own repo. Read `terraform/locals.tf` first; the `local.services` map is the only registry (nothing is auto-discovered).
+This repo owns the environment, not the workload: each application's chart lives in its own repo. Two places hold everything this repo knows about an application (ADR 0002, `docs/adr/0002-application-delivery-boundary.md`; ADR 0004, `docs/adr/0004-one-application-registry.md`):
 
-## 1. Register a new service (database-backed bounded context)
+- **Terraform** (`terraform/applications.tf`): its platform contract. One `terraform/modules/application` instance creates its generated passwords, `<name>-db`/`<name>-analytics-db` Secrets, any extra Secret (`secrets`, e.g. the ops agent's Anthropic key), its image builds with content-derived tags, and its ArgoCD `Application`.
+- **Value files** (`helm-values/`): its whole configuration. The Application reads `_platform.yaml`, then `<app>.yaml`, then `kind-resources/<app>.yaml` from this repo's GitHub `develop`; its `valuesObject` carries only the image tags. See `helm-values/_README.md`.
 
-1. Add an entry to `local.services` in `terraform/locals.tf` (`db`, `user`, `port`, `path`, `chart_path`, copy a neighbour). That entry feeds `terraform/applications.tf` (one `terraform/modules/application` instance: generated password, `<svc>-db` Secret, image build and tag, the `Application`), `terraform/postgres.tf` (initdb role and DB), `terraform/services.tf` (`local.service_full_values`), `terraform/pgbouncer.tf` and `terraform/outputs.tf`.
-   Then add its literal line to `local.app_db_passwords` in `terraform/applications.tf` (`"<svc>" = module.application["<svc>"].db_password`); the plan fails with an invalid-index error until you do. Never replace that map with a for expression: a computed module key makes Postgres wait for every image build.
-2. Add `helm-values/<svc>.yaml` (static overlay; see `helm-values/_README.md`). `services.tf` does `yamldecode(file(...))` of it, so a missing file fails `terraform validate`.
-3. Opt-in lists: add the name to `local.analytics_services` (`terraform/locals.tf`) if it has a projector/reports pair, and to `local.mcp_services` (`terraform/mcp.tf`) if its repo ships an MCP binary (cmd/mcp there). Both gates (`contains(...)` in `services.tf`) pick it up with no other edit.
-4. Keep the hand-maintained chart lists in sync (they are NOT auto-discovered): `CHARTS` in the `Makefile` and `CHARTS` in `scripts/check-chart-selectors.py`.
-5. The service's chart must already exist in its own repo at `charts/<repo>/`, with every Service selecting by `app.kubernetes.io/component`.
+Nothing is auto-discovered.
 
-Exceptions that are NOT in `local.services`: network-inventory-planning (`terraform/network-inventory-planning.tf`), network-fulfillment (`terraform/network-fulfillment.tf`), ops-agent (`terraform/ops-agent.tf`), the console and the EventCatalog (`terraform/frontends.tf`) compute their values in their own files and have an explicit entry in `local.other_applications` (`terraform/applications.tf`). Do not add network-fulfillment to `analytics_services`: `analytics_db_info` indexes `local.services[name]` and throws a plan-time KeyError. `mcp_services` only needs the name, so it is safe there.
+## 1. Register a new application
 
-Every application is one instance of `terraform/modules/application` (`docs/adr/0004-one-application-registry.md`). The module owns its generated passwords, `<name>-db`/`<name>-analytics-db` Secrets, any extra Secret (`secrets`, e.g. the ops agent's Anthropic key), image builds and ArgoCD `Application`; no root resource creates any of them. Static sites (console, EventCatalog) declare `frontend = { dir = ".", values_key = "image" }`; an image pulled from a registry is `image = null`.
+1. Its chart must already exist in its own repo at `charts/<repo>/`, with every Service selecting by `app.kubernetes.io/component`.
+2. Registry entry:
+   - A database-backed context with the shared database naming: an entry in `local.services` (`terraform/locals.tf`: `db`, `user`, `port`, `path`, `chart_path`; copy a neighbour). `local.service_applications` picks it up. Add its literal line to `local.app_passwords` in `terraform/applications.tf` (`"<svc>" = module.application["<svc>"].passwords`); the plan fails with an invalid-index error until you do. Never replace that map with a for expression: a computed module key makes Postgres wait for every image build.
+   - Anything else: an explicit entry in `local.other_applications` (`terraform/applications.tf`). Static sites declare `frontend = { dir = ".", values_key = "image" }`; an image pulled from a registry is `image = null`.
+3. If it has a projector/reports pair: add it to `local.analytics_services` (`terraform/locals.tf`), which gives it an analytics database and the `<svc>-analytics-db` Secret. Do not add network-fulfillment there: `analytics_db_info` indexes `local.services[name]` and throws a plan-time KeyError.
+4. If its repo ships a frontend remote: add it to `local.frontend_remotes` (`terraform/frontends.tf`) for the image build and the web gateway route.
+5. Values: create `helm-values/<app>.yaml` (its complete configuration: copy a sibling's routes, MCP, analytics, Kong plugin blocks) and `helm-values/kind-resources/<app>.yaml` (generated CPU overlay; see that directory's README). The plan fails while either is missing. Credentials come from `existingSecret` (`<app>-db`, `<app>-analytics-db`), never a value; image tags never appear here.
+6. Keep the hand-maintained chart lists in sync: `CHARTS` in the `Makefile` and `CHARTS` in `scripts/check-chart-selectors.py`.
 
-## 2. Per-service env: where it must live
+## 2. Change an application's configuration
 
-`services.tf` computes `local.service_helm_values` and pre-merges it OVER `helm-values/<svc>.yaml` into `local.service_full_values` (computed wins; only `config` and `analytics` are deep-merged). An `extraEnv` list written in a `helm-values/*.yaml` file is silently dropped and `terraform plan` shows nothing. Put per-service env that has no dedicated chart value into `local.sync_edge_env` (`terraform/locals.tf`).
+- Edit `helm-values/<app>.yaml` (or `_platform.yaml` for a platform fact every chart reads). Check it renders before merging:
+  `helm template <app> ../<app>/charts/<app> -n warehouse-systems -f helm-values/_platform.yaml -f helm-values/<app>.yaml -f helm-values/kind-resources/<app>.yaml`
+- It deploys on merge to `develop`: ArgoCD re-renders and rolls what changed. `terraform apply` never sees it; a revert is a Git revert.
+- A platform fact in `_platform.yaml` (Gateway parentRefs, Kafka brokers, Kong traces endpoint, CORS origin) is also read by Terraform (`local.platform`); a precondition fails the plan if the platform Terraform installs disagrees.
 
-Every `*_MODE` env var defaults to permissive (no network) when unset. A new sync edge needs its `MODE` and `BASE_URL` both in `sync_edge_env`, in the same PR as the integration. After apply, grep the pod's startup log for `mode":"http"` (or `kafka-cache`) to confirm what the binary chose.
+## 3. Per-service env and sync edges
 
-## 3. Conditional blocks and `terraform validate`
-
-Both branches of a ternary must declare the SAME key set, even if one side is inert (`enabled = false`, `extraEnv = []`). Otherwise `terraform validate` fails with "Inconsistent conditional result types". Copy the shape of the `inventory-storage` / `order-management` blocks in `terraform/services.tf`. Never make the branches structurally different. Run `make tf-validate` after every edit.
+- Use the chart's dedicated value when it has one. `extraEnv` in `helm-values/<app>.yaml` is only for env the chart does not render: setting a variable both ways renders a duplicate env entry, which breaks ArgoCD's three-way diff (ComparisonError "doesn't match $setElementOrder list").
+- Helm replaces lists: `extraEnv` in the values file replaces the chart default's list whole.
+- Every `*_MODE` env var defaults to permissive (no network) when unset. A new sync edge needs its `MODE` and `BASE_URL` both in the consumer's values file, in the same PR as the integration. After the sync, grep the pod's startup log for `mode":"http"` (or `kafka-cache`) to confirm what the binary chose.
+- Rollback switches (edges built but off) are listed with their exact flip in `docs/rollback-switches.md`.
 
 ## 4. Images and rollout (the "local" tag trap, as it is today)
 
-- Service images are content-tagged `local-<first 12 of the source hash>` (computed in `terraform/modules/application`, `pullPolicy: IfNotPresent`). The hash covers Go files, migrations, the Dockerfile, go.mod and go.sum of the LOCAL sibling checkout, so a Go change makes the tag change and the pod rolls. Never replace it with a fixed `local` tag (frontends are content-tagged the same way, `local.frontend_source_hash` in `terraform/frontends.tf`).
-- The hash does NOT cover chart templates, and Terraform no longer installs releases: there is no `helm_release.service`. ArgoCD (the module's `Application`, `targetRevision = "develop"`, from GitHub) owns each release with automated prune and selfHeal. A chart template change reaches the cluster only after it is merged to that service repo's `develop` on GitHub and ArgoCD syncs; `terraform apply` will say `0 changed`. Check with `kubectl -n argocd get applications` and `argocd app diff <svc>`.
-- The CLAUDE.md older recipe (`terraform taint helm_release.service[...]`, `rollout restart`) predates the ArgoCD hand-off; trust the code. If a pod still runs old code, compare `module.application["<svc>"].image_tag` (`terraform console`) with the live image, and only then `kubectl rollout restart deployment/<name> -n warehouse-systems`.
+- Images are content-tagged `local-<first 12 of the source hash>` (computed in `terraform/modules/application`, `pullPolicy: IfNotPresent`). The hash covers every file the Dockerfile copies in: Go files, migrations, the Dockerfile, go.mod and go.sum of the LOCAL sibling checkout, so a Go change makes the tag change and the pod rolls. Never replace it with a fixed `local` tag (frontends are content-tagged the same way, `local.frontend_source_hash` in `terraform/frontends.tf`).
+- The hash does NOT cover chart templates, and Terraform installs no releases. ArgoCD (the module's `Application`, chart from the service repo's GitHub `develop`) owns each release with automated prune and selfHeal. A chart template change reaches the cluster only after it is merged to that repo's `develop` and ArgoCD syncs; `terraform apply` will say `0 changed`. Check with `kubectl -n argocd get applications` and `argocd app diff <svc>`.
+- If a pod still runs old code, compare `module.application["<svc>"].image_tag` (`terraform console`) with the live image, and only then `kubectl rollout restart deployment/<name> -n warehouse-systems`.
 
-## 5. Adding to analytics/mcp on a Postgres that already has data
+## 5. A new database or analytics database on a Postgres that already has data
 
-Bitnami runs `primary.initdb.scripts` once, on an empty data directory. A new entry renders into `terraform/templates/init-databases.sql.tftpl` but never executes on a live cluster, so the projector CrashLoopBackOffs with `password authentication failed`. After apply:
+Bitnami runs `primary.initdb.scripts` once, on an empty data directory. A new entry renders into `terraform/templates/init-databases.sql.tftpl` but never executes on a live cluster, so the pod CrashLoopBackOffs with `password authentication failed`. After apply:
 
 1. Read the generated password with a throwaway `terraform output -raw` (see how `terraform/network-fulfillment.tf` documents it).
 2. Run the equivalent `CREATE ROLE` / `CREATE DATABASE` / `REVOKE` / `GRANT` SQL against `postgres-postgresql-0`, mirroring the template's loop body exactly.
-3. Only THEN recover the crashed release. The original recipe was SQL first, then `helm rollback`, because the reverse order left the release stuck `pending-upgrade`; that predates the ArgoCD hand-off, so on today's setup prefer an ArgoCD resync of the Application and say so if it behaves differently (unverified).
+3. Only THEN recover the crashed workload: an ArgoCD resync of the Application.
 
 Never run step 2 against the live cluster without the user's go-ahead.
 

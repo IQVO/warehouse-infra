@@ -3,12 +3,9 @@
 # fulfillment-execution's TaskCompleted event (warehouse.fulfillment.events)
 # AND, since its analytics data product (ADR-0007 there) and transactional
 # outbox (ADR-0010 there), a PUBLISHER onto warehouse.labor-performance.analytics.
-# EVENT_PUBLISHER is set by the chart itself (config.eventPublisher),
-# overridden to "kafka" from terraform/services.tf's computed merge --
-# never via extraEnv, which would duplicate the chart's own rendered env
-# and break ArgoCD's diff (see terraform/locals.tf's sync_edge_env
-# header). An extraEnv in THIS file would also be silently overridden by
-# the computed layer.
+# EVENT_PUBLISHER is set by the chart itself (config.eventPublisher: "kafka"
+# below) -- never via extraEnv, which would duplicate the chart's own rendered
+# env and break ArgoCD's diff.
 #
 # Startup: runs migrations before serving.
 #
@@ -30,10 +27,9 @@ config:
   kafkaConsumerGroup: "labor-performance"
   corsAllowedOrigins: "http://localhost:5173,http://localhost:5187"
 
+  eventPublisher: kafka
 kafka:
   enabled: true
-  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
-
 livenessProbe:
   httpGet:
     path: /healthz
@@ -49,3 +45,61 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 5
   failureThreshold: 6
+
+# Formerly computed by terraform/services.tf (ADR 0002 phase 3, docs/adr/0002-application-delivery-boundary.md).
+# Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
+# _platform.yaml; image tags from Terraform (the Application's valuesObject).
+analytics:
+  database:
+    existingSecret: labor-performance-analytics-db
+  enabled: true
+  reports:
+    route:
+      enabled: true
+      path: /api/labor-performance/reports
+database:
+  existingSecret: labor-performance-db
+extraEnv: []
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/labor-performance-frontend
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/labor-performance
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/labor-performance
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/labor-performance
+          pathType: Prefix
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/labor-performance
+pathCatalogue:
+  content: ''
+  enabled: false
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

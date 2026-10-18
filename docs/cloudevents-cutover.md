@@ -342,8 +342,8 @@ with new CloudEvents UUIDs and can be left as is.
 
 ## 7. Deploy the new images
 
-Images are NOT pulled from a registry. `terraform/services.tf` (and
-`network-fulfillment.tf`) run `scripts/build-and-load.sh`, which
+Images are NOT pulled from a registry. `terraform/modules/application`
+runs `scripts/build-and-load.sh`, which
 `docker build`s each service from its LOCAL checkout at
 `~/warehouse-systems/<repo>` (`${path.module}/../../<repo>`) and
 `kind load`s it; the image tag is a hash of that checkout's `*.go` +
