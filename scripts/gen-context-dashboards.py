@@ -349,7 +349,7 @@ CONTEXTS = [
         # (cmd/mcp/router.go mcpServiceName), the projector and reports
         # processes share the `product-master` prefix -- one prefix regex
         # covers every process of this context, same convention as the other
-        # locals.tf-routed services.
+        # apps.yaml-routed services.
         "service_regex": "product-master.*",
         "loki_app": "product-master",
         "business_metrics": [
@@ -718,7 +718,7 @@ def build_gateway_overview():
         panel(
             0, y, 12, 9,
             "Request rate by context",
-            "Requests/sec Kong is forwarding, summed by the Kong Service name (one per bounded context's route -- see locals.tf's `services` map / Gateway API HTTPRoute-derived Service naming, httproute.warehouse-systems.<context>.0).",
+            "Requests/sec Kong is forwarding, summed by the Kong Service name (one per bounded context's route -- see the `kind: service` entries of terraform/apps.yaml / Gateway API HTTPRoute-derived Service naming, httproute.warehouse-systems.<context>.0).",
             [target(
                 'sum by (service) (rate(kong_http_requests_total[5m]))',
                 legend="{{service}}",

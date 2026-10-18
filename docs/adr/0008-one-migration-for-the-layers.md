@@ -5,7 +5,12 @@
 Accepted (2026-10-18). Amends [ADR 0007](0007-state-split-in-four-steps.md)
 decisions 2 and 4 (how the migrations of steps 2 and 3 run). Implements
 [ADR 0002](0002-application-delivery-boundary.md) D6 and
-[ADR 0003](0003-per-application-terraform-state.md).
+[ADR 0003](0003-per-application-terraform-state.md). Run on the live state on
+2026-10-18 (source serial 2432, 210 addresses = 2 + 49 + 159): after
+refresh-only applies of `00-cluster` and `10-platform`, those two layers and
+all 17 workspaces planned "No changes" with a real refresh. The one flaw found
+while running it, `terraform state` needing the modules installed, is fixed in
+the script.
 
 ## Context
 

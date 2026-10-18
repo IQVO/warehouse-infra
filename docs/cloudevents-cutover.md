@@ -386,8 +386,8 @@ done   # every line: sdk=1 flat=0
 ```bash
 cd ~/warehouse-systems/warehouse-infra
 git checkout -q develop && git pull -q --ff-only origin develop
-terraform -chdir=terraform plan  -out=cutover.plan
-terraform -chdir=terraform apply cutover.plan
+scripts/tf.sh platform plan  -out=cutover.plan
+scripts/tf.sh platform apply cutover.plan
 ```
 
 The apply rebuilds every service whose source hash changed (all nine do),
