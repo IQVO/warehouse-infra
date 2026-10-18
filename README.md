@@ -1155,9 +1155,11 @@ subchart releases wired together by `gatewayDiscovery` — more moving parts and
 more to go wrong, for no benefit at this scale. Routing started as plain
 `Ingress` objects; it now uses Gateway API `HTTPRoute`s that each chart
 renders against the shared `warehouse-gateway` Gateway
-(`terraform/gateway-api.tf`, `deploy_gateway_api`, on by default). How those
-Gateway API platform objects are installed is set by
-[ADR 0002](docs/adr/0002-application-delivery-boundary.md), decision D5.
+(`terraform/gateway-api.tf`, `deploy_gateway_api`, on by default). The Gateway API
+CRDs, the `GatewayClass` and the `Gateway` are declarative `kubectl_manifest`
+resources, so Terraform detects and repairs drift
+([ADR 0006](docs/adr/0006-declarative-gateway-api.md)); the CRD bundle is
+vendored under `terraform/gateway-api/`.
 
 **Why sidecar Istio and not ambient.** Sidecar mode needs no CNI DaemonSet and
 no ztunnel, which is markedly less fragile inside kind, and namespace-label

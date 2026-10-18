@@ -194,6 +194,10 @@ module "application" {
   # Where the module creates the application's role and database (ADR 0005).
   postgres = local.postgres
 
+  # The Application is created after the Gateway API CRDs and the Gateway
+  # (ADR 0006).
+  platform_ready = local.gateway_ready
+
   repos_root  = "${path.module}/../.."
   scripts_dir = "${path.module}/../scripts"
 
