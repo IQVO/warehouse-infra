@@ -82,6 +82,17 @@ extraEnv:
     value: http
   - name: FACILITY_LAYOUT_BASE_URL
     value: http://facility-layout.warehouse-systems.svc.cluster.local:80
+  # REPLENISH work from pick-face-replenishment's ReplenishmentRequested /
+  # ReplenishmentCancelled (wes-work-planning ADR 0042, cmd/wes/replenishment.go;
+  # topic warehouse.pick-face-replenishment.events). The chart has no dedicated
+  # value for either variable, so they live here and nowhere else. The group
+  # is STABLE and shared by every replica; unset, the binary defaults the mode
+  # to permissive and plans no REPLENISH work. REPLENISHMENT_CPT_HORIZON and
+  # REPLENISHMENT_URGENT_CPT_HORIZON are left at the binary's defaults (8h, 1h).
+  - name: REPLENISHMENT_MODE
+    value: kafka
+  - name: REPLENISHMENT_CONSUMER_GROUP
+    value: wes-work-planning-replenishment
 frontend:
   enabled: true
   image:
