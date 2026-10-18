@@ -30,7 +30,6 @@
 resource "kubernetes_namespace" "observability" {
   count = var.deploy_observability ? 1 : 0
 
-  depends_on = [null_resource.kubeconfig]
 
   metadata {
     name = var.observability_namespace
@@ -204,7 +203,7 @@ resource "helm_release" "prometheus" {
     "prometheus-pushgateway"   = { enabled = false }
 
     serverFiles = {
-      "alerting_rules.yml" = jsondecode(file("${path.module}/alerting/warehouse-alert-rules.json"))
+      "alerting_rules.yml" = jsondecode(file("${path.module}/../alerting/warehouse-alert-rules.json"))
     }
 
     server = {
@@ -430,7 +429,7 @@ resource "helm_release" "grafana" {
       warehouse = merge(
         {
           "go-runtime" = {
-            json = file("${path.module}/dashboards/go-runtime.json")
+            json = file("${path.module}/../dashboards/go-runtime.json")
           }
           # Fleet-wide API Gateway view (kong-prometheus.tf's `prometheus`
           # KongClusterPlugin is what makes this data exist at all): request
@@ -438,14 +437,14 @@ resource "helm_release" "grafana" {
           # single north-south edge every context's traffic passes through,
           # before any per-service dashboard's own view of the same request.
           "kong-gateway-overview" = {
-            json = file("${path.module}/dashboards/kong-gateway-overview.json")
+            json = file("${path.module}/../dashboards/kong-gateway-overview.json")
           }
           # Fleet-wide Logs view (Loki, via logging.tf's Alloy pipeline):
           # cross-context error/warning triage in one screen, so "is
           # anything failing right now" never requires opening all 8
           # per-context dashboards one at a time.
           "logs-overview" = {
-            json = file("${path.module}/dashboards/logs-overview.json")
+            json = file("${path.module}/../dashboards/logs-overview.json")
           }
         },
         # One dashboard per bounded context (terraform/dashboards/contexts/),
@@ -457,9 +456,9 @@ resource "helm_release" "grafana" {
         # that answers "is this bounded context healthy" without cross-
         # referencing the fleet-wide dashboards above.
         {
-          for f in fileset("${path.module}/dashboards/contexts", "*.json") :
+          for f in fileset("${path.module}/../dashboards/contexts", "*.json") :
           trimsuffix(f, ".json") => {
-            json = file("${path.module}/dashboards/contexts/${f}")
+            json = file("${path.module}/../dashboards/contexts/${f}")
           }
         }
       )

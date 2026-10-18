@@ -6,15 +6,6 @@ terraform {
   required_version = ">= 1.5.0"
 
   required_providers {
-    # Creates the kind cluster. Chosen over a null_resource/local-exec wrapper
-    # because it exposes the cluster's kubeconfig as first-class attributes and
-    # participates in `terraform destroy` properly. Validated against
-    # kindest/node:v1.36.1 and Docker 29.x before being adopted.
-    kind = {
-      source  = "tehcyx/kind"
-      version = "~> 0.9.0"
-    }
-
     helm = {
       source  = "hashicorp/helm"
       version = "~> 2.17"

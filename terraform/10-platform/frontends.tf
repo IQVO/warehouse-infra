@@ -45,35 +45,35 @@ locals {
   # remote's bundle, so a ui-kit change with an unchanged remote still
   # produces different bytes.
   uikit_source_hash = sha256(join("", concat(
-    [for f in sort(fileset("${path.module}/../../warehouse-ui-kit/src", "**")) : filesha256("${path.module}/../../warehouse-ui-kit/src/${f}")],
+    [for f in sort(fileset("${path.module}/../../../warehouse-ui-kit/src", "**")) : filesha256("${path.module}/../../../warehouse-ui-kit/src/${f}")],
     [
-      filesha256("${path.module}/../../warehouse-ui-kit/package.json"),
+      filesha256("${path.module}/../../../warehouse-ui-kit/package.json"),
     ],
   )))
 
   frontend_source_hash = {
     for name, fe in local.frontend_remotes :
     name => substr(sha256(join("", concat(
-      [for f in sort(fileset("${path.module}/../../${name}/web/src", "**")) : filesha256("${path.module}/../../${name}/web/src/${f}")],
+      [for f in sort(fileset("${path.module}/../../../${name}/web/src", "**")) : filesha256("${path.module}/../../../${name}/web/src/${f}")],
       [
-        filesha256("${path.module}/../../${name}/web/package.json"),
-        filesha256("${path.module}/../../${name}/web/vite.config.ts"),
-        filesha256("${path.module}/../../${name}/web/index.html"),
-        filesha256("${path.module}/../../${name}/web/Dockerfile"),
-        filesha256("${path.module}/../../${name}/web/nginx.conf"),
+        filesha256("${path.module}/../../../${name}/web/package.json"),
+        filesha256("${path.module}/../../../${name}/web/vite.config.ts"),
+        filesha256("${path.module}/../../../${name}/web/index.html"),
+        filesha256("${path.module}/../../../${name}/web/Dockerfile"),
+        filesha256("${path.module}/../../../${name}/web/nginx.conf"),
         local.uikit_source_hash,
       ],
     ))), 0, 12)
   }
 
   console_source_hash = var.deploy_frontends ? substr(sha256(join("", concat(
-    [for f in sort(fileset("${path.module}/../../warehouse-console/src", "**")) : filesha256("${path.module}/../../warehouse-console/src/${f}")],
+    [for f in sort(fileset("${path.module}/../../../warehouse-console/src", "**")) : filesha256("${path.module}/../../../warehouse-console/src/${f}")],
     [
-      filesha256("${path.module}/../../warehouse-console/package.json"),
-      filesha256("${path.module}/../../warehouse-console/vite.config.ts"),
-      filesha256("${path.module}/../../warehouse-console/index.html"),
-      filesha256("${path.module}/../../warehouse-console/Dockerfile"),
-      filesha256("${path.module}/../../warehouse-console/nginx.conf"),
+      filesha256("${path.module}/../../../warehouse-console/package.json"),
+      filesha256("${path.module}/../../../warehouse-console/vite.config.ts"),
+      filesha256("${path.module}/../../../warehouse-console/index.html"),
+      filesha256("${path.module}/../../../warehouse-console/Dockerfile"),
+      filesha256("${path.module}/../../../warehouse-console/nginx.conf"),
       local.uikit_source_hash,
     ],
   ))), 0, 12) : ""
@@ -83,22 +83,22 @@ locals {
   # every build input: contracts, generated pages, generator scripts, config,
   # packaging and public assets.
   ecosystem_source_hash = var.deploy_frontends ? substr(sha256(join("", concat(
-    [for f in sort(fileset("${path.module}/../../ecosystem/specs", "**")) : filesha256("${path.module}/../../ecosystem/specs/${f}")],
-    [for f in sort(fileset("${path.module}/../../ecosystem/domains", "**")) : filesha256("${path.module}/../../ecosystem/domains/${f}")],
-    [for f in sort(fileset("${path.module}/../../ecosystem/channels", "**")) : filesha256("${path.module}/../../ecosystem/channels/${f}")],
-    [for f in sort(fileset("${path.module}/../../ecosystem/users", "**")) : filesha256("${path.module}/../../ecosystem/users/${f}")],
-    [for f in sort(fileset("${path.module}/../../ecosystem/public", "**")) : filesha256("${path.module}/../../ecosystem/public/${f}")],
-    [for f in sort(fileset("${path.module}/../../ecosystem/scripts", "**")) : filesha256("${path.module}/../../ecosystem/scripts/${f}")],
+    [for f in sort(fileset("${path.module}/../../../ecosystem/specs", "**")) : filesha256("${path.module}/../../../ecosystem/specs/${f}")],
+    [for f in sort(fileset("${path.module}/../../../ecosystem/domains", "**")) : filesha256("${path.module}/../../../ecosystem/domains/${f}")],
+    [for f in sort(fileset("${path.module}/../../../ecosystem/channels", "**")) : filesha256("${path.module}/../../../ecosystem/channels/${f}")],
+    [for f in sort(fileset("${path.module}/../../../ecosystem/users", "**")) : filesha256("${path.module}/../../../ecosystem/users/${f}")],
+    [for f in sort(fileset("${path.module}/../../../ecosystem/public", "**")) : filesha256("${path.module}/../../../ecosystem/public/${f}")],
+    [for f in sort(fileset("${path.module}/../../../ecosystem/scripts", "**")) : filesha256("${path.module}/../../../ecosystem/scripts/${f}")],
     [
-      filesha256("${path.module}/../../ecosystem/package.json"),
-      filesha256("${path.module}/../../ecosystem/package-lock.json"),
-      filesha256("${path.module}/../../ecosystem/Dockerfile"),
-      filesha256("${path.module}/../../ecosystem/nginx.conf"),
-      filesha256("${path.module}/../../ecosystem/eventcatalog.config.js"),
-      filesha256("${path.module}/../../ecosystem/eventcatalog.styles.css"),
-      filesha256("${path.module}/../../ecosystem/catalog.contexts.mjs"),
-      filesha256("${path.module}/../../ecosystem/catalog.markdown.mjs"),
-      filesha256("${path.module}/../../ecosystem/.dockerignore"),
+      filesha256("${path.module}/../../../ecosystem/package.json"),
+      filesha256("${path.module}/../../../ecosystem/package-lock.json"),
+      filesha256("${path.module}/../../../ecosystem/Dockerfile"),
+      filesha256("${path.module}/../../../ecosystem/nginx.conf"),
+      filesha256("${path.module}/../../../ecosystem/eventcatalog.config.js"),
+      filesha256("${path.module}/../../../ecosystem/eventcatalog.styles.css"),
+      filesha256("${path.module}/../../../ecosystem/catalog.contexts.mjs"),
+      filesha256("${path.module}/../../../ecosystem/catalog.markdown.mjs"),
+      filesha256("${path.module}/../../../ecosystem/.dockerignore"),
     ],
   ))), 0, 12) : ""
 
@@ -125,12 +125,12 @@ locals {
   # is KONG's host endpoint -- a different origin from the page itself, which
   # is exactly why Kong needs an exact-origin CORS policy: each chart's
   # kong-plugins.yaml, origin from helm-values/_platform.yaml.
-  api_origin = "http://localhost:${var.kong_proxy_http_host_port}"
+  api_origin = "http://localhost:${local.cluster.ports.kong_proxy_http_host_port}"
 
   # The page's own origin, and therefore the ONLY origin Kong should grant
   # CORS to. Port 80 is implicit in an HTTP origin, so it must be omitted
   # there or the browser's Origin header will never match.
-  web_origin = var.web_gateway_host_port == 80 ? "http://localhost" : "http://localhost:${var.web_gateway_host_port}"
+  web_origin = local.cluster.ports.web_gateway_host_port == 80 ? "http://localhost" : "http://localhost:${local.cluster.ports.web_gateway_host_port}"
 }
 
 # ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ locals {
   web_gateway_name = "web-gateway"
 
   # nginx variable names cannot contain hyphens.
-  web_gateway_config = var.deploy_frontends ? templatefile("${path.module}/templates/web-gateway.conf.tftpl", {
+  web_gateway_config = var.deploy_frontends ? templatefile("${path.module}/../templates/web-gateway.conf.tftpl", {
     listen_port = 8080
     # kube-dns by IP -- nginx cannot resolve its own resolver, so a DNS name
     # here fails config parsing and the container never starts. Resolving
@@ -206,11 +206,11 @@ resource "kubernetes_deployment" "web_gateway" {
   lifecycle {
     precondition {
       condition     = local.platform.kongPlugins.cors.origin == local.web_origin
-      error_message = "helm-values/_platform.yaml kongPlugins.cors.origin must be ${local.web_origin} (var.web_gateway_host_port)."
+      error_message = "helm-values/_platform.yaml kongPlugins.cors.origin must be ${local.web_origin} (local.cluster.ports.web_gateway_host_port)."
     }
     precondition {
-      condition     = yamldecode(file("${path.module}/../helm-values/warehouse-console.yaml")).runtimeConfig.apiOrigin == local.api_origin
-      error_message = "helm-values/warehouse-console.yaml runtimeConfig.apiOrigin must be ${local.api_origin} (var.kong_proxy_http_host_port)."
+      condition     = yamldecode(file("${path.module}/../../helm-values/warehouse-console.yaml")).runtimeConfig.apiOrigin == local.api_origin
+      error_message = "helm-values/warehouse-console.yaml runtimeConfig.apiOrigin must be ${local.api_origin} (local.cluster.ports.kong_proxy_http_host_port)."
     }
     # The gateway proxies /mfes/<context>/ to every remote in
     # local.frontend_remotes; the chart only runs it when the context's values
@@ -218,20 +218,17 @@ resource "kubernetes_deployment" "web_gateway" {
     precondition {
       condition = alltrue([
         for name in keys(local.frontend_remotes) :
-        try(yamldecode(file("${path.module}/../helm-values/${name}.yaml")).frontend.enabled, false)
+        try(yamldecode(file("${path.module}/../../helm-values/${name}.yaml")).frontend.enabled, false)
       ])
       error_message = "Every context in local.frontend_remotes must set frontend.enabled: true in its helm-values file."
     }
   }
 
-  depends_on = [
-    kubernetes_config_map.web_gateway,
-    # ArgoCD owns the console release and every context's release, and
-    # modules/application creates their Applications -- depend on the
-    # module, so the gateway doesn't start routing to Services that don't
-    # exist yet on a from-scratch apply.
-    module.application,
-  ]
+  # No dependency on the applications (they are 20-apps, applied after this
+  # layer, ADR 0007): the gateway resolves every upstream at request time
+  # (`resolver` + variables in web-gateway.conf.tftpl), so it starts before the
+  # Services behind it exist.
+  depends_on = [kubernetes_config_map.web_gateway]
 
   metadata {
     name      = local.web_gateway_name
@@ -380,7 +377,7 @@ resource "kubernetes_service" "web_gateway" {
       name        = "http"
       port        = 80
       target_port = "http"
-      node_port   = var.web_gateway_node_port
+      node_port   = local.cluster.ports.web_gateway_node_port
       protocol    = "TCP"
     }
   }

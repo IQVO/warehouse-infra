@@ -66,13 +66,13 @@ resource "helm_release" "kong" {
         enabled       = true
         servicePort   = 80
         containerPort = 8000
-        nodePort      = var.kong_proxy_http_node_port
+        nodePort      = local.cluster.ports.kong_proxy_http_node_port
       }
       tls = {
         enabled       = true
         servicePort   = 443
         containerPort = 8443
-        nodePort      = var.kong_proxy_https_node_port
+        nodePort      = local.cluster.ports.kong_proxy_https_node_port
       }
     }
 

@@ -150,7 +150,7 @@ resource "helm_release" "kafka" {
         service = {
           type      = "NodePort"
           domain    = "localhost"
-          nodePorts = [var.kafka_node_port]
+          nodePorts = [local.cluster.ports.kafka_node_port]
         }
       }
     }
@@ -175,5 +175,5 @@ output "kafka_brokers" {
 # a local `go run` should use. Empty when the broker is cluster-internal only.
 output "kafka_brokers_host" {
   description = "Host-reachable Kafka bootstrap address for out-of-cluster clients (e2e-tests, local go run)."
-  value       = var.deploy_kafka && var.kafka_external_access_enabled ? "localhost:${var.kafka_host_port}" : ""
+  value       = var.deploy_kafka && var.kafka_external_access_enabled ? "localhost:${local.cluster.ports.kafka_host_port}" : ""
 }

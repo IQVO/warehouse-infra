@@ -38,7 +38,7 @@ resource "kubernetes_service" "grafana_nodeport" {
       name        = "http"
       port        = local.grafana_port
       target_port = 3000
-      node_port   = var.grafana_node_port
+      node_port   = local.cluster.ports.grafana_node_port
       protocol    = "TCP"
     }
   }
@@ -69,7 +69,7 @@ resource "kubernetes_service" "jaeger_nodeport" {
       name        = "http-query"
       port        = local.jaeger_query_port
       target_port = local.jaeger_query_port
-      node_port   = var.jaeger_node_port
+      node_port   = local.cluster.ports.jaeger_node_port
       protocol    = "TCP"
     }
   }
@@ -100,7 +100,7 @@ resource "kubernetes_service" "prometheus_nodeport" {
       name        = "http"
       port        = local.prometheus_port
       target_port = local.prometheus_port
-      node_port   = var.prometheus_node_port
+      node_port   = local.cluster.ports.prometheus_node_port
       protocol    = "TCP"
     }
   }
@@ -130,7 +130,7 @@ resource "kubernetes_service" "kiali_nodeport" {
       name        = "http"
       port        = local.kiali_port
       target_port = local.kiali_port
-      node_port   = var.kiali_node_port
+      node_port   = local.cluster.ports.kiali_node_port
       protocol    = "TCP"
     }
   }

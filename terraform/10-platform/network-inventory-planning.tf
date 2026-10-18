@@ -17,7 +17,7 @@
 # (ADR 0002 D2). This file keeps the database names the platform reads and
 # the outputs.
 #
-# NOT in `local.services`: that map's entries share one chart shape (and
+# NOT in `module.registry.services`: that map's entries share one chart shape (and
 # one database naming rule), which NIP's chart and databases do not.
 #
 # Kafka topics: NO declaration in this repo is the fleet norm. Every
