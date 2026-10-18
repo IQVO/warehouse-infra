@@ -32,26 +32,13 @@
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# OLTP database names. The role and database are created by the initdb
-# script (postgres.tf) with the module's generated password.
-#
-# NOTE FOR AN ALREADY-RUNNING CLUSTER: Bitnami executes
-# primary.initdb.scripts exactly ONCE, against an empty data directory. On
-# a cluster whose Postgres already has data, a new role/database here
-# renders the SQL but never runs it. Create them by hand against the live
-# primary, mirroring templates/init-databases.sql.tftpl's loop body, using
-# the password from
-# `terraform output -raw network_inventory_planning_db_password`.
+# OLTP database names. modules/application creates the role and the database
+# in Postgres with its generated password (ADR 0005), on a fresh or a
+# populated cluster alike.
 # ---------------------------------------------------------------------------
 locals {
   network_inventory_planning_db_user = "network_inventory_planning"
   network_inventory_planning_db_name = "network_inventory_planning"
-}
-
-output "network_inventory_planning_db_password" {
-  description = "Generated password for the network-inventory-planning OLTP role (needed to create the role by hand on an already-initialized Postgres)."
-  value       = module.application["network-inventory-planning"].db_password
-  sensitive   = true
 }
 
 output "network_inventory_planning_route" {
@@ -67,20 +54,12 @@ output "network_inventory_planning_route" {
 # projector also runs the analytical migrations, which take a session-scoped
 # advisory lock PgBouncer's transaction pooling cannot honour).
 #
-# Same NOTE as the OLTP database above: on an already-initialized Postgres,
-# create the role/database by hand using
-# `terraform output -raw network_inventory_planning_analytics_db_password`
-# (README "Network inventory planning (NIP) runbook").
+# Same as the OLTP database above: modules/application creates the role and the
+# database (ADR 0005).
 # ---------------------------------------------------------------------------
 locals {
   network_inventory_planning_analytics_db_user = "network_inventory_planning_analytics"
   network_inventory_planning_analytics_db_name = "network_inventory_planning_analytics"
-}
-
-output "network_inventory_planning_analytics_db_password" {
-  description = "Generated password for the network-inventory-planning analytics role (needed to create the role by hand on an already-initialized Postgres)."
-  value       = module.application["network-inventory-planning"].analytics_db_password
-  sensitive   = true
 }
 
 # Reports route: DELETED (fleet decision 2026-10-13) — the chart's own
