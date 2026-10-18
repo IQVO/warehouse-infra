@@ -1476,6 +1476,206 @@
       ]
     },
     {
+      "name": "warehouse-pick-face-replenishment",
+      "rules": [
+        {
+          "alert": "WarehouseKong5xxRatioHigh",
+          "expr": "sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[5m])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\"}[5m])) > 0.05",
+          "for": "5m",
+          "labels": {
+            "context": "pick-face-replenishment",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Pick-Face Replenishment: more than 5% of requests on a Kong route answer 5xx",
+            "description": "Kong route {{ $labels.service }} answered 5xx for {{ $value | humanizePercentage }} of its requests over the last 5 minutes (API route = <context>.N, MCP = <context>-mcp.N, reports = <context>-reports.N).",
+            "runbook_url": "https://iqvo.github.io/pick-face-replenishment/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-pick-face-replenishment"
+          }
+        },
+        {
+          "alert": "WarehousePodRestarting",
+          "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total{namespace=\"warehouse-systems\", pod=~\"pick-face-replenishment-.+\"}[15m])) >= 2",
+          "for": "0m",
+          "labels": {
+            "context": "pick-face-replenishment",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Pick-Face Replenishment: a container is restarting",
+            "description": "{{ $labels.pod }}/{{ $labels.container }} restarted {{ $value | humanize }} times in 15 minutes (boot-retry exhaustion, a failed migration, a stopped consumer that exits on purpose, or an OOM kill). Read the previous container's last log lines first.",
+            "runbook_url": "https://iqvo.github.io/pick-face-replenishment/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-pick-face-replenishment"
+          }
+        }
+      ]
+    },
+    {
+      "name": "warehouse-pick-face-replenishment-slo",
+      "rules": [
+        {
+          "alert": "WarehouseApiAvailabilityBurnFast",
+          "expr": "(sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[1h])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\"}[1h])) / 0.01 >= 14.4) and (sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[5m])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\"}[5m])) / 0.01 >= 14.4) and sum by (service) (increase(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\"}[1h])) >= 30",
+          "for": "2m",
+          "labels": {
+            "context": "pick-face-replenishment",
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "Pick-Face Replenishment: API availability SLO burning fast (day's budget gone in ~100 minutes)",
+            "description": "Kong route {{ $labels.service }} answers 5xx at {{ $value | humanize }}x the rate the one-day 99% availability SLO allows, over the last hour and over the last 5 minutes (5xx ratio of 14.4% or more). At this burn the whole day's error budget is gone in about 100 minutes. The alert needs at least 30 requests in the last hour, so one failed request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/pick-face-replenishment/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-pick-face-replenishment"
+          }
+        },
+        {
+          "alert": "WarehouseApiLatencyBurnFast",
+          "expr": "((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[1h])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\"}[1h]))) / 0.05 >= 14.4) and ((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[5m])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\"}[5m]))) / 0.05 >= 14.4) and sum by (service) (increase(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\"}[1h])) >= 30",
+          "for": "2m",
+          "labels": {
+            "context": "pick-face-replenishment",
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "Pick-Face Replenishment: API latency SLO burning fast (day's budget gone in ~100 minutes)",
+            "description": "Kong route {{ $labels.service }} is missing the 500 ms upstream latency target at {{ $value | humanize }}x the rate the one-day 95% latency SLO allows, over the last hour and over the last 5 minutes (slow ratio of 72% or more). At this burn the whole day's error budget is gone in about 100 minutes. Kong's histogram has no 500 ms bucket, so the nearest boundary, le=400.0 (400 ms), is used: a request between 400 and 500 ms counts as slow. The alert needs at least 30 requests in the last hour, so one slow request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/pick-face-replenishment/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-pick-face-replenishment"
+          }
+        },
+        {
+          "alert": "WarehouseApiAvailabilityBurnSlow",
+          "expr": "(sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[6h])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\"}[6h])) / 0.01 >= 3) and (sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[30m])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\"}[30m])) / 0.01 >= 3) and sum by (service) (increase(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\"}[6h])) >= 30",
+          "for": "15m",
+          "labels": {
+            "context": "pick-face-replenishment",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Pick-Face Replenishment: API availability SLO burning slowly (day's budget gone in ~8 hours)",
+            "description": "Kong route {{ $labels.service }} answers 5xx at {{ $value | humanize }}x the rate the one-day 99% availability SLO allows, over the last 6 hours and over the last 30 minutes (5xx ratio of 3% or more). At this burn the whole day's error budget is gone in about 8 hours. The alert needs at least 30 requests in the last 6 hours, so one failed request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/pick-face-replenishment/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-pick-face-replenishment"
+          }
+        },
+        {
+          "alert": "WarehouseApiLatencyBurnSlow",
+          "expr": "((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[6h])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\"}[6h]))) / 0.05 >= 3) and ((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[30m])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\"}[30m]))) / 0.05 >= 3) and sum by (service) (increase(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]pick-face-replenishment(-mcp|-reports)?[.][0-9]+\"}[6h])) >= 30",
+          "for": "15m",
+          "labels": {
+            "context": "pick-face-replenishment",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Pick-Face Replenishment: API latency SLO burning slowly (day's budget gone in ~8 hours)",
+            "description": "Kong route {{ $labels.service }} is missing the 500 ms upstream latency target at {{ $value | humanize }}x the rate the one-day 95% latency SLO allows, over the last 6 hours and over the last 30 minutes (slow ratio of 15% or more). At this burn the whole day's error budget is gone in about 8 hours. Kong's histogram has no 500 ms bucket, so the nearest boundary, le=400.0 (400 ms), is used: a request between 400 and 500 ms counts as slow. The alert needs at least 30 requests in the last 6 hours, so one slow request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/pick-face-replenishment/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-pick-face-replenishment"
+          }
+        }
+      ]
+    },
+    {
+      "name": "warehouse-task-interleaving",
+      "rules": [
+        {
+          "alert": "WarehouseKong5xxRatioHigh",
+          "expr": "sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[5m])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\"}[5m])) > 0.05",
+          "for": "5m",
+          "labels": {
+            "context": "task-interleaving",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Task Interleaving: more than 5% of requests on a Kong route answer 5xx",
+            "description": "Kong route {{ $labels.service }} answered 5xx for {{ $value | humanizePercentage }} of its requests over the last 5 minutes (API route = <context>.N, MCP = <context>-mcp.N, reports = <context>-reports.N).",
+            "runbook_url": "https://iqvo.github.io/task-interleaving/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-task-interleaving"
+          }
+        },
+        {
+          "alert": "WarehousePodRestarting",
+          "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total{namespace=\"warehouse-systems\", pod=~\"task-interleaving-.+\"}[15m])) >= 2",
+          "for": "0m",
+          "labels": {
+            "context": "task-interleaving",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Task Interleaving: a container is restarting",
+            "description": "{{ $labels.pod }}/{{ $labels.container }} restarted {{ $value | humanize }} times in 15 minutes (boot-retry exhaustion, a failed migration, a stopped consumer that exits on purpose, or an OOM kill). Read the previous container's last log lines first.",
+            "runbook_url": "https://iqvo.github.io/task-interleaving/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-task-interleaving"
+          }
+        }
+      ]
+    },
+    {
+      "name": "warehouse-task-interleaving-slo",
+      "rules": [
+        {
+          "alert": "WarehouseApiAvailabilityBurnFast",
+          "expr": "(sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[1h])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\"}[1h])) / 0.01 >= 14.4) and (sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[5m])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\"}[5m])) / 0.01 >= 14.4) and sum by (service) (increase(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\"}[1h])) >= 30",
+          "for": "2m",
+          "labels": {
+            "context": "task-interleaving",
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "Task Interleaving: API availability SLO burning fast (day's budget gone in ~100 minutes)",
+            "description": "Kong route {{ $labels.service }} answers 5xx at {{ $value | humanize }}x the rate the one-day 99% availability SLO allows, over the last hour and over the last 5 minutes (5xx ratio of 14.4% or more). At this burn the whole day's error budget is gone in about 100 minutes. The alert needs at least 30 requests in the last hour, so one failed request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/task-interleaving/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-task-interleaving"
+          }
+        },
+        {
+          "alert": "WarehouseApiLatencyBurnFast",
+          "expr": "((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[1h])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\"}[1h]))) / 0.05 >= 14.4) and ((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[5m])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\"}[5m]))) / 0.05 >= 14.4) and sum by (service) (increase(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\"}[1h])) >= 30",
+          "for": "2m",
+          "labels": {
+            "context": "task-interleaving",
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "Task Interleaving: API latency SLO burning fast (day's budget gone in ~100 minutes)",
+            "description": "Kong route {{ $labels.service }} is missing the 500 ms upstream latency target at {{ $value | humanize }}x the rate the one-day 95% latency SLO allows, over the last hour and over the last 5 minutes (slow ratio of 72% or more). At this burn the whole day's error budget is gone in about 100 minutes. Kong's histogram has no 500 ms bucket, so the nearest boundary, le=400.0 (400 ms), is used: a request between 400 and 500 ms counts as slow. The alert needs at least 30 requests in the last hour, so one slow request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/task-interleaving/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-task-interleaving"
+          }
+        },
+        {
+          "alert": "WarehouseApiAvailabilityBurnSlow",
+          "expr": "(sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[6h])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\"}[6h])) / 0.01 >= 3) and (sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[30m])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\"}[30m])) / 0.01 >= 3) and sum by (service) (increase(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\"}[6h])) >= 30",
+          "for": "15m",
+          "labels": {
+            "context": "task-interleaving",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Task Interleaving: API availability SLO burning slowly (day's budget gone in ~8 hours)",
+            "description": "Kong route {{ $labels.service }} answers 5xx at {{ $value | humanize }}x the rate the one-day 99% availability SLO allows, over the last 6 hours and over the last 30 minutes (5xx ratio of 3% or more). At this burn the whole day's error budget is gone in about 8 hours. The alert needs at least 30 requests in the last 6 hours, so one failed request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/task-interleaving/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-task-interleaving"
+          }
+        },
+        {
+          "alert": "WarehouseApiLatencyBurnSlow",
+          "expr": "((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[6h])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\"}[6h]))) / 0.05 >= 3) and ((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[30m])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\"}[30m]))) / 0.05 >= 3) and sum by (service) (increase(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]task-interleaving(-mcp|-reports)?[.][0-9]+\"}[6h])) >= 30",
+          "for": "15m",
+          "labels": {
+            "context": "task-interleaving",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Task Interleaving: API latency SLO burning slowly (day's budget gone in ~8 hours)",
+            "description": "Kong route {{ $labels.service }} is missing the 500 ms upstream latency target at {{ $value | humanize }}x the rate the one-day 95% latency SLO allows, over the last 6 hours and over the last 30 minutes (slow ratio of 15% or more). At this burn the whole day's error budget is gone in about 8 hours. Kong's histogram has no 500 ms bucket, so the nearest boundary, le=400.0 (400 ms), is used: a request between 400 and 500 ms counts as slow. The alert needs at least 30 requests in the last 6 hours, so one slow request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/task-interleaving/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-task-interleaving"
+          }
+        }
+      ]
+    },
+    {
       "name": "warehouse-warehouse-ops-agent",
       "rules": [
         {
