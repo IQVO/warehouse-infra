@@ -1,0 +1,25 @@
+# warehouse-console: the Module Federation shell, served by the Nginx web gateway
+# (terraform/frontends.tf). Complete Helm values (ADR 0002 D2). The image tag comes
+# from Terraform (content hash of the console sources and the shared ui-kit).
+
+image:
+  repository: warehouse/warehouse-console-frontend
+  pullPolicy: IfNotPresent
+
+# ClusterIP: the web gateway is the only host-facing frontend endpoint.
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+# Frontend routing belongs to the web gateway, never to an Ingress or HTTPRoute:
+# an Ingress here would put console traffic through Kong, which this design forbids.
+ingress:
+  enabled: false
+
+# The runtime contract every remote reads. apiOrigin is Kong's host endpoint,
+# cross-origin from this page by design; terraform/frontends.tf checks it against
+# var.kong_proxy_http_host_port.
+runtimeConfig:
+  enabled: true
+  apiOrigin: http://localhost:8000

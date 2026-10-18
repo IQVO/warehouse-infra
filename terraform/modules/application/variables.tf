@@ -43,9 +43,20 @@ variable "chart" {
   })
 }
 
+variable "values" {
+  description = "Where ArgoCD reads the application's value files (ADR 0002 D2): repo_url/target_revision of this repo, dir inside it, and local_dir, the same directory on disk, which the plan checks so a missing file fails here rather than in ArgoCD."
+  type = object({
+    repo_url        = string
+    target_revision = optional(string, "develop")
+    dir             = optional(string, "helm-values")
+    local_dir       = string
+  })
+}
+
 variable "helm_values" {
-  description = "Helm values for the ArgoCD Application, without image tags: the module sets image.tag and frontend.image.tag from the images it builds. Still computed by the root module; ADR 0002 phase 3 replaces them with value files. Never put a credential here: charts read them from the Secrets this module creates."
+  description = "Values Terraform itself owns, placed in the Application's valuesObject (which wins over the value files). Empty for almost every application: configuration belongs in the value files. The module adds image.tag and frontend.image.tag for the images it builds. Never put a credential here: charts read credentials from the Secrets this module creates."
   type        = any
+  default     = {}
 }
 
 variable "image" {

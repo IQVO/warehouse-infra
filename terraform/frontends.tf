@@ -13,8 +13,8 @@
 # Each bounded context owns its remote under <repo>/web and ships the frontend
 # Deployment/Service in its OWN chart behind `frontend.enabled` (default
 # false). warehouse-infra only decides that this environment wants them on,
-# and supplies the locally built image tag -- the same environment-vs-shape
-# split as services.tf.
+# (helm-values/<context>.yaml: frontend.enabled) and supplies the locally
+# built image tag (modules/application).
 #
 # warehouse-console is its own Helm release (it has no backend chart to ride
 # along in) and additionally gets the runtime /config.json carrying
@@ -73,15 +73,14 @@ locals {
     # needs no change. The web gateway location /mfes/inbound-receiving/ is
     # rendered from this entry; the chart's frontend Service is
     # "inbound-receiving-frontend". The remote sends an Idempotency-Key header
-    # on every POST (allowed in kong-cors.tf).
+    # on every POST (allowed by the chart's CORS KongPlugin).
     "inbound-receiving" = { remote_name = "inbound_mfe" }
     # network-inventory-planning (IQVO/network-inventory-planning#18):
     # federation container `nip_mfe`, Vite base /mfes/network-inventory-planning/.
     # Its web/ sits at the standard <repo>/web path. NIP is not in
-    # local.services (network-inventory-planning.tf), so services.tf's computed
-    # `frontend` block never reaches it; that file mirrors it by hand, exactly
-    # like network-fulfillment.tf. The chart's frontend Service is
-    # "network-inventory-planning-frontend".
+    # local.services (network-inventory-planning.tf); its helm-values file
+    # switches the frontend on like every other. The chart's frontend Service
+    # is "network-inventory-planning-frontend".
     "network-inventory-planning" = { remote_name = "nip_mfe" }
   } : {}
 
@@ -155,48 +154,14 @@ locals {
     ],
   ))), 0, 12) : ""
 
-  console_chart_path   = "${path.module}/../../warehouse-console/charts/warehouse-console"
   console_release_name = "warehouse-console"
-
-  # Full computed Helm values for warehouse-console, extracted from the
-  # (now-removed) helm_release.console's `values` argument -- unchanged
-  # content, pure refactor -- so the ArgoCD Application (modules/application)
-  # reads from exactly the same computation.
-  console_helm_values = {
-    image = {
-      repository = "warehouse/warehouse-console-frontend"
-      # tag: set by modules/application from local.console_source_hash.
-      pullPolicy = "IfNotPresent"
-    }
-
-    # ClusterIP: the web gateway is the only host-facing frontend endpoint.
-    service = {
-      type       = "ClusterIP"
-      port       = 80
-      targetPort = 8080
-    }
-
-    # Frontend routing belongs to the web gateway, never to an Ingress or
-    # HTTPRoute -- an Ingress here would put console traffic through KONG,
-    # which is precisely what this design forbids.
-    ingress = {
-      enabled = false
-    }
-
-    # The runtime contract every remote reads. apiOrigin points at Kong's
-    # host endpoint, cross-origin from this page by design.
-    runtimeConfig = {
-      enabled   = true
-      apiOrigin = local.api_origin
-    }
-  }
 
   # Service DNS the web gateway proxies to. Every one of these is ClusterIP:
   # the gateway is the only frontend workload with a NodePort.
   #
   # The frontend Service name comes from each chart's own frontendFullname
   # helper, which is "<release>-frontend"; the release name is the context
-  # name (services.tf uses each.key). Asserted live by the smoke test rather
+  # name (the Application name). Asserted live by the smoke test rather
   # than assumed.
   frontend_service_host = {
     for name, fe in local.frontend_remotes :
@@ -206,30 +171,12 @@ locals {
   console_service_host = "${local.console_release_name}.${var.apps_namespace}.svc.cluster.local"
 
   ecosystem_release_name = "ecosystem"
-  ecosystem_chart_path   = "${path.module}/../../ecosystem/charts/ecosystem"
   ecosystem_service_host = "${local.ecosystem_release_name}.${var.apps_namespace}.svc.cluster.local"
-
-  ecosystem_helm_values = {
-    image = {
-      repository = "warehouse/ecosystem-frontend"
-      # tag: set by modules/application from local.ecosystem_source_hash.
-      pullPolicy = "IfNotPresent"
-    }
-
-    service = {
-      type       = "ClusterIP"
-      port       = 80
-      targetPort = 8080
-    }
-
-    ingress = {
-      enabled = false
-    }
-  }
 
   # The browser-facing API origin the console publishes in /config.json. This
   # is KONG's host endpoint -- a different origin from the page itself, which
-  # is exactly why Kong needs the exact-origin CORS policy in kong-cors.tf.
+  # is exactly why Kong needs an exact-origin CORS policy: each chart's
+  # kong-plugins.yaml, origin from helm-values/_platform.yaml.
   api_origin = "http://localhost:${var.kong_proxy_http_host_port}"
 
   # The page's own origin, and therefore the ONLY origin Kong should grant
@@ -303,6 +250,31 @@ resource "kubernetes_config_map" "web_gateway" {
 
 resource "kubernetes_deployment" "web_gateway" {
   count = var.deploy_frontends ? 1 : 0
+
+  # The value files name this gateway's origin (Kong's CORS origin,
+  # helm-values/_platform.yaml) and Kong's host endpoint (the console's
+  # runtime apiOrigin, helm-values/warehouse-console.yaml): both must match
+  # the ports this repo publishes.
+  lifecycle {
+    precondition {
+      condition     = local.platform.kongPlugins.cors.origin == local.web_origin
+      error_message = "helm-values/_platform.yaml kongPlugins.cors.origin must be ${local.web_origin} (var.web_gateway_host_port)."
+    }
+    precondition {
+      condition     = yamldecode(file("${path.module}/../helm-values/warehouse-console.yaml")).runtimeConfig.apiOrigin == local.api_origin
+      error_message = "helm-values/warehouse-console.yaml runtimeConfig.apiOrigin must be ${local.api_origin} (var.kong_proxy_http_host_port)."
+    }
+    # The gateway proxies /mfes/<context>/ to every remote in
+    # local.frontend_remotes; the chart only runs it when the context's values
+    # file switches it on.
+    precondition {
+      condition = alltrue([
+        for name in keys(local.frontend_remotes) :
+        try(yamldecode(file("${path.module}/../helm-values/${name}.yaml")).frontend.enabled, false)
+      ])
+      error_message = "Every context in local.frontend_remotes must set frontend.enabled: true in its helm-values file."
+    }
+  }
 
   depends_on = [
     kubernetes_config_map.web_gateway,

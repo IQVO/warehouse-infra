@@ -6,7 +6,7 @@
 #
 # Kafka: publishes integration/analytics events (kafka.tf) and runs inbound
 # consumers: the repromise consumer (fixed in code), the PATH_CATALOGUE_SOURCE
-# caches (see services.tf) and, via `plannedCapacity` below, the
+# caches (extraEnv below) and, via `plannedCapacity` below, the
 # warehouse-planning capacity-plan consumer.
 #
 # HTTP outbound dependencies (inventory-storage, wes-work-planning) default
@@ -27,32 +27,6 @@ inventoryStorage:
   mode: "http"
   baseUrl: "http://inventory-storage.warehouse-systems.svc.cluster.local:80"
 
-kafka:
-  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
-
-# Planned capacity from warehouse-planning (order-management ADR 0031): consume
-# warehouse.warehouse-planning.events into a local read model, serve
-# GET /planned-capacity?site=, and annotate an order response with
-# `capacityConstraint` when its promise overlaps a PUBLISHED shortage window.
-# Annotate-only: no promise moves, no order is rejected, allocation is untouched.
-#
-# Both keys are DEDICATED chart values (charts/order-management renders them to
-# PLANNED_CAPACITY_CONSUMER_GROUP / PLANNED_CAPACITY_SITE_ID), so they live here
-# and NOT in local.sync_edge_env (an extraEnv here would be silently dropped by
-# the computed layer in terraform/services.tf; setting both would double-render).
-# KAFKA_BROKERS is already rendered (config.eventPublisher=kafka above).
-#   consumerGroup: fixed and stable, so a restarted pod resumes from its
-#     committed offsets and N replicas share partitions. The binary has no
-#     default on purpose; an empty value turns the integration off.
-#   siteId: the warehouse-planning `location` (site/building code) order
-#     promises are matched against. Orders carry no site of their own, so this
-#     is one site for the whole service, like DEFAULT_SITE_ID (which is unset
-#     here and so is "site-1", the CPT-schedule site -- NOT what planning uses).
-#     "SIM1" is the site code warehouse-planning's live capacity is registered
-#     under (its ADR 0003); change it here if that location is ever renamed. If
-#     it does not equal the `location` of the published plans, NO order is
-#     annotated (fail-open) -- GET /planned-capacity?site=<code> shows what the
-#     service actually holds.
 plannedCapacity:
   consumerGroup: "order-management-planned-capacity"
   siteId: "SIM1"
@@ -63,7 +37,7 @@ plannedCapacity:
 # instead of the default "permissive" (every SKU unclassified). "http" was
 # REMOVED from the binary and fails boot. Both keys are DEDICATED chart values
 # (rendered to PRODUCT_CLASSIFICATION_MODE / PRODUCT_CLASSIFICATION_CONSUMER_GROUP),
-# so they live here and NOT in local.sync_edge_env (setting both would
+# so they live here and NOT in extraEnv (setting both would
 # double-render). consumerGroup is fixed and stable: a restarted pod resumes
 # from its committed offsets and N replicas share partitions; the binary has
 # no default on purpose. KAFKA_BROKERS is already rendered. The `inventoryStorage`
@@ -75,6 +49,12 @@ productClassification:
 analytics:
   enabled: true
 
+  database:
+    existingSecret: order-management-analytics-db
+  reports:
+    route:
+      enabled: true
+      path: /api/order-management/reports
 livenessProbe:
   httpGet:
     path: /healthz
@@ -90,3 +70,55 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 5
   failureThreshold: 6
+
+# Formerly computed by terraform/services.tf (ADR 0002 phase 3, docs/adr/0002-application-delivery-boundary.md).
+# Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
+# _platform.yaml; image tags from Terraform (the Application's valuesObject).
+database:
+  existingSecret: order-management-db
+extraEnv:
+  - name: PATH_CATALOGUE_SOURCE
+    value: kafka
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/order-management-frontend
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/order-management
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/order-management
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/order-management
+          pathType: Prefix
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/order-management
+pathCatalogue:
+  content: ''
+  enabled: false
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

@@ -24,9 +24,8 @@
 #
 # Every key below is a DEDICATED chart value
 # (charts/slotting-optimization/values.yaml renders each one to its env var),
-# so none of this belongs in local.sync_edge_env -- an `extraEnv` in THIS file
-# would be silently dropped by the computed layer (see helm-values/_README.md
-# and terraform/locals.tf).
+# so none of this belongs in extraEnv (a duplicate env entry breaks ArgoCD's
+# diff).
 #
 # Startup: runs golang-migrate before serving, over MIGRATIONS_DATABASE_URL
 # (the direct, non-pooled DSN Terraform puts in the <svc>-db Secret);
@@ -37,9 +36,8 @@
 #
 # DEMAND_SITE_ID / DEFAULT_SITE_ID are deliberately left unset: every request
 # names its site and every site's demand is ingested (no invented default).
-# The read-only MCP server is switched on by services.tf's mcp_services gate
-# (terraform/mcp.tf); the ops-agent consumes it (ops-agent.tf,
-# warehouse-ops-agent #151).
+# The read-only MCP server is switched on below (mcp.enabled); the ops-agent
+# consumes it (warehouse-ops-agent.yaml, warehouse-ops-agent #151).
 
 replicaCount: 1
 
@@ -71,23 +69,52 @@ config:
 
 kafka:
   enabled: true
-  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
-
-# Analytics read side (ADR 0006, enabled by this change). `enabled` is also
-# set by Terraform's computed layer (services.tf,
-# contains(local.analytics_services, name)); repeated here so this file is
-# the readable source of truth, exactly as the siblings do. The projector's
-# consumer group (ANALYTICS_CONSUMER_GROUP) is a FIXED, stable id (fleet
-# charter naming `<ctx>-analytics`), pinned equal to the chart's default so
-# a rename there cannot silently orphan the committed offsets. NOTE the key
-# shape differs from the siblings: this chart pins the group at
-# analytics.consumerGroup (NOT analytics.projector.consumerGroup) and reads
-# the DSN from a single Secret key -- analytics.existingSecret, the
-# slotting-optimization-analytics-db Secret modules/application writes, set
-# by services.tf and shallow-merged over this block (disjoint keys) -- NOT
-# the analytics.database.* pair. The role/database are NOT created
-# by a plain apply on an already-populated Postgres: see the infra PR
-# runbook.
 analytics:
   enabled: true
   consumerGroup: "slotting-optimization-analytics"
+  existingSecret: slotting-optimization-analytics-db
+
+# Formerly computed by terraform/services.tf (ADR 0002 phase 3, docs/adr/0002-application-delivery-boundary.md).
+# Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
+# _platform.yaml; image tags from Terraform (the Application's valuesObject).
+database:
+  existingSecret: slotting-optimization-db
+extraEnv: []
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/slotting-optimization
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/slotting-optimization
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/slotting-optimization
+          pathType: Prefix
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/slotting-optimization
+pathCatalogue:
+  content: ''
+  enabled: false
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

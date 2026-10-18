@@ -21,8 +21,7 @@ config:
   # warehouse.network-inventory-planning.events. The chart natively
   # templates TRANSFER_ALLOCATION_CONSUMER_MODE/GROUP from these keys --
   # setting them via extraEnv would duplicate the chart's own env entries
-  # and break ArgoCD's three-way diff (see locals.tf's sync_edge_env
-  # header). The group id is the chart's own documented default, set
+  # and break ArgoCD's three-way diff. The group id is the chart's own documented default, set
   # explicitly so the Deployment's env is self-describing; a locally-run
   # process overrides it so it can never steal the live Deployment's
   # partitions.
@@ -60,13 +59,20 @@ config:
   taskCompletedConsumerMode: "kafka"
   taskCompletedConsumerGroup: "inventory-storage-confirm-pick"
 
+  # K4: bin classification from a facility-events cache. Rollback R6
+  # (docs/rollback-switches.md): http plus facilityLayoutBaseUrl.
+  locationLookupMode: kafka
 kafka:
   enabled: true
-  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
-
 analytics:
   enabled: true
 
+  database:
+    existingSecret: inventory-storage-analytics-db
+  reports:
+    route:
+      enabled: true
+      path: /api/inventory-storage/reports
 livenessProbe:
   httpGet:
     path: /healthz
@@ -82,3 +88,53 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 5
   failureThreshold: 6
+
+# Formerly computed by terraform/services.tf (ADR 0002 phase 3, docs/adr/0002-application-delivery-boundary.md).
+# Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
+# _platform.yaml; image tags from Terraform (the Application's valuesObject).
+database:
+  existingSecret: inventory-storage-db
+extraEnv: []
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/inventory-storage-frontend
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/inventory-storage
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/inventory-storage
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/inventory-storage
+          pathType: Prefix
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/inventory-storage
+pathCatalogue:
+  content: ''
+  enabled: false
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

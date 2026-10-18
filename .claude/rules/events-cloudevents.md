@@ -11,7 +11,7 @@ paths:
 
 Every Kafka message on every topic this cluster hosts, integration `warehouse.<ctx>.events` and analytics `warehouse.<ctx>.analytics`, is a CloudEvents 1.0 event in structured content mode. This is a hard fleet rule.
 
-- Never configure an envelope toggle: no `EVENT_ENVELOPE_MODE` or any flat/dual/cloudevents switch in `terraform/` (`local.sync_edge_env`, `services.tf`, `argocd-apps.tf`), `helm-values/` or `scripts/`. The services have no such variable; adding one is a defect.
+- Never configure an envelope toggle: no `EVENT_ENVELOPE_MODE` or any flat/dual/cloudevents switch in `terraform/`, `helm-values/` (an `extraEnv` entry or any chart value) or `scripts/`. The services have no such variable; adding one is a defect.
 - No flat envelope (`event_id`/`event_type`/`occurred_at`), no dual-write, no dual-read. `docs/analytics/envelope-v1.md` is SUPERSEDED.
 - Wire format (useful with `kafka-console-consumer.sh --property print.headers=true`): Kafka header `content-type: application/cloudevents+json; charset=UTF-8`; attributes `specversion=1.0`, `id` (UUID, stable across outbox redelivery), `source=/warehouse/<repo>`, `type`, `subject` (aggregate id), `time` (UTC occurred-at), `datacontenttype=application/json`, `dataschema=urn:warehouse:<repo>:<events|analytics>:<EventName>:v<N>`.
 - `type` is `com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`: `wms` for facility-layout and inventory-storage, `wes` for everything else; wes-work-planning's context segment is `work-planning`.

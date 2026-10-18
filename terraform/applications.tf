@@ -12,12 +12,13 @@
 # application itself comes from its own chart.
 #
 # Registering an application:
-#   - a database-backed context with the shared chart shape (Kong routes,
-#     MCP, analytics values from services.tf) goes in local.services
-#     (locals.tf) and is picked up below automatically;
-#   - anything else gets its own entry in local.other_applications, with its
-#     values computed in its own file (network-fulfillment.tf, ops-agent.tf,
-#     frontends.tf, ...).
+#   - a database-backed context with the shared database naming goes in
+#     local.services (locals.tf) and is picked up below automatically;
+#   - anything else gets its own entry in local.other_applications;
+#   - either way its configuration is helm-values/<name>.yaml plus
+#     helm-values/kind-resources/<name>.yaml (ADR 0002 D2), which ArgoCD
+#     reads from this repo's develop: the plan fails while either is
+#     missing.
 #
 # The moved blocks in moved-applications.tf map every pre-module address
 # onto the module, so applying them only rewrites state addresses: no
@@ -46,7 +47,7 @@ locals {
       database = merge(local.oltp_endpoints, { name = svc.db, user = svc.user })
       # The <name>-analytics-db Secret the chart reads through
       # analytics.database.existingSecret (analytics.existingSecret for
-      # slotting-optimization), set in services.tf.
+      # slotting-optimization), set in its helm-values file.
       analytics_database = contains(local.analytics_services, name) ? {
         name        = local.analytics_db_info[name].db
         user        = local.analytics_db_info[name].user
@@ -156,21 +157,24 @@ locals {
 
   applications = merge(local.service_applications, local.other_applications)
 
-  # The chart values, still computed by the root (ADR 0002 phase 3 moves them
-  # to value files), kept out of the registry above so that nothing reading
-  # the registry (app_db_passwords, which the Postgres release reads) depends
-  # on them. Without image tags: the module adds the tags of the images it
-  # builds, so these values never depend on the module's outputs.
-  application_helm_values = merge(
-    { for name in keys(local.services) : name => local.argocd_service_values[name] },
-    {
-      "network-inventory-planning" = local.argocd_network_inventory_planning_values
-      "network-fulfillment"        = local.argocd_network_fulfillment_values
-      "warehouse-ops-agent"        = local.argocd_ops_agent_values
-      "warehouse-console"          = local.argocd_console_values
-      "ecosystem"                  = local.argocd_ecosystem_values
-    },
-  )
+  # Values Terraform itself owns, for the Application's valuesObject. Every
+  # application's configuration lives in its value files (helm-values/,
+  # ADR 0002 D2); the only exception is the ops agent's image, chosen per
+  # machine through terraform.tfvars (ops-agent.tf). The module adds the
+  # tags of the images it builds.
+  application_helm_values = {
+    "warehouse-ops-agent" = local.ops_agent_terraform_values
+  }
+
+  # Where ArgoCD reads the value files: this repo's GitHub develop (public,
+  # like every chart repo). A values change deploys on merge, through an
+  # ArgoCD sync, with no terraform apply.
+  application_values_source = {
+    repo_url        = "https://github.com/IQVO/warehouse-infra.git"
+    target_revision = "develop"
+    dir             = "helm-values"
+    local_dir       = "${path.module}/../helm-values"
+  }
 
   # The generated passwords ({ db, analytics_db }), for the platform's
   # initdb script and PgBouncer userlist: the platform's dependency on the
@@ -228,5 +232,6 @@ module "application" {
   database           = local.applications[each.key].database
   analytics_database = local.applications[each.key].analytics_database
   secrets            = local.applications[each.key].secrets
-  helm_values        = local.application_helm_values[each.key]
+  values             = local.application_values_source
+  helm_values        = lookup(local.application_helm_values, each.key, {})
 }
