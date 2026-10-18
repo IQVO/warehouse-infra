@@ -22,6 +22,8 @@ CHARTS := \
 	../product-master/charts/product-master \
 	../inbound-receiving/charts/inbound-receiving \
 	../slotting-optimization/charts/slotting-optimization \
+	../pick-face-replenishment/charts/pick-face-replenishment \
+	../task-interleaving/charts/task-interleaving \
 	../network-inventory-planning/charts/network-inventory-planning \
 	../warehouse-ops-agent/charts/warehouse-ops-agent \
 	../warehouse-console/charts/warehouse-console \
@@ -92,6 +94,8 @@ helm-lint:
 			helm lint "$$c" --set database.url=postgres://u:p@example.invalid:5432/db || exit 1; \
 		elif [ "$$(basename $$c)" = "warehouse-planning" ] || [ "$$(basename $$c)" = "network-inventory-planning" ] || [ "$$(basename $$c)" = "product-master" ] || [ "$$(basename $$c)" = "inbound-receiving" ] || [ "$$(basename $$c)" = "slotting-optimization" ]; then \
 			helm lint "$$c" --set database.url=postgres://u@example.invalid:5432/db || exit 1; \
+		elif [ "$$(basename $$c)" = "pick-face-replenishment" ] || [ "$$(basename $$c)" = "task-interleaving" ]; then \
+			helm lint "$$c" --set database.url=postgres://u@example.invalid:5432/db --set kafka.brokers=kafka.example.invalid:9092 || exit 1; \
 		else \
 			helm lint "$$c" || exit 1; \
 		fi; \
