@@ -4,7 +4,10 @@
 
 Accepted (2026-10-18). Implements [ADR 0002](0002-application-delivery-boundary.md)
 D6 and [ADR 0003](0003-per-application-terraform-state.md) (phase 6). Step 1
-(the registry) is merged with this ADR; steps 2 to 4 are open.
+(the registry) is merged with this ADR. Step 2's code (`terraform/20-apps`,
+the platform's `terraform_remote_state` output, `scripts/migrate-app-state.sh`)
+is merged, but the migration itself has not been run for any application —
+see the README's "ADR 0007 status" note. Steps 3 and 4 are open.
 
 ## Context
 

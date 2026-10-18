@@ -12,5 +12,11 @@ terraform/*/terraform.tfstate*
 terraform/*/terraform.tfstate.d/
 terraform/*/*.tfvars
 terraform/*/kubeconfig
+# terraform/20-apps (ADR 0007 step 2) is its own Terraform root, with its
+# own working-state directory and lock file -- same reasons as the root's
+# patterns above, one directory level deeper.
+terraform/*/.terraform/
+terraform/*/.terraform.lock.hcl
 !terraform/terraform.tfvars.example
 .claude/settings.local.json
+__pycache__/
