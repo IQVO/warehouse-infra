@@ -5,7 +5,7 @@
 # *.tf file.
 
 # Real Anthropic API key for warehouse-ops-agent's ADR-0004 model-backed
-# Reasoner (wired to LLM_MODE=shadow — see terraform/ops-agent.tf). Leaving
+# Reasoner (wired to LLM_MODE=shadow — see terraform/20-apps/main.tf). Leaving
 # this empty is fine for `terraform validate`/`plan`; the ops-agent pod will
 # CrashLoopBackOff at startup if you `apply` with LLM_MODE=shadow and no key
 # (ADR-0004 fails loudly by design — see cmd/agent/reasoner.go in

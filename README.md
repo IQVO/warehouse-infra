@@ -3,8 +3,8 @@
 A fully local Kubernetes environment for the `warehouse-systems` bounded
 contexts: a **kind** cluster running **PostgreSQL**, **Kafka**, **Istio**
 (sidecar mesh), the observability stack, **Kong** (north-south API gateway) and
-an **Nginx web gateway** (the product UI), all provisioned by a single
-`terraform apply`.
+an **Nginx web gateway** (the product UI), all provisioned by `./scripts/up.sh`:
+three Terraform layers (cluster, platform, one state per application), applied in order.
 
 Nothing here talks to a cloud. There is no cloud load balancer, no registry
 push, no remote state — images are built locally and side-loaded into kind, and
@@ -95,7 +95,7 @@ This section is the port-level map (which host port reaches which Service,
 and which container port that Service targets). For the path-level API
 route table (Kong's `/api/<context>` prefixes) see "Route table" below.
 
-### Host-reachable ports (kind `extraPortMappings`, `main.tf`)
+### Host-reachable ports (kind `extraPortMappings`, `terraform/00-cluster/main.tf`)
 
 | Host URL / port                  | `listen_address` | Container (NodePort) | Backing Service                         | What it is |
 |-----------------------------------|-------------------|-----------------------|------------------------------------------|------------|
@@ -251,7 +251,7 @@ one Deployment answers (its `charts/product-master/tests/test_service_selectors.
 
 ### ArgoCD
 
-Installed by `terraform/argocd.tf` (`helm-values/argocd.yaml`) in its own
+Installed by `terraform/10-platform/argocd.tf` (`helm-values/argocd.yaml`) in its own
 `argocd` namespace. **Deliberately not on any host port** — neither product
 edge (`:80` Nginx, `:8000` Kong) is meant to carry deployment-control-plane
 traffic, and nothing in `main.tf`'s `extraPortMappings` publishes it.
@@ -350,7 +350,7 @@ one-time YAML → process-path-management migration and is superseded by
 contract (image build/load, database secrets, ArgoCD Application) by
 `terraform/modules/application`, its configuration (Kong routes for the API and
 `/reports`, MCP, console remote, analytics) by
-`helm-values/network-inventory-planning.yaml`; `terraform/network-inventory-planning.tf`
+`helm-values/network-inventory-planning.yaml`; `terraform/10-platform/network-inventory-planning.tf`
 keeps its database names. One thing a plain
 `terraform apply` does NOT do on an already-populated cluster:
 
@@ -526,7 +526,7 @@ guessed (see `terraform/variables.tf` for the reasoning behind each pin):
 ### About that PostgreSQL pin
 
 Bitnami moved its versioned public images behind "Bitnami Secure Images" in
-2025. Two consequences, both handled in `terraform/postgres.tf`:
+2025. Two consequences, both handled in `terraform/10-platform/postgres.tf`:
 
 * The **current** chart (18.x) defaults to `bitnami/postgresql:latest` — an
   unpinned rolling tag, which is not reproducible.
@@ -555,10 +555,12 @@ cd warehouse-infra
 ./scripts/up.sh
 ```
 
-That runs `terraform init` + `terraform apply`, which in order:
+That applies the three Terraform layers in order (ADR 0007): `00-cluster`,
+`10-platform`, then `20-apps`, one state per application (ADR 0003). In order:
 
-1. creates the kind cluster (control-plane + worker) with the Kong port
-   mappings,
+1. `00-cluster` creates the kind cluster (control-plane + worker) with the
+   Kong port mappings; `10-platform` does everything down to step 4, and
+   `20-apps` the rest,
 2. installs **PostgreSQL** (empty: each application's role and database are
    created later by a Job, see "Databases"),
 3. installs **istio-base**, then **istiod** (base first — it owns the CRDs
@@ -571,9 +573,23 @@ That runs `terraform init` + `terraform apply`, which in order:
 Equivalent by hand:
 
 ```bash
-cd warehouse-infra/terraform
-terraform init
-terraform apply -auto-approve
+cd warehouse-infra
+scripts/tf.sh cluster  apply -auto-approve
+scripts/tf.sh platform apply -auto-approve
+scripts/tf.sh apps     apply -auto-approve      # or: scripts/tf.sh app <name> apply
+```
+
+`scripts/tf.sh` (also `make cluster-plan`, `platform-plan`, `app-plan APP=<name>`,
+`apps-plan` and the `-apply` twins) passes `terraform/terraform.tfvars` to every
+layer, chooses an application's workspace with `TF_WORKSPACE` for that one
+command, rejects a name that is not in `terraform/apps.yaml`, and waits up to
+five minutes for a state lock. Each layer reads the one before it through
+`terraform_remote_state` on the local backend, so apply them in this order the
+first time. Changing one application touches only that application's state:
+
+```bash
+make app-plan  APP=product-master
+make app-apply APP=product-master
 ```
 
 Then verify end to end:
@@ -586,7 +602,8 @@ To stand up only the platform, without building or deploying the four
 services:
 
 ```bash
-terraform apply -auto-approve -var deploy_services=false
+scripts/tf.sh cluster apply -auto-approve
+scripts/tf.sh platform apply -auto-approve
 ```
 
 ### If port 80 is taken
@@ -595,10 +612,12 @@ terraform apply -auto-approve -var deploy_services=false
 to `443`. If something on your machine already owns them, kind cluster creation
 fails with a bind error. Override:
 
-```bash
-terraform apply -auto-approve \
-  -var kong_proxy_http_host_port=8000 \
-  -var kong_proxy_https_host_port=8443
+Put them in `terraform/terraform.tfvars` (every layer reads that file) before
+the first `./scripts/up.sh`:
+
+```hcl
+kong_proxy_http_host_port  = 8000
+kong_proxy_https_host_port = 8443
 ```
 
 ---
@@ -650,7 +669,7 @@ The gateway strips `/mfes/<context>` before proxying, so each remote's own nginx
 sees root-relative paths. Each remote is built with Vite base
 `/mfes/<context>/`, which keeps its chunks inside its own namespace.
 
-`terraform output routes`, `frontend_routes` and `product_endpoints` print the
+`scripts/tf.sh platform output routes`, `frontend_routes` and `product_endpoints` print the
 live tables for the ports you actually applied.
 
 ---
@@ -715,7 +734,7 @@ cluster (`LLM_MODE=shadow` — it calls the real Anthropic API alongside the
 deterministic policy, logs agreement, but never acts on the model's output
 alone). Terraform creates the Kubernetes Secret
 (`warehouse-ops-agent-anthropic`, from the ops agent's `secrets` entry in
-`terraform/applications.tf`) but
+`terraform/20-apps/main.tf`) but
 **never generates or hardcodes the API key itself** — `var.anthropic_api_key`
 defaults to `""`.
 
@@ -723,7 +742,7 @@ Supply the real value one of two ways, **never** by editing a tracked file:
 
 ```bash
 export TF_VAR_anthropic_api_key="sk-ant-..."
-terraform apply
+make app-apply APP=warehouse-ops-agent
 ```
 
 or copy `terraform/terraform.tfvars.example` to a gitignored
@@ -736,7 +755,7 @@ real `apply` with `LLM_MODE=shadow`: warehouse-ops-agent's own composition
 root (`cmd/agent/reasoner.go`, ADR-0004) fails loudly at pod startup —
 `LLM_MODE=shadow requires ANTHROPIC_API_KEY` — rather than silently running
 without the model it was told to use. A `check` block in
-`terraform/ops-agent.tf` surfaces the same condition as a `terraform
+`terraform/20-apps/main.tf` surfaces the same condition as a `terraform
 plan`/`apply` warning so you don't have to wait for the crash loop to learn
 it.
 
@@ -751,7 +770,7 @@ only the environment.** There is exactly one copy of every manifest.
 > decision: application configuration lives in value files that ArgoCD reads
 > from this repo (D2), and every application is registered through one
 > `application` module ([ADR 0004](docs/adr/0004-one-application-registry.md),
-> `terraform/applications.tf`). Both are done; the split below is what the code
+> `terraform/20-apps/main.tf`). Both are done; the split below is what the code
 > does.
 
 All four services already ship a complete, well-formed Helm chart at
@@ -825,7 +844,7 @@ was staged for commit.
 ## Deploying a new bounded context (GitOps via ArgoCD)
 
 **ArgoCD is now the sole owner of every chart's Helm release lifecycle** —
-every application in `terraform/applications.tf`'s registry (the
+every application in `terraform/20-apps/main.tf`'s registry (the
 `kind: service` contexts, network-inventory-planning, network-fulfillment,
 `warehouse-ops-agent`, `warehouse-console` and the EventCatalog: 17
 Applications). Terraform still bootstraps the
@@ -840,23 +859,19 @@ Application renders its chart with the value files in `helm-values/`
 `terraform/apps.yaml` (its header documents the fields), and add
 `helm-values/<app>.yaml` plus `helm-values/kind-resources/<app>.yaml`
 (the plan fails while either is missing). Its role and database come with it
-(ADR 0005). `terraform/applications.tf` turns every entry into one instance of
-`terraform/modules/application`
+(ADR 0005). `terraform/20-apps/main.tf` turns the entry named after the selected
+workspace into one instance of `terraform/modules/application`
 ([ADR 0004](docs/adr/0004-one-application-registry.md), the registry file:
-[ADR 0007](docs/adr/0007-state-split-in-four-steps.md)). A `terraform apply`
-after adding an entry:
+[ADR 0007](docs/adr/0007-state-split-in-four-steps.md)). `make app-apply
+APP=<name>` after adding an entry:
 
-> **ADR 0007 status**: step 1 (the registry, `terraform/apps.yaml`) is
-> merged and live. Step 2 (`terraform/20-apps`, one Terraform CLI workspace
-> per application, reading the platform through `terraform_remote_state`)
-> exists in the repository but **no application has been migrated to it
-> yet** — `terraform/applications.tf` below is still the only place any
-> application's resources actually live. Migrating one application:
-> `scripts/migrate-app-state.sh <name> --go-ahead` (dry-run without the
-> flag), one at a time, only after this repo's `terraform/` has been applied
-> at least once since `terraform/20-apps` was merged (it reads `terraform/`'s
-> new `platform` output). Steps 3 (splitting `00-cluster`/`10-platform` out
-> of this root) and 4 (cleanup) are still open.
+> **ADR 0007 status**: steps 1 to 3 are merged: the registry
+> (`terraform/apps.yaml`), `terraform/20-apps` (one workspace per application)
+> and the layer split (`00-cluster`, `10-platform`). The live state is moved
+> into the layers by `scripts/migrate-state-to-layers.sh`, one run for all of
+> them ([ADR 0008](docs/adr/0008-one-migration-for-the-layers.md)); until
+> the maintainer has run it, the layers have no state and nothing applies from
+> a checkout of this layout. Step 4 (cleanup) is open.
 
 1. Builds and side-loads the new service's image (the module's
    `null_resource.build_and_load`).
@@ -922,7 +937,7 @@ kind-specific need, not a general shortcut: kind's kubelet serving certs
 are self-signed per-node at cluster boot and aren't trusted by
 metrics-server by default, so without the flag every node scrape fails
 with `x509: certificate signed by unknown authority`. See
-`terraform/metrics-server.tf`'s header comment for the full rationale.
+`terraform/10-platform/metrics-server.tf`'s header comment for the full rationale.
 Verify it after an apply with:
 
 ```bash
@@ -1057,18 +1072,17 @@ cd warehouse-infra
 ./scripts/down.sh
 ```
 
-That runs `terraform destroy`, which removes the Helm releases and then deletes
-the kind cluster (which is what actually reclaims the Docker containers and
-their disk). If `destroy` fails part-way — typically a Helm release that can't
-be reached because the API server is already gone — the script falls back to
-deleting the cluster directly.
+That deletes the kind cluster, which removes everything inside it and is what
+actually reclaims the Docker containers and their disk, and then drops the three
+layers' Terraform state (with the cluster gone none of them describes anything).
+`terraform destroy` layer by layer is not used: it leaves about 60 phantom
+resources and takes far longer than the cluster delete it ends with.
 
 By hand:
 
 ```bash
-cd warehouse-infra/terraform
-terraform destroy -auto-approve
-kind delete cluster --name warehouse   # only if destroy left it behind
+kind delete cluster --name warehouse
+rm -f terraform/{00-cluster,10-platform}/terraform.tfstate* && rm -rf terraform/20-apps/terraform.tfstate.d
 ```
 
 The locally built `warehouse/*:local-<hash12>` images stay in your Docker
@@ -1100,32 +1114,30 @@ warehouse-infra/
 │   ├── kind-resources/          # generated per-Application CPU-request overlays (kind only)
 │   └── fulfillment-execution.yaml
 ├── scripts/
-│   ├── up.sh                    # single entrypoint: init + apply + next steps
-│   ├── down.sh                  # destroy + fallback cluster delete
+│   ├── up.sh                    # single entrypoint: the three layers in order + next steps
+│   ├── tf.sh                    # terraform in one layer or one application's workspace
+│   ├── migrate-state-to-layers.sh  # the recorded state mv of ADR 0007 step 2/3
+│   ├── down.sh                  # delete the cluster, drop the layers' state
 │   ├── build-and-load.sh        # docker build + kind load, called by Terraform
 │   ├── smoke-test.sh            # curls all four /healthz through Kong
 │   └── seed-transfer-capability.py  # post-deploy: site transfer capability from role defaults
 └── terraform/
-    ├── versions.tf              # Terraform + provider pins
-    ├── providers.tf             # kind / kubernetes / helm wiring
-    ├── variables.tf             # every knob, with the reasoning for each pin
-    ├── apps.yaml                # the application registry (ADR 0007)
-    ├── locals.tf                # derivations from it, and local.platform (_platform.yaml)
-    ├── main.tf                  # kind cluster + namespaces
-    ├── postgres.tf              # PostgreSQL release + 4 databases
-    ├── istio.tf                 # istio-base -> istiod
-    ├── kong.tf                  # Kong Gateway + Ingress Controller
-    ├── argocd.tf                # ArgoCD release (helm-values/argocd.yaml)
-    ├── applications.tf          # the application registry: one modules/application instance each (ADR 0004)
-    ├── moved-applications.tf    # state moves onto the module (ADR 0002 D3)
-    ├── outputs.tf                # includes `platform`, what terraform/20-apps reads (ADR 0007 step 2)
-    ├── 20-apps/                  # ADR 0007 step 2: one Terraform workspace per application (not yet migrated into)
-    │   ├── providers.tf          # reads cluster credentials via terraform_remote_state, not a resource
-    │   └── main.tf               # one module.application instance, chosen by terraform.workspace
+    ├── apps.yaml                # the application registry (ADR 0007), read by every layer
+    ├── terraform.tfvars         # gitignored; one file, read by every layer
+    ├── 00-cluster/              # the kind cluster; publishes its connection (own state)
+    ├── 10-platform/             # Postgres, PgBouncer, Kafka, Istio, Kong, ArgoCD, observability, Gateway API (own state)
+    │   ├── locals.tf            # local.platform (_platform.yaml), the registry (apps.yaml) and what derives from it
+    │   ├── postgres.tf, pgbouncer.tf, kafka.tf, istio.tf, kong.tf, argocd.tf, ...
+    │   └── outputs.tf           # incl. `platform`, the contract 20-apps reads (ADR 0007)
+    ├── 20-apps/                 # one configuration, one workspace and state per application (ADR 0003)
+    │   ├── main.tf              # the selected workspace's modules/application instance (ADR 0003)
+    │   └── terraform.tfstate.d/<name>/   # gitignored
     ├── modules/
-    │   ├── application/         # one application's platform contract: DB passwords, Secrets, images, Application
+    │   ├── application/         # one application's platform contract: Secrets, images, Application (ADR 0004)
     │   └── database/            # one role and database, created by a Job (ADR 0005)
-    └── templates/               # pgbouncer.ini, userlist, pgbouncer-auth.sql
+    ├── templates/               # pgbouncer.ini, userlist, pgbouncer-auth.sql, web-gateway.conf
+    ├── dashboards/, alerting/   # generated Grafana dashboards and Prometheus rules
+    └── gateway-api/             # the vendored Gateway API CRD bundle (ADR 0006)
 ```
 
 ---
@@ -1156,6 +1168,17 @@ provider node to the cluster resource, so they are configured only after the
 cluster exists — and a single `terraform apply` works from clean state.
 Nothing here is machine-specific.
 
+**Since ADR 0007 the cluster is its own layer, so the providers read
+`terraform_remote_state` instead.** `00-cluster` publishes the same four
+attributes as a sensitive `connection` output; `10-platform` and `20-apps`
+configure `kubernetes`, `helm` and `kubectl` from it. A provider no longer
+depends on a resource of its own configuration, which is what the Kubernetes
+provider's documentation asks for, and a missing cluster state is a plan error
+that names the layer to apply first. The kubeconfig file is written to
+`terraform/00-cluster/kubeconfig`; its path is the relative `./kubeconfig` on
+purpose (it forces a new cluster when it changes, and every existing state holds
+that value).
+
 `null_resource.kubeconfig` still exports credentials, but purely for the
 human's benefit: setting `kubeconfig_path` on `kind_cluster` makes the provider
 write to that file *instead of* your default kubeconfig, which would leave
@@ -1168,7 +1191,7 @@ subchart releases wired together by `gatewayDiscovery` — more moving parts and
 more to go wrong, for no benefit at this scale. Routing started as plain
 `Ingress` objects; it now uses Gateway API `HTTPRoute`s that each chart
 renders against the shared `warehouse-gateway` Gateway
-(`terraform/gateway-api.tf`, `deploy_gateway_api`, on by default). The Gateway API
+(`terraform/10-platform/gateway-api.tf`, `deploy_gateway_api`, on by default). The Gateway API
 CRDs, the `GatewayClass` and the `Gateway` are declarative `kubectl_manifest`
 resources, so Terraform detects and repairs drift
 ([ADR 0006](docs/adr/0006-declarative-gateway-api.md)); the CRD bundle is

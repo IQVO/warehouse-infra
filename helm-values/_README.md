@@ -36,4 +36,4 @@ Rules:
   sync edge needs its `MODE` and `BASE_URL` in the same change. The rollback
   switches are listed in `../docs/rollback-switches.md`.
 - `argocd.yaml` is different: the values of Terraform's own ArgoCD
-  `helm_release` (`terraform/argocd.tf`), not an application's.
+  `helm_release` (`terraform/10-platform/argocd.tf`), not an application's.

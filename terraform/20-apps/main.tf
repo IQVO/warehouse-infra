@@ -103,13 +103,6 @@ locals {
   }
 }
 
-check "workspace_is_a_registered_application" {
-  assert {
-    condition     = local.app_name != "default" && contains(keys(local.registry), local.app_name)
-    error_message = "terraform.workspace is \"${local.app_name}\". Select a registered application with TF_WORKSPACE=<name> (see terraform/apps.yaml for the list) -- never the \"default\" workspace, and never `terraform workspace select` (ADR 0003 decision 2)."
-  }
-}
-
 module "application" {
   source = "../modules/application"
 

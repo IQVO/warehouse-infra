@@ -41,7 +41,6 @@
 resource "helm_release" "metrics_server" {
   count = var.deploy_metrics_server ? 1 : 0
 
-  depends_on = [null_resource.kubeconfig]
 
   name       = "metrics-server"
   repository = "https://kubernetes-sigs.github.io/metrics-server/"

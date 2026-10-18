@@ -12,7 +12,7 @@
 #   kind          service | other (required, and the first field of an entry:
 #                 scripts/test_gen_context_dashboards.py reads it by position). `service` entries get the
 #                 /api/<name> route, a row in the `services` and
-#                 `database_urls` outputs, and take part in analytics_services.
+#                 `database_url` outputs, and take part in analytics_services.
 #   repo_owner    GitHub owner ArgoCD clones the chart from. Default
 #                 claudioed (the older repos resolve through GitHub's
 #                 2026-10-03 transfer redirect); repos created directly under

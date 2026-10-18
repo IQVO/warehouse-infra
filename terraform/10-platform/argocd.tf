@@ -20,7 +20,6 @@ resource "kubernetes_namespace" "argocd" {
     name = "argocd"
   }
 
-  depends_on = [kind_cluster.warehouse]
 }
 
 resource "helm_release" "argocd" {
@@ -33,7 +32,7 @@ resource "helm_release" "argocd" {
   timeout = 600
   wait    = true
 
-  values = [file("${path.module}/../helm-values/argocd.yaml")]
+  values = [file("${path.module}/../../helm-values/argocd.yaml")]
 
   depends_on = [kubernetes_namespace.argocd]
 }

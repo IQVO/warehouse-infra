@@ -8,7 +8,7 @@
 # Context in one paragraph: postgres.tf runs ONE Postgres release with the
 # Bitnami chart's unmodified `max_connections=100` default, shared by every
 # one of this fleet's 10 backend services (each with its own logical
-# database/role on that SAME server, see locals.tf's `local.services` +
+# database/role on that SAME server, see locals.tf's `module.registry.services` +
 # network-fulfillment.tf). order-management's ADR-0026 (Phase 3 scalability)
 # found that ONE service alone, at its own HPA ceiling, could reach ~80/100
 # connections -- rolling the same pgxpool.MaxConns pattern to the other 9
@@ -48,7 +48,7 @@ locals {
 
   # Conservative per-database REAL Postgres connection ceiling. Aggregate
   # worst case = (databases pooled below) * 12: 14 databases as of
-  # 2026-10-17 (the 12 in local.services plus network-fulfillment and
+  # 2026-10-17 (the 12 in module.registry.services plus network-fulfillment and
   # network-inventory-planning) * 12 = 168, which EXCEEDS the Postgres
   # chart's stock max_connections=100 -- so postgres.tf now raises
   # max_connections to 250, restoring real headroom above the pooled
@@ -70,7 +70,7 @@ locals {
   pgbouncer_auth_user = "pgbouncer_auth"
 
   pgbouncer_config = templatefile(
-    "${path.module}/templates/pgbouncer.ini.tftpl",
+    "${path.module}/../templates/pgbouncer.ini.tftpl",
     {
       postgres_host  = local.postgres_host
       postgres_port  = local.postgres_port
@@ -82,7 +82,7 @@ locals {
   )
 
   pgbouncer_userlist = templatefile(
-    "${path.module}/templates/pgbouncer-userlist.txt.tftpl",
+    "${path.module}/../templates/pgbouncer-userlist.txt.tftpl",
     {
       admin_user     = local.pgbouncer_admin_user
       admin_password = var.postgres_admin_password
@@ -103,12 +103,12 @@ resource "random_password" "pgbouncer_auth" {
 # mechanism the applications use (modules/database), run once per cluster and
 # again whenever the password or the SQL changes.
 module "pgbouncer_auth" {
-  source = "./modules/database"
+  source = "../modules/database"
 
   name      = "pgbouncer-auth"
   role      = local.pgbouncer_auth_user
   password  = random_password.pgbouncer_auth.result
-  extra_sql = file("${path.module}/templates/pgbouncer-auth.sql")
+  extra_sql = file("${path.module}/../templates/pgbouncer-auth.sql")
   postgres  = local.postgres
 }
 
@@ -172,7 +172,7 @@ resource "kubernetes_deployment" "pgbouncer" {
         }
         annotations = {
           # Roll the pod whenever the rendered config or userlist changes
-          # (a new service added to local.services, a rotated password) --
+          # (a new service added to module.registry.services, a rotated password) --
           # the Secret is mounted as a real volume (not subPath), so
           # kubelet DOES propagate a content change to the running
           # container, but PgBouncer itself does not re-read pgbouncer.ini
@@ -377,6 +377,6 @@ resource "kubernetes_service" "pgbouncer" {
 }
 
 output "pgbouncer_host" {
-  description = "In-cluster DNS name:port of PgBouncer. Every OLTP DATABASE_URL Secret (local.database_urls) points here instead of directly at Postgres; analytics DSNs stay direct (see the design doc)."
+  description = "In-cluster DNS name:port of PgBouncer. Every OLTP DATABASE_URL Secret (the module's <name>-db, see each application's database_url output in 20-apps) points here instead of directly at Postgres; analytics DSNs stay direct (see the design doc)."
   value       = "${local.pgbouncer_host}:${local.pgbouncer_port}"
 }

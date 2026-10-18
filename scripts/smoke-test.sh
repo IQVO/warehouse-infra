@@ -4,14 +4,14 @@
 set -uo pipefail
 
 INFRA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "${INFRA_DIR}/terraform" || exit 1
+TF="${INFRA_DIR}/scripts/tf.sh"
 
-BASE="$(terraform output -raw kong_proxy_url)"
-NAMESPACE="$(terraform output -raw apps_namespace 2>/dev/null || echo warehouse-systems)"
+BASE="$("${TF}" platform output -raw kong_proxy_url)"
+NAMESPACE="$("${TF}" platform output -raw apps_namespace 2>/dev/null || echo warehouse-systems)"
 
 # Use the kubeconfig Terraform owns rather than whatever context happens to be
 # current in the caller's default kubeconfig. Self-contained and always right.
-export KUBECONFIG="${INFRA_DIR}/terraform/kubeconfig"
+export KUBECONFIG="${INFRA_DIR}/terraform/00-cluster/kubeconfig"
 
 fail=0
 
@@ -44,7 +44,7 @@ done
 # ports are used on purpose so this never collides with a port-forward the
 # developer already has open on 16686/9090/3000.
 # ---------------------------------------------------------------------------
-OBS_NS="$(terraform output -raw observability_namespace 2>/dev/null || true)"
+OBS_NS="$("${TF}" platform output -raw observability_namespace 2>/dev/null || true)"
 
 if [[ -z "${OBS_NS}" ]]; then
   echo "=== observability: not deployed (deploy_observability=false), skipping ==="

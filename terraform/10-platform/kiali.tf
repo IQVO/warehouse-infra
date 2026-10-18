@@ -65,13 +65,13 @@ resource "helm_release" "kiali" {
         # through its own NodePort (exposure.tf), so this does not need to be
         # localhost-reachable.
         internal_url = "http://${local.observability_dns.grafana}:${local.grafana_port}"
-        external_url = "http://localhost:${var.grafana_host_port}"
+        external_url = "http://localhost:${local.cluster.ports.grafana_host_port}"
       }
       tracing = {
         enabled      = true
         provider     = "jaeger"
         internal_url = "http://${local.observability_dns.jaeger}:${local.jaeger_query_port}"
-        external_url = "http://localhost:${var.jaeger_host_port}"
+        external_url = "http://localhost:${local.cluster.ports.jaeger_host_port}"
         use_grpc     = false
       }
     }

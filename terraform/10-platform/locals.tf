@@ -24,7 +24,7 @@ locals {
   # there and preconditions on the platform resources they describe
   # (gateway-api.tf, kafka.tf, observability.tf, frontends.tf) fail the plan
   # when a variable would install the platform somewhere else.
-  platform = yamldecode(file("${path.module}/../helm-values/_platform.yaml"))
+  platform = yamldecode(file("${path.module}/../../helm-values/_platform.yaml"))
 
   postgres_release_name = "postgres"
   postgres_host         = "${local.postgres_release_name}-postgresql.${var.data_namespace}.svc.cluster.local"
@@ -34,7 +34,7 @@ locals {
   # Everything below that used to be a hand-maintained map per concern
   # (services, analytics_services, argocd_repo_owner, the network-* names) is
   # derived from it (ADR 0007).
-  registry = yamldecode(file("${path.module}/apps.yaml")).applications
+  registry = yamldecode(file("${path.module}/../apps.yaml")).applications
 
   # The applications that share the /api/<name> route shape: each has a role
   # and a database named after it (dashes become underscores).
@@ -45,66 +45,6 @@ locals {
       port = 8080
       path = "${var.api_path_prefix}/${name}"
     } if a.kind == "service"
-  }
-
-  # sslmode=disable: the Postgres release runs without TLS inside the cluster.
-  # Traffic between service pods and Postgres (or, since pgbouncer.tf, PgBouncer)
-  # is not meshed either (both live in an un-injected namespace), which is fine
-  # for a laptop.
-  #
-  # This map holds the same connection string modules/application writes
-  # into each service's <name>-db Secret (DATABASE_URL), with the same
-  # generated password the provisioning Job set on the role. It is exposed only
-  # through the `database_urls` output, which is marked sensitive.
-  #
-  # Routed through PgBouncer (pgbouncer.tf), not directly at Postgres, since
-  # the PgBouncer connection-pooling rollout (see
-  # docs/scalability/pgbouncer-connection-pooling.md): the DSN shape, dbname,
-  # user and password are all UNCHANGED from before that rollout -- only the
-  # host:port moved from Postgres's own Service to PgBouncer's, which is
-  # exactly the point (transparent to every service's pgxpool, same DSN
-  # shape, no service-side code change). Analytics DSNs
-  # (analytics_database_urls below) are deliberately NOT routed through
-  # PgBouncer -- see the design doc's "why analytics stays direct" section.
-  database_urls = {
-    for name, svc in local.services :
-    name => "postgres://${svc.user}:${module.application[name].db_password}@${local.pgbouncer_host}:${local.pgbouncer_port}/${svc.db}?sslmode=disable"
-  }
-
-  # ---------------------------------------------------------------------
-  # Analytics data-mesh (ADR-0010 in each service repo): the "report part"
-  # (cmd/<svc>-projector, cmd/<svc>-reports) of every service whose registry
-  # entry says `analytics`. Baseline per docs/analytics/governance-charter.md:
-  # a dedicated `<svc>_analytics` database in the SAME Postgres release, owned
-  # by a single generated role, whose DSN modules/application writes into the
-  # <name>-analytics-db Secret (ANALYTICS_DATABASE_URL for the projector,
-  # ANALYTICS_READER_DATABASE_URL for the reports reader). The promotion path
-  # to a distinct read-only reports role or a separate instance is a later,
-  # additive change (see the governance charter).
-  #
-  # Only `service` entries: network-fulfillment and network-inventory-planning
-  # have their analytics database too, but outside this map and the
-  # `analytics_database_urls` output (their DSN lives in their Secret).
-  # ---------------------------------------------------------------------
-  analytics_services = toset([
-    for name, a in local.registry : name if a.kind == "service" && try(a.analytics, false) != false
-  ])
-
-  analytics_db_info = {
-    for name in local.analytics_services :
-    name => {
-      db   = "${local.services[name].db}_analytics"
-      user = "${local.services[name].user}_analytics"
-    }
-  }
-
-  # The same DSN modules/application writes into each <name>-analytics-db
-  # Secret (ANALYTICS_DATABASE_URL and ANALYTICS_READER_DATABASE_URL), kept
-  # only for the sensitive `analytics_database_urls` output. Charts never
-  # receive it as a value: they read the Secret (existingSecret).
-  analytics_database_urls = {
-    for name in local.analytics_services :
-    name => "postgres://${local.analytics_db_info[name].user}:${module.application[name].analytics_db_password}@${local.postgres_host}:${local.postgres_port}/${local.analytics_db_info[name].db}?sslmode=disable"
   }
 }
 

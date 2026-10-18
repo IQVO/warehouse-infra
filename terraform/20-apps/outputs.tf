@@ -29,3 +29,22 @@ output "analytics_database_url" {
   )
   sensitive = true
 }
+
+# A workspace that is not an application of terraform/apps.yaml (the default
+# one, a typo) would plan to create an application of that name: an ArgoCD
+# Application, a role and a database. A `check` block only warns, so this is a
+# precondition, which stops the plan. scripts/tf.sh rejects the name earlier.
+output "workspace" {
+  description = "The application this state belongs to (the Terraform workspace)."
+  value       = local.app_name
+
+  precondition {
+    # The conditional's predicate is a value only the platform state knows, so
+    # `terraform validate` (no state, always the default workspace) leaves the
+    # result unknown and skips this; a plan reads the state and evaluates it.
+    condition = local.platform.apps_namespace == "" ? true : (
+      local.app_name != "default" && contains(keys(local.registry), local.app_name)
+    )
+    error_message = "terraform.workspace is \"${local.app_name}\". Select a registered application with TF_WORKSPACE=<name> (see terraform/apps.yaml for the list), or use scripts/tf.sh / make app-plan APP=<name> -- never the \"default\" workspace, and never `terraform workspace select` (ADR 0003 decision 2)."
+  }
+}
