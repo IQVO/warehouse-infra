@@ -41,53 +41,53 @@
 # render, and CI green) so every service could migrate the same way
 # fulfillment-execution did, without a fleet-wide flag day.
 #
-# Why not the `kubernetes_manifest` provider resource for the CRDs
-# themselves: it needs the CRD's OpenAPI schema to validate the resource at
-# PLAN time, which does not exist yet on a `terraform apply` that installs
-# the CRD and a custom resource using it in the same run — a real, known
-# chicken/egg limitation of that provider. A `null_resource` + `kubectl
-# apply` avoids it and matches this module's own existing pattern for
-# cluster-side actions Terraform's typed providers don't cleanly cover
-# (see main.tf's kubeconfig export).
+# Declarative since ADR 0002 D5 (ADR 0006). Every object below is a
+# kubectl_manifest, so Terraform reconciles it: a changed or deleted object is
+# a plan diff, where the `kubectl apply` in a null_resource ran once and never
+# looked again. That is how the KongClusterPlugins and the reports routes
+# silently disappeared from the cluster before 2026-10-13. kubectl_manifest, not
+# the `kubernetes_manifest` resource, because the latter needs the CRD's
+# OpenAPI schema at PLAN time, which does not exist yet on an apply that
+# installs a CRD and a custom resource of it in the same run.
+#
+# The CRD bundle is vendored under terraform/gateway-api/ (one file per
+# release; scripts/vendor-gateway-api.sh adds one), so a plan needs no network
+# and an upgrade is a reviewable diff.
 # ---------------------------------------------------------------------------
 
-resource "null_resource" "gateway_api_crds" {
+locals {
+  gateway_api_bundle = "${path.module}/gateway-api/standard-install-${var.gateway_api_version}.yaml"
+}
+
+data "kubectl_file_documents" "gateway_api_crds" {
   count = var.deploy_gateway_api ? 1 : 0
 
-  depends_on = [null_resource.kubeconfig]
-
-  triggers = {
-    version = var.gateway_api_version
-    # Re-run if the cluster gets recreated, since the CRDs live IN the
-    # cluster and do not survive a kind_cluster replacement.
-    cluster_id  = kind_cluster.warehouse.id
-    kubeconfig  = local.kubeconfig_path
-    api_version = var.gateway_api_version
+  lifecycle {
+    precondition {
+      condition     = fileexists(local.gateway_api_bundle)
+      error_message = "No vendored Gateway API bundle for ${var.gateway_api_version}. Run scripts/vendor-gateway-api.sh ${var.gateway_api_version} and commit the file under terraform/gateway-api/."
+    }
   }
 
-  provisioner "local-exec" {
-    command = <<-EOT
-      kubectl --kubeconfig '${local.kubeconfig_path}' apply -f \
-        https://github.com/kubernetes-sigs/gateway-api/releases/download/${var.gateway_api_version}/standard-install.yaml
-    EOT
-  }
+  content = try(file(local.gateway_api_bundle), "")
+}
 
-  # local-exec has no built-in destroy counterpart, so a plain count=0 (or
-  # `terraform destroy`) would otherwise leave these CRDs -- and therefore
-  # every GatewayClass/Gateway/HTTPRoute instance depending on them --
-  # ORPHANED in the cluster with no Terraform state tracking them at all.
-  # Verified this the hard way: after flipping deploy_gateway_api to false,
-  # `terraform apply` reported the resources destroyed while `kubectl get
-  # gateway,httproute,gatewayclass` still showed all three, 20+ minutes
-  # old, completely untracked. `when = destroy` + `self.triggers` (the only
-  # values available to a destroy-time provisioner) fixes it for the
-  # ordinary count-1-to-0 case; a bare `terraform destroy` still relies on
-  # down.sh's kind-cluster-deletion safety net, which removes everything
-  # at once regardless of provisioner ordering.
-  provisioner "local-exec" {
-    when    = destroy
-    command = "kubectl --kubeconfig '${self.triggers.kubeconfig}' delete -f https://github.com/kubernetes-sigs/gateway-api/releases/download/${self.triggers.api_version}/standard-install.yaml --ignore-not-found=true || true"
-  }
+# The standard-channel bundle: the CRDs, plus the upstream safe-upgrades
+# ValidatingAdmissionPolicy and its binding. One resource per document, keyed
+# by the object's API path.
+#
+# Server-side apply with forced conflicts: the HTTPRoute CRD alone is about
+# 250 KB, at the edge of the annotation `kubectl apply` would add, and the
+# first apply adopts objects that `kubectl apply` created. The provider's
+# apply_retry_count (providers.tf) covers the moment between a CRD being
+# created and the API server serving it, when the GatewayClass below would
+# otherwise fail with "no matches for kind".
+resource "kubectl_manifest" "gateway_api_crds" {
+  for_each = var.deploy_gateway_api ? data.kubectl_file_documents.gateway_api_crds[0].manifests : {}
+
+  yaml_body         = each.value
+  server_side_apply = true
+  force_conflicts   = true
 }
 
 # The GatewayClass: a cluster-scoped "which controller implements this"
@@ -114,47 +114,34 @@ resource "null_resource" "gateway_api_crds" {
 # and will be processed" -- verified live, along with a real end-to-end
 # curl through a resulting HTTPRoute returning 200 on a path that only
 # exists via that route (not the pre-existing Ingress).
-resource "null_resource" "gateway_class" {
+resource "kubectl_manifest" "gateway_class" {
   count = var.deploy_gateway_api ? 1 : 0
 
   depends_on = [
-    null_resource.gateway_api_crds,
+    kubectl_manifest.gateway_api_crds,
     helm_release.kong,
   ]
 
-  triggers = {
-    cluster_id = kind_cluster.warehouse.id
-    kubeconfig = local.kubeconfig_path
-  }
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      cat <<'MANIFEST' | kubectl --kubeconfig '${local.kubeconfig_path}' apply -f -
-      apiVersion: gateway.networking.k8s.io/v1
-      kind: GatewayClass
-      metadata:
-        name: kong
-        annotations:
-          konghq.com/gatewayclass-unmanaged: "true"
-      spec:
-        controllerName: konghq.com/kic-gateway-controller
-      MANIFEST
-    EOT
-  }
-
-  # See gateway_api_crds' destroy provisioner comment: local-exec resources
-  # need an explicit destroy-time counterpart or count=0 orphans the object.
-  provisioner "local-exec" {
-    when    = destroy
-    command = "kubectl --kubeconfig '${self.triggers.kubeconfig}' delete gatewayclass kong --ignore-not-found=true || true"
-  }
+  yaml_body = yamlencode({
+    apiVersion = "gateway.networking.k8s.io/v1"
+    kind       = "GatewayClass"
+    metadata = {
+      name = "kong"
+      annotations = {
+        "konghq.com/gatewayclass-unmanaged" = "true"
+      }
+    }
+    spec = {
+      controllerName = "konghq.com/kic-gateway-controller"
+    }
+  })
 }
 
 # The Gateway: the actual listener KIC programs into the running Kong
 # proxy. One shared Gateway for the whole fleet, matching the existing
 # "one Kong release fronts every service" topology — HTTPRoutes attach to
 # this by name via parentRefs, they do not each get their own Gateway.
-resource "null_resource" "gateway" {
+resource "kubectl_manifest" "gateway" {
   count = var.deploy_gateway_api ? 1 : 0
 
   # Every application's routes attach to the parentRefs in
@@ -173,47 +160,40 @@ resource "null_resource" "gateway" {
     }
   }
 
-  depends_on = [null_resource.gateway_class]
+  depends_on = [kubectl_manifest.gateway_class]
 
-  triggers = {
-    cluster_id = kind_cluster.warehouse.id
-    kubeconfig = local.kubeconfig_path
-    name       = local.gateway_name
-    namespace  = var.kong_namespace
-  }
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      cat <<'MANIFEST' | kubectl --kubeconfig '${local.kubeconfig_path}' apply -f -
-      apiVersion: gateway.networking.k8s.io/v1
-      kind: Gateway
-      metadata:
-        name: ${local.gateway_name}
-        namespace: ${var.kong_namespace}
-      spec:
-        gatewayClassName: kong
-        listeners:
-          - name: http
-            protocol: HTTP
-            port: 80
-            allowedRoutes:
-              namespaces:
-                from: All
-      MANIFEST
-    EOT
-  }
-
-  # See gateway_api_crds' destroy provisioner comment.
-  provisioner "local-exec" {
-    when    = destroy
-    command = "kubectl --kubeconfig '${self.triggers.kubeconfig}' delete gateway '${self.triggers.name}' -n '${self.triggers.namespace}' --ignore-not-found=true || true"
-  }
+  yaml_body = yamlencode({
+    apiVersion = "gateway.networking.k8s.io/v1"
+    kind       = "Gateway"
+    metadata = {
+      name      = local.gateway_name
+      namespace = var.kong_namespace
+    }
+    spec = {
+      gatewayClassName = "kong"
+      listeners = [{
+        name     = "http"
+        protocol = "HTTP"
+        port     = 80
+        allowedRoutes = {
+          namespaces = {
+            from = "All"
+          }
+        }
+      }]
+    }
+  })
 }
 
 locals {
   # A platform fact the application charts read from
   # helm-values/_platform.yaml (ADR 0002 D2), so it is read from there.
   gateway_name = local.platform.gatewayApi.parentRefs[0].name
+
+  # Known only once the CRDs, the GatewayClass and the Gateway exist. Every
+  # Application waits on it (modules/application's platform_ready), so ArgoCD
+  # never syncs an HTTPRoute before its CRD: no staged `-target` apply.
+  gateway_ready = var.deploy_gateway_api ? kubectl_manifest.gateway[0].uid : "gateway-api-disabled"
 }
 
 output "gateway_api_installed" {

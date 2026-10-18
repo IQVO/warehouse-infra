@@ -244,6 +244,12 @@ resource "kubectl_manifest" "application" {
   # ArgoCD reads the value files from GitHub, so a missing one would only
   # surface as a failed sync. Fail the plan instead.
   lifecycle {
+    # Reading var.platform_ready is what orders this Application after the
+    # platform objects its chart's manifests need (ADR 0006).
+    precondition {
+      condition     = var.platform_ready == null || var.platform_ready != ""
+      error_message = "${var.name}: platform_ready must not be an empty string."
+    }
     precondition {
       condition = alltrue([
         for f in ["_platform.yaml", "${var.name}.yaml", "kind-resources/${var.name}.yaml"] :
