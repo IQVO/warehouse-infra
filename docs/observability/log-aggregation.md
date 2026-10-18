@@ -4,7 +4,7 @@ Status: **Accepted**
 
 ## Context
 
-`terraform/observability.tf`'s OTel Collector config declares its `logs`
+`terraform/10-platform/observability.tf`'s OTel Collector config declares its `logs`
 pipeline as `null`, with the comment: *"No logs backend in this stack.
 Declaring an empty logs pipeline would fail validation; dropping it is the
 honest thing."* That was accurate: the stack shipped traces (Jaeger) and

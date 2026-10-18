@@ -79,7 +79,7 @@ wes-work-planning `0005_outbox`.
 
 Partition counts to recreate with: **8 partitions, replication factor 1**
 for every business topic (`docs/kafka-partition-scaleup.md`;
-`terraform/kafka.tf` sets the broker default `num.partitions = 8`).
+`terraform/10-platform/kafka.tf` sets the broker default `num.partitions = 8`).
 `__consumer_offsets` is never touched.
 
 ---

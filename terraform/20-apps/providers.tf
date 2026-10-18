@@ -13,7 +13,7 @@ data "terraform_remote_state" "platform" {
   backend = "local"
 
   config = {
-    path = "${path.module}/../terraform.tfstate"
+    path = "${path.module}/../10-platform/terraform.tfstate"
   }
 }
 

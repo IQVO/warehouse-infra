@@ -1,12 +1,12 @@
 # warehouse-ops-agent: complete Helm values (ADR 0002 D2), formerly computed in
-# terraform/ops-agent.tf (see its git history for each block's reasoning).
+# terraform/20-apps/main.tf (see its git history for each block's reasoning).
 
 # The image (repository, tag, pullPolicy) is NOT here: Terraform sets it in the
 # Application's valuesObject from var.ops_agent_image_repository/var.ops_agent_image_tag,
 # which the operator overrides locally in terraform.tfvars.
 # The Anthropic API key is never a value: credentials.existingSecret points at the
 # warehouse-ops-agent-anthropic Secret Terraform creates (modules/application `secrets`).
-# llm.mode "shadow" needs that key; terraform/ops-agent.tf's check block warns when it is
+# llm.mode "shadow" needs that key; terraform/20-apps/main.tf's check block warns when it is
 # empty.
 credentials:
   existingSecret: warehouse-ops-agent-anthropic

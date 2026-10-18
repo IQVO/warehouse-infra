@@ -6,14 +6,11 @@
 terraform {
   required_version = ">= 1.5.0"
 
-  backend "local" {
-    # No `path`: the default `terraform.tfstate` in this directory, workspace
-    # states under `terraform.tfstate.d/<workspace>/terraform.tfstate` (ADR
-    # 0003 decision 1). Both are covered by the repo-wide
-    # `terraform/*/terraform.tfstate*` / `terraform/*/terraform.tfstate.d/`
-    # .gitignore patterns already -- no change needed there.
-  }
-
+  # No `backend` block, on purpose. The default is the local backend, with the
+  # same files (`terraform.tfstate.d/<workspace>/terraform.tfstate`, ADR 0003
+  # decision 1). An explicit `backend "local" {}` makes every `terraform init`
+  # after the first workspace exists ask to migrate those workspaces, which
+  # fails without a terminal and blocks `scripts/tf.sh`.
   required_providers {
     helm = {
       source  = "hashicorp/helm"

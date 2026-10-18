@@ -7,7 +7,7 @@
 TF_DIR := terraform
 
 # The Helm charts this repo deploys: the application registry in
-# terraform/applications.tf (one chart per application). Keep this list in
+# terraform/apps.yaml (one chart per application). Keep this list in
 # sync with it — it is not auto-discovered.
 CHARTS := \
 	../inventory-storage/charts/inventory-storage \
@@ -27,20 +27,17 @@ CHARTS := \
 	../warehouse-console/charts/warehouse-console \
 	../ecosystem/charts/ecosystem
 
-.PHONY: help tf-fmt-check tf-validate app-plan app-apply apps-plan apps-apply helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test check check-all
+.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test check check-all
 
 help:
 	@echo "warehouse-infra — local quality gate (no CI workflow yet; this IS the gate)"
 	@echo ""
 	@echo "  help            Print this list of targets (default target)"
 	@echo "  tf-fmt-check    terraform fmt -check -recursive -diff (from $(TF_DIR)/)"
-	@echo "  tf-validate     terraform init -backend=false + terraform validate (terraform/ and terraform/20-apps)"
-	@echo "  app-plan        make app-plan APP=<name> -- one application's plan, TF_WORKSPACE-scoped (ADR 0003)"
-	@echo "  app-apply       make app-apply APP=<name> -- one application's apply"
-	@echo "  apps-plan       every application in terraform/apps.yaml, one at a time"
-	@echo "  apps-apply      every application in terraform/apps.yaml, one at a time -- see"
-	@echo "                  scripts/migrate-app-state.sh first if it has not been migrated to"
-	@echo "                  terraform/20-apps yet (ADR 0007 step 2)"
+	@echo "  tf-validate     terraform init -backend=false + terraform validate, in each of the three layers"
+	@echo "  cluster-plan|apply, platform-plan|apply   one layer (ARGS=... goes to terraform)"
+	@echo "  app-plan|apply APP=<name>   one application's own state (terraform/20-apps, workspace <name>)"
+	@echo "  apps-plan|apply  every application of terraform/apps.yaml, one after the other"
 	@echo "  helm-lint       helm lint on every chart in \$$(CHARTS) — workforce-management"
 	@echo "                  and warehouse-planning need a dummy database.url, wired in below"
 	@echo "  shellcheck      shellcheck --severity=warning on scripts/*.sh"
@@ -63,36 +60,26 @@ help:
 tf-fmt-check:
 	cd $(TF_DIR) && terraform fmt -check -recursive -diff
 
+# The three layers of ADR 0007. Validation needs no state: terraform_remote_state
+# is only read by plan.
+TF_LAYERS := 00-cluster 10-platform 20-apps
+
 tf-validate:
-	cd $(TF_DIR) && terraform init -backend=false -input=false >/dev/null && terraform validate
-	cd $(TF_DIR)/20-apps && terraform init -backend=false -input=false >/dev/null && terraform validate
-
-# One application's plan/apply, TF_WORKSPACE-scoped (ADR 0003 decision 2: the
-# workspace is chosen per command, never `terraform workspace select`).
-# Usage: make app-plan APP=facility-layout
-app-plan:
-	@if [ -z "$(APP)" ]; then echo "usage: make app-plan APP=<name>"; exit 1; fi
-	cd $(TF_DIR)/20-apps && TF_WORKSPACE=$(APP) terraform plan -lock-timeout=5m -var-file=../terraform.tfvars
-
-app-apply:
-	@if [ -z "$(APP)" ]; then echo "usage: make app-apply APP=<name>"; exit 1; fi
-	cd $(TF_DIR)/20-apps && TF_WORKSPACE=$(APP) terraform apply -lock-timeout=5m -var-file=../terraform.tfvars
-
-# Every application in terraform/apps.yaml, one at a time (ADR 0003 decision
-# 5). Sequential by design: an application plan is seconds, not minutes, but
-# the registry is still read from a Python one-liner (no extra dependency)
-# rather than parsed in Make.
-apps-plan:
-	@for a in $$(python3 -c "import yaml,sys; print('\n'.join(yaml.safe_load(open('$(TF_DIR)/apps.yaml'))['applications'].keys()))"); do \
-		echo "==> $$a"; \
-		$(MAKE) app-plan APP=$$a || exit 1; \
+	@for l in $(TF_LAYERS); do \
+		echo "==> $$l"; \
+		(cd $(TF_DIR)/$$l && terraform init -backend=false -input=false >/dev/null && terraform validate) || exit 1; \
 	done
 
-apps-apply:
-	@for a in $$(python3 -c "import yaml,sys; print('\n'.join(yaml.safe_load(open('$(TF_DIR)/apps.yaml'))['applications'].keys()))"); do \
-		echo "==> $$a"; \
-		$(MAKE) app-apply APP=$$a || exit 1; \
-	done
+# ---- Running Terraform: one layer, or one application's state (ADR 0003, 0007).
+# ARGS is passed to terraform, e.g. `make app-plan APP=product-master ARGS=-refresh=false`.
+cluster-plan cluster-apply platform-plan platform-apply: ; @scripts/tf.sh $(word 1,$(subst -, ,$@)) $(word 2,$(subst -, ,$@)) $(ARGS)
+
+app-plan app-apply:
+	@test -n "$(APP)" || { echo "usage: make $@ APP=<application of terraform/apps.yaml>"; exit 2; }
+	@scripts/tf.sh app $(APP) $(subst app-,,$@) $(ARGS)
+
+apps-plan apps-apply:
+	@scripts/tf.sh apps $(subst apps-,,$@) $(ARGS)
 
 helm-lint:
 	@if ! command -v helm >/dev/null 2>&1; then \
@@ -163,7 +150,7 @@ check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observ
 check-all: check
 
 # --- agent harness (harness-template v3) -----------------------------------
-.PHONY: check-fast secret-files-check guide-lint harness-test
+.PHONY: cluster-plan cluster-apply platform-plan platform-apply app-plan app-apply apps-plan apps-apply check-fast secret-files-check guide-lint harness-test
 # Fast local gate used by the agent Stop hook (this repo's own quick checks).
 check-fast: tf-fmt-check shellcheck chart-selector-check observability-check secret-files-check
 

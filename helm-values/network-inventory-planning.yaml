@@ -1,5 +1,5 @@
 # network-inventory-planning: complete Helm values (ADR 0002 D2). Formerly computed in
-# terraform/network-inventory-planning.tf; see that file's git history (before ADR 0002
+# terraform/10-platform/network-inventory-planning.tf; see that file's git history (before ADR 0002
 # phase 3) for the reasoning behind each block.
 # Platform facts come from _platform.yaml, the kind CPU overlay from kind-resources/,
 # the image tags from Terraform (the Application's valuesObject). Credentials never
