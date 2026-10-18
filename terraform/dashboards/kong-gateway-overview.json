@@ -142,7 +142,7 @@
     {
       "type": "timeseries",
       "title": "Request rate by context",
-      "description": "Requests/sec Kong is forwarding, summed by the Kong Service name (one per bounded context's route -- see locals.tf's `services` map / Gateway API HTTPRoute-derived Service naming, httproute.warehouse-systems.<context>.0).",
+      "description": "Requests/sec Kong is forwarding, summed by the Kong Service name (one per bounded context's route -- see the `kind: service` entries of terraform/apps.yaml / Gateway API HTTPRoute-derived Service naming, httproute.warehouse-systems.<context>.0).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
