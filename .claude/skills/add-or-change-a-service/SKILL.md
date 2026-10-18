@@ -16,7 +16,7 @@ Nothing is auto-discovered.
 
 1. Its chart must already exist in its own repo at `charts/<repo>/`, with every Service selecting by `app.kubernetes.io/component`.
 2. Registry entry:
-   - A database-backed context with the shared database naming: an entry in `local.services` (`terraform/locals.tf`: `db`, `user`, `port`, `path`, `chart_path`; copy a neighbour). `local.service_applications` picks it up. Add its literal line to `local.app_passwords` in `terraform/applications.tf` (`"<svc>" = module.application["<svc>"].passwords`); the plan fails with an invalid-index error until you do. Never replace that map with a for expression: a computed module key makes Postgres wait for every image build.
+   - A database-backed context with the shared database naming: an entry in `local.services` (`terraform/locals.tf`: `db`, `user`, `port`, `path`, `chart_path`; copy a neighbour). `local.service_applications` picks it up. Nothing else is registered by hand: the module creates its role and database in Postgres through a Job (ADR 0005).
    - Anything else: an explicit entry in `local.other_applications` (`terraform/applications.tf`). Static sites declare `frontend = { dir = ".", values_key = "image" }`; an image pulled from a registry is `image = null`.
 3. If it has a projector/reports pair: add it to `local.analytics_services` (`terraform/locals.tf`), which gives it an analytics database and the `<svc>-analytics-db` Secret. Do not add network-fulfillment there: `analytics_db_info` indexes `local.services[name]` and throws a plan-time KeyError.
 4. If its repo ships a frontend remote: add it to `local.frontend_remotes` (`terraform/frontends.tf`) for the image build and the web gateway route.
@@ -43,15 +43,12 @@ Nothing is auto-discovered.
 - The hash does NOT cover chart templates, and Terraform installs no releases. ArgoCD (the module's `Application`, chart from the service repo's GitHub `develop`) owns each release with automated prune and selfHeal. A chart template change reaches the cluster only after it is merged to that repo's `develop` and ArgoCD syncs; `terraform apply` will say `0 changed`. Check with `kubectl -n argocd get applications` and `argocd app diff <svc>`.
 - If a pod still runs old code, compare `module.application["<svc>"].image_tag` (`terraform console`) with the live image, and only then `kubectl rollout restart deployment/<name> -n warehouse-systems`.
 
-## 5. A new database or analytics database on a Postgres that already has data
+## 5. A new database or analytics database
 
-Bitnami runs `primary.initdb.scripts` once, on an empty data directory. A new entry renders into `terraform/templates/init-databases.sql.tftpl` but never executes on a live cluster, so the pod CrashLoopBackOffs with `password authentication failed`. After apply:
+Nothing to do by hand. `modules/application` runs `modules/database` for the OLTP role and for the analytics role (ADR 0005): a Job creates the role and the database, or brings the role to the generated password, and the `Application` waits for it. This works the same on an empty Postgres and on one that already has data.
 
-1. Read the generated password with a throwaway `terraform output -raw` (see how `terraform/network-fulfillment.tf` documents it).
-2. Run the equivalent `CREATE ROLE` / `CREATE DATABASE` / `REVOKE` / `GRANT` SQL against `postgres-postgresql-0`, mirroring the template's loop body exactly.
-3. Only THEN recover the crashed workload: an ArgoCD resync of the Application.
-
-Never run step 2 against the live cluster without the user's go-ahead.
+- A failed Job fails the apply after six retries. Read it with `kubectl -n warehouse-data logs job/provision-<name>` (`<name>-analytics` for the analytics role).
+- Removing an application removes its Job and Secret, never its role or database. Dropping data is a separate step that needs the user's go-ahead.
 
 ## 6. Verify
 

@@ -29,10 +29,8 @@
 #
 # Startup: runs golang-migrate before serving, over MIGRATIONS_DATABASE_URL
 # (the direct, non-pooled DSN Terraform puts in the <svc>-db Secret);
-# DATABASE_URL itself goes through PgBouncer. The role/database are rendered
-# into the initdb script from local.services, but initdb only runs on an
-# EMPTY Postgres data directory: on an already-populated cluster they must be
-# created once by hand before the first sync (see README "slotting-optimization").
+# DATABASE_URL itself goes through PgBouncer. The role/database are created
+# by modules/application's provisioning Job (ADR 0005), before the first sync.
 #
 # DEMAND_SITE_ID / DEFAULT_SITE_ID are deliberately left unset: every request
 # names its site and every site's demand is ingested (no invented default).

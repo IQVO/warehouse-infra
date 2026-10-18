@@ -6,6 +6,18 @@ Implemented (this branch). Phase 3 scalability follow-up, triggered directly
 by order-management's ADR-0026 (`order-management/docs/docs/adr/0026-*.md`,
 merged in PR #110).
 
+## Update 2026-10-18 (ADR 0005)
+
+PgBouncer no longer lists any database or role by name. `pgbouncer.ini` has one
+`*` fallback entry with `pool_size=12`, so every database is pooled with the
+same size as before, and `userlist.txt` holds only the superuser and the
+`pgbouncer_auth` lookup role. Clients are authenticated with `auth_query`
+(`pgbouncer.get_auth()`, `templates/pgbouncer-auth.sql`), so a new application
+changes neither file. Where this document mentions `[databases]` entries per
+database or the `pgbouncer_oltp_services` map, read "the `*` entry"; the
+pooling decisions below are unchanged. The role and database themselves are
+created by `modules/database`, not by an initdb script.
+
 ## Context
 
 `warehouse-infra` runs **one** Postgres release (Bitnami chart,

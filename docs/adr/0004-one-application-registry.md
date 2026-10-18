@@ -9,6 +9,8 @@ D3 and [ADR 0003](0003-per-application-terraform-state.md) call
 recorded on the cluster's state on 2026-10-17. The two image-hash
 overrides kept for parity (decision 5) are removed by the follow-up change:
 every application now uses the module's default hash.
+Decision 4 (the platform reads passwords by literal key) is ended by
+[ADR 0005](0005-database-provisioning-by-jobs.md).
 
 ## Context
 

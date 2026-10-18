@@ -7,26 +7,33 @@
 ; every setting PgBouncer actually runs with comes from here, not from any
 ; PGBOUNCER_* env var on the Deployment.
 ;
-; One [databases] entry per service's OLTP database only -- analytics
-; databases are deliberately NOT listed here and stay routed directly at
-; Postgres (see docs/scalability/pgbouncer-connection-pooling.md for the
-; full reasoning). The alias on the left of each entry is intentionally
-; IDENTICAL to the real database name, so a service's existing DATABASE_URL
-; DSN shape (postgres://<user>:<pass>@<host>:<port>/<dbname>?sslmode=disable)
-; needs only its host:port changed -- the dbname, user and password stay
-; byte-identical.
+; No application is listed (ADR 0005). The `*` entry is PgBouncer's fallback:
+; a client that asks for database X reaches database X on Postgres, with
+; the pool settings below. The names stay identical to the real database
+; names, so a service's DATABASE_URL
+; (postgres://<user>:<password>@<host>:<port>/<dbname>?sslmode=disable) needs
+; only its host:port to point here. Analytics databases are still wired
+; directly at Postgres by their services (see
+; docs/scalability/pgbouncer-connection-pooling.md); nothing here blocks the
+; name, because Postgres' own CONNECT privilege is the access control.
+;
+; Clients are authenticated by auth_query, run as auth_user against the
+; postgres database (auth_dbname) through the pgbouncer.get_auth() function
+; that templates/pgbouncer-auth.sql creates. userlist.txt holds only the
+; superuser and that lookup role.
 ; ---------------------------------------------------------------------------
 
 [databases]
-%{ for name, svc in services ~}
-${svc.db} = host=${postgres_host} port=${postgres_port} dbname=${svc.db} pool_size=${oltp_pool_size}
-%{ endfor ~}
+* = host=${postgres_host} port=${postgres_port} pool_size=${oltp_pool_size}
 
 [pgbouncer]
 listen_addr = 0.0.0.0
 listen_port = ${pgbouncer_port}
 auth_type = scram-sha-256
 auth_file = /opt/bitnami/pgbouncer/conf/userlist.txt
+auth_user = ${auth_user}
+auth_dbname = postgres
+auth_query = SELECT usename, passwd FROM pgbouncer.get_auth($1)
 
 ; Transaction pooling: a server connection is handed to a client only for
 ; the duration of one transaction, then returned to the pool immediately.
