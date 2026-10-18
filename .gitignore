@@ -5,4 +5,12 @@ terraform/terraform.tfstate
 terraform/terraform.tfstate.*
 terraform/kubeconfig
 terraform/*.tfvars
+# Plans and workspace states hold every secret in clear text; the repo is public.
+*.tfplan
+terraform/terraform.tfstate.d/
+terraform/*/terraform.tfstate*
+terraform/*/terraform.tfstate.d/
+terraform/*/*.tfvars
+terraform/*/kubeconfig
+!terraform/terraform.tfvars.example
 .claude/settings.local.json
