@@ -9,10 +9,11 @@ amends or supersedes an earlier one with its own ADR
 | ADR | Title | Status (from the ADR body) |
 | --- | --- | --- |
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions in `docs/adr/` | Accepted (2026-10-17) |
-| [0002](0002-application-delivery-boundary.md) | Application delivery boundary: Terraform owns the platform, Helm and ArgoCD own the applications | Accepted (2026-10-17). Amended by ADR 0003 (D6). Phases 1 to 4 merged (phase 2 by ADR 0004; phase 3: values in `helm-values/`, two-source Applications; phase 4 by ADR 0005); phases 5 and 6 open |
+| [0002](0002-application-delivery-boundary.md) | Application delivery boundary: Terraform owns the platform, Helm and ArgoCD own the applications | Accepted (2026-10-17). Amended by ADR 0003 (D6). Phases 1 to 4 merged (phase 2 by ADR 0004; phase 3: values in `helm-values/`, two-source Applications; phase 4 by ADR 0005; phase 5 by ADR 0006); phase 6 open |
 | [0003](0003-per-application-terraform-state.md) | Each application gets its own Terraform state | Accepted (2026-10-17). Amends ADR 0002 D6; implemented with ADR 0002 phase 6 |
 | [0004](0004-one-application-registry.md) | Every application is registered through one module and one registry | Accepted (2026-10-17). Implements ADR 0002 phase 2; renames the module to `modules/application`. State moves recorded; image-hash follow-up done; decision 4 ended by ADR 0005 |
 | [0005](0005-database-provisioning-by-jobs.md) | Application roles and databases are provisioned by Jobs, and the platform names no application | Accepted (2026-10-18). Implements ADR 0002 D4 (phase 4) |
+| [0006](0006-declarative-gateway-api.md) | The Gateway API objects are `kubectl_manifest` resources, and the CRD bundle is vendored | Accepted (2026-10-18). Implements ADR 0002 D5 (phase 5) |
 
 ## Adding an ADR
 

@@ -59,4 +59,8 @@ provider "kubectl" {
   client_certificate     = kind_cluster.warehouse.client_certificate
   client_key             = kind_cluster.warehouse.client_key
   load_config_file       = false
+
+  # A CRD is created and a custom resource of it applied in the same run
+  # (gateway-api.tf); retry the apply while the API server starts serving it.
+  apply_retry_count = 5
 }
