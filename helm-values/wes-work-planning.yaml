@@ -10,7 +10,7 @@
 # database; wiring a migrate-on-boot step belongs in the service repo, not here.
 #
 # Kafka: publish-only. Live now that warehouse-infra runs a real Kafka
-# release (kafka.tf) — see warehouse-infra terraform/kafka.tf.
+# release (kafka.tf) — see warehouse-infra terraform/10-platform/kafka.tf.
 #
 # Analytics: the projector+reports pair (ADR-0010) is turned on here.
 # analytics.database.existingSecret names the wes-work-planning-analytics-db

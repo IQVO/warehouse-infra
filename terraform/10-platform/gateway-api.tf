@@ -3,7 +3,7 @@
 #
 # Kong originally fronted every service via plain Kubernetes `Ingress`
 # objects (see kong.tf's header comment on that original choice). This
-# migrates every service in local.services (plus warehouse-ops-agent, see
+# migrates every service in module.registry.services (plus warehouse-ops-agent, see
 # ops-agent.tf) from Ingress to the Kubernetes Gateway API's HTTPRoute,
 # chart-rendered via each service's own `gatewayApi` values block (its
 # helm-values file; the parentRefs come from helm-values/_platform.yaml).
@@ -56,7 +56,7 @@
 # ---------------------------------------------------------------------------
 
 locals {
-  gateway_api_bundle = "${path.module}/gateway-api/standard-install-${var.gateway_api_version}.yaml"
+  gateway_api_bundle = "${path.module}/../gateway-api/standard-install-${var.gateway_api_version}.yaml"
 }
 
 data "kubectl_file_documents" "gateway_api_crds" {

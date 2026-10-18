@@ -1,6 +1,6 @@
 # network-fulfillment: the fleet's Anti-Corruption Layer to an external retail network
 # (Amazon Vendor Direct Fulfillment). Complete Helm values (ADR 0002 D2), formerly computed
-# in terraform/network-fulfillment.tf (see its git history for each block's reasoning).
+# in terraform/10-platform/network-fulfillment.tf (see its git history for each block's reasoning).
 
 # THE IMPORTANT PART OF THIS FILE IS WHAT IT DOES NOT SET: config.networkMode stays "stub",
 # deliberately and permanently for the local kind cluster. In stub mode the service makes

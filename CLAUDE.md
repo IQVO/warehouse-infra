@@ -11,16 +11,18 @@ per-service values; each service's chart lives in that service's own repo.
 
 ## What this repo deploys
 
-`terraform/apps.yaml` (the application registry; `terraform/applications.tf`
+`terraform/apps.yaml` (the application registry; `terraform/20-apps/main.tf`
 turns each entry into module inputs) is the **single
 source of truth** for what gets deployed. It does NOT auto-discover sibling
 repos: a new repo must be added by hand and its own `charts/<repo>/` must
-already exist. Read it and `terraform/locals.tf` before answering "what does
+already exist. Read it and `terraform/10-platform/locals.tf` before answering "what does
 the cluster know about".
 
 ```
-terraform/             Root module: services, Kafka, Postgres + PgBouncer, MCP, ArgoCD,
-                       dashboards, the Nginx/Kong localhost edge
+terraform/00-cluster/  The kind cluster (own state)
+terraform/10-platform/ Kafka, Postgres + PgBouncer, Istio, ArgoCD, observability, the Nginx/Kong
+                       localhost edge (own state)
+terraform/20-apps/     One workspace and state per application (modules/application)
 terraform/modules/application/  One application's platform contract (DB, Secrets, images, Application)
 helm-values/           Every application's complete Helm values; ArgoCD reads them from develop (ADR 0002 D2)
 config/process-paths/  Seed data for scripts/seed-process-paths.py
@@ -38,6 +40,8 @@ alters a recorded decision ships its ADR in the same PR.
 `docs/adr/0002-application-delivery-boundary.md` sets the boundary: an
 application's Kubernetes objects belong in its own chart, never in
 Terraform. Read its Rollout section before restructuring `terraform/`.
+`docs/adr/0007-state-split-in-four-steps.md` splits `terraform/` into the layers
+`00-cluster`, `10-platform` and `20-apps` (one state per application).
 `docs/adr/0004-one-application-registry.md` makes every application one
 instance of `terraform/modules/application`.
 
@@ -75,13 +79,16 @@ instance of `terraform/modules/application`.
 8. **Every chart `Service` must select exactly ONE Deployment** (scope
    `selectorLabels` by `app.kubernetes.io/component`). Run
    `make chart-selector-check` before touching selector/label wiring.
-9. **`terraform destroy` leaves ~60 phantom resources in state.** Back up
-   the tfstate, confirm `kind get clusters` is empty, then `terraform state rm`
-   each, before re-applying.
+9. **Never `terraform destroy` the cluster.** It leaves ~60 phantom resources
+   in state. `scripts/down.sh` deletes the kind cluster and drops the layers'
+   state instead; recreate with `scripts/up.sh` (three layers, in order).
 10. **Delete tracked files with `git rm -r <path>`, never bare `rm -rf`.**
-11. **Worktrees have no tfstate and no sibling repos.** Copy the real
-    `terraform.tfstate` in, scope plan/apply with `-target=`, copy it back
-    after an apply, and symlink siblings (see `deploy-local-checkout`). Never
+11. **Worktrees have no tfstate and no sibling repos.** Copy the real layer
+    states in (`00-cluster`, `10-platform`, the application workspaces you
+    need), plan one application with `scripts/tf.sh app <name> plan`, copy the
+    state back after an apply, and symlink siblings (see
+    `deploy-local-checkout`). Never apply from a checkout older than the
+    layered layout (ADR 0007): the old root no longer has a state. Never
     apply, destroy or run SQL/kubectl mutations against the live cluster
     without the user's go-ahead.
 
@@ -108,7 +115,8 @@ one through the other (`docs/exposure/localhost-edge-topology.md`). Run
 make check-fast         # tf-fmt-check + shellcheck + chart-selector-check (agent Stop hook)
 make check              # + tf-validate + helm-lint (mirrors ci.yml); check-all is an alias
 make guide-lint         # agent-guide lint (blocking in CI)
-terraform -chdir=terraform plan      # see deploy-local-checkout before apply
+scripts/tf.sh platform plan          # layers: cluster | platform | app <name> | apps (see deploy-local-checkout before apply)
+make app-plan APP=<name>             # one application's own state
 bash scripts/up.sh | down.sh | smoke-test.sh | test-exposure-policy.sh
 ```
 

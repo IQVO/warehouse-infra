@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Vendor a Gateway API standard-channel release bundle into terraform/gateway-api/.
 #
-# terraform/gateway-api.tf reads terraform/gateway-api/standard-install-<tag>.yaml
+# terraform/10-platform/gateway-api.tf reads terraform/gateway-api/standard-install-<tag>.yaml
 # for var.gateway_api_version, so a plan needs no network and a version bump is
 # a reviewable diff (ADR 0006). Run it, then commit the new file:
 #     ./scripts/vendor-gateway-api.sh v1.6.2

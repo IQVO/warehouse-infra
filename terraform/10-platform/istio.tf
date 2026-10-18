@@ -11,7 +11,6 @@
 # ---------------------------------------------------------------------------
 
 resource "kubernetes_namespace" "istio_system" {
-  depends_on = [null_resource.kubeconfig]
 
   metadata {
     name = "istio-system"

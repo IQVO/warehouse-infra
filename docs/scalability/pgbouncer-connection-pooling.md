@@ -21,7 +21,7 @@ created by `modules/database`, not by an initdb script.
 ## Context
 
 `warehouse-infra` runs **one** Postgres release (Bitnami chart,
-`terraform/postgres.tf`) with `max_connections` at its unmodified default
+`terraform/10-platform/postgres.tf`) with `max_connections` at its unmodified default
 of **100**, shared by every one of this fleet's 10 backend services. Each
 service has its own logical database + role on that same server
 (`terraform/locals.tf`'s `local.services` map, plus `network-fulfillment.tf`
@@ -75,7 +75,7 @@ catalog does not include a `pgbouncer` chart (unlike `postgresql`/`kafka`,
 both still free and both already used elsewhere in this repo). The
 `bitnamilegacy/pgbouncer` **image** itself is still pullable (same registry
 override pattern `postgres.tf`/`kafka.tf` already use for their own
-images), so `terraform/pgbouncer.tf` hand-rolls the
+images), so `terraform/10-platform/pgbouncer.tf` hand-rolls the
 Deployment/Service/Secret directly in Terraform — the same pattern
 `terraform/frontends.tf`'s `kubernetes_deployment.web_gateway` already uses
 in this repo for the (also chart-less) Nginx web gateway. This keeps the
@@ -86,7 +86,7 @@ that does not exist.
 
 ### Per-database pool sizing
 
-`terraform/pgbouncer.tf`'s `local.pgbouncer_oltp_pool_size = 12` — every
+`terraform/10-platform/pgbouncer.tf`'s `local.pgbouncer_oltp_pool_size = 12` — every
 OLTP database gets its own `[databases]` entry in `pgbouncer.ini` with
 `pool_size=12`, well inside the requested 10-15 range and conservative
 end of it. Aggregate worst case across every OLTP database this fleet has
@@ -192,7 +192,7 @@ credentials. Confirmed directly against order-management (see
 
 ### Readiness / liveness / startup probes
 
-PgBouncer's own Deployment (`terraform/pgbouncer.tf`) uses `SHOW POOLS`
+PgBouncer's own Deployment (`terraform/10-platform/pgbouncer.tf`) uses `SHOW POOLS`
 against its built-in `pgbouncer` admin pseudo-database for all three
 probes (`startup_probe`, `readiness_probe`, `liveness_probe`), not a bare
 TCP-port-open check. A bare port probe can report "ready" while PgBouncer

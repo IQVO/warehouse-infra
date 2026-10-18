@@ -39,7 +39,7 @@ warehouse, lake, or ETL team.
   the projector is the only writer, the reports binary connects read-only, and the
   OLTP service never opens the analytics DB at all.
   - **Today (baseline):** a dedicated `*_analytics` database in the existing Postgres
-    release (fits `warehouse-infra/terraform/postgres.tf`; the role and database are created by `modules/database`, ADR 0005),
+    release (fits `warehouse-infra/terraform/10-platform/postgres.tf`; the role and database are created by `modules/database`, ADR 0005),
     with a separate role. This is the required minimum — logical isolation + least
     privilege, zero new infra.
   - **Promotion path:** because the only coupling is the `ANALYTICS_DATABASE_URL`

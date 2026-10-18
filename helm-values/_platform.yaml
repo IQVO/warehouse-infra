@@ -13,7 +13,7 @@
 # terraform/locals.tf), so each has one source: change the Gateway, the brokers or
 # the collector here, never in HCL.
 
-# The shared Kong Gateway (terraform/gateway-api.tf) every route attaches to: the
+# The shared Kong Gateway (terraform/10-platform/gateway-api.tf) every route attaches to: the
 # API routes, the MCP routes and the analytics reports routes.
 gatewayApi:
   parentRefs: &gateway
@@ -39,6 +39,6 @@ kongPlugins:
   opentelemetry:
     tracesEndpoint: http://otel-collector.observability.svc.cluster.local:4318/v1/traces
 
-# The one Kafka broker set for the whole platform (terraform/kafka.tf).
+# The one Kafka broker set for the whole platform (terraform/10-platform/kafka.tf).
 kafka:
   brokers: kafka.warehouse-systems.svc.cluster.local:9092
