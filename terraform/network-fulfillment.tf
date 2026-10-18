@@ -15,21 +15,11 @@
 # (DATABASE_URL through PgBouncer, MIGRATIONS_DATABASE_URL direct) and the
 # network-fulfillment-analytics-db Secret come from modules/application
 # (applications.tf, ADR 0002), which also creates the roles and databases in
-# Postgres (ADR 0005). The names stay here, because the registry reads them.
+# Postgres (ADR 0005). Their names derive from the registry entry (apps.yaml):
+# network_fulfillment and network_fulfillment_analytics. Its chart's
+# analytics-secret.yaml reads a single ANALYTICS_DATABASE_URL key (netfulfil-
+# projector and netfulfil-reports both use it), so the entry says so.
 # ---------------------------------------------------------------------------
-locals {
-  network_fulfillment_db_user = "network_fulfillment"
-  network_fulfillment_db_name = "network_fulfillment"
-
-  # The "Network Order Acknowledgement & Translation" data product's own
-  # analytical database (PR#18 upstream, ADR 0002 there). Its chart's
-  # analytics-secret.yaml reads a single ANALYTICS_DATABASE_URL key (both
-  # netfulfil-projector and netfulfil-reports use it), so the module writes
-  # only that key for this context.
-  network_fulfillment_analytics_db_user = "network_fulfillment_analytics"
-  network_fulfillment_analytics_db_name = "network_fulfillment_analytics"
-}
-
 output "network_fulfillment_route" {
   description = "Kong/Gateway path this context's REST surface is reachable on."
   value       = "${var.api_path_prefix}/network-fulfillment"

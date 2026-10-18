@@ -25,63 +25,11 @@
 locals {
   # Every remote is owned by the bounded context whose API it calls, and is
   # served at /mfes/<context>/. The remote_name is the Module Federation
-  # container name the console's vite.config.ts imports by -- recorded here
-  # only for traceability; nothing in Terraform derives behaviour from it.
+  # container name the console's vite.config.ts imports by. The remotes are
+  # the registry entries (apps.yaml) with a frontend_remote: the web gateway
+  # routes them (this file) and applications.tf builds their images.
   frontend_remotes = var.deploy_frontends ? {
-    "order-management"        = { remote_name = "order_mgmt_mfe" }
-    "inventory-storage"       = { remote_name = "inventory_mfe" }
-    "wes-work-planning"       = { remote_name = "planning_mfe" }
-    "fulfillment-execution"   = { remote_name = "fulfillment_mfe" }
-    "workforce-management"    = { remote_name = "workforce_mfe" }
-    "facility-layout"         = { remote_name = "facility_mfe" }
-    "labor-performance"       = { remote_name = "labor_mfe" }
-    "process-path-management" = { remote_name = "process_path_mfe" }
-    # network-fulfillment isn't in local.services (network-fulfillment.tf's
-    # header), but its own web/ directory is at the exact same relative
-    # path every sibling remote uses (confirmed via `git ls-tree` on PR#16's
-    # branch: web/src, web/package.json, web/vite.config.ts, web/index.html,
-    # web/Dockerfile, web/nginx.conf all present at network-fulfillment/web/),
-    # so local.frontend_source_hash's fileset() calls below resolve with
-    # zero further change. remote_name/port confirmed from PR#16's actual
-    # web/vite.config.ts: federation name "netfulfil_mfe", dev/preview
-    # server port 5188.
-    "network-fulfillment" = { remote_name = "netfulfil_mfe" }
-    # warehouse-planning (IQVO/warehouse-planning#20): federation container
-    # `capacity_mfe` (NOT planning_mfe, which is wes-work-planning's), exposes
-    # ./App, Vite base /mfes/warehouse-planning/, dev/preview port 5190. Its
-    # web/ sits at the standard <repo>/web path, so the source-hash fileset
-    # below and build-and-load-frontend.sh need no change. The chart's
-    # frontend Service is "warehouse-planning-frontend" (release name ==
-    # chart name, so fullname has no suffix) -- the name the gateway upstream
-    # below is derived from.
-    "warehouse-planning" = { remote_name = "capacity_mfe" }
-    # product-master (IQVO/product-master#10): federation container
-    # `productmaster_mfe` (registered by the console in warehouse-console#66),
-    # Vite base /mfes/product-master/. Its web/ sits at the standard <repo>/web
-    # path with web/Dockerfile taking warehouse-ui-kit as the named `uikit`
-    # build context, exactly what build-and-load-frontend.sh supplies, so the
-    # source-hash fileset below needs no change. The web gateway location
-    # /mfes/product-master/ is rendered from this entry; the chart's frontend
-    # Service is "product-master-frontend".
-    "product-master" = { remote_name = "productmaster_mfe" }
-    # inbound-receiving (IQVO/inbound-receiving web remote): federation
-    # container `inbound_mfe` (registered by the console in
-    # warehouse-console#73), Vite base /mfes/inbound-receiving/. Its web/ sits at
-    # the standard <repo>/web path with web/Dockerfile taking warehouse-ui-kit
-    # as the named `uikit` build context, exactly what
-    # build-and-load-frontend.sh supplies, so the source-hash fileset below
-    # needs no change. The web gateway location /mfes/inbound-receiving/ is
-    # rendered from this entry; the chart's frontend Service is
-    # "inbound-receiving-frontend". The remote sends an Idempotency-Key header
-    # on every POST (allowed by the chart's CORS KongPlugin).
-    "inbound-receiving" = { remote_name = "inbound_mfe" }
-    # network-inventory-planning (IQVO/network-inventory-planning#18):
-    # federation container `nip_mfe`, Vite base /mfes/network-inventory-planning/.
-    # Its web/ sits at the standard <repo>/web path. NIP is not in
-    # local.services (network-inventory-planning.tf); its helm-values file
-    # switches the frontend on like every other. The chart's frontend Service
-    # is "network-inventory-planning-frontend".
-    "network-inventory-planning" = { remote_name = "nip_mfe" }
+    for name, a in local.registry : name => { remote_name = a.frontend_remote } if try(a.frontend_remote, null) != null
   } : {}
 
   # Content-addressed image tags, NOT the fixed "local" tag the Go services
