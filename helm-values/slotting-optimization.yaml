@@ -81,10 +81,11 @@ kafka:
 # charter naming `<ctx>-analytics`), pinned equal to the chart's default so
 # a rename there cannot silently orphan the committed offsets. NOTE the key
 # shape differs from the siblings: this chart pins the group at
-# analytics.consumerGroup (NOT analytics.projector.consumerGroup) and takes
-# the DSN as a single analytics.url -- computed by services.tf and
-# shallow-merged over this block (disjoint keys) -- NOT the
-# database.projectorUrl/reportsUrl pair. The role/database are NOT created
+# analytics.consumerGroup (NOT analytics.projector.consumerGroup) and reads
+# the DSN from a single Secret key -- analytics.existingSecret, the
+# slotting-optimization-analytics-db Secret modules/application writes, set
+# by services.tf and shallow-merged over this block (disjoint keys) -- NOT
+# the analytics.database.* pair. The role/database are NOT created
 # by a plain apply on an already-populated Postgres: see the infra PR
 # runbook.
 analytics:
