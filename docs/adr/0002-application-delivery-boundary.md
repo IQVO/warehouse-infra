@@ -8,7 +8,9 @@ order-management and network-inventory-planning) merged and its state moves
 recorded on the cluster's state (2026-10-17). Phase 2 implemented by
 [ADR 0004](0004-one-application-registry.md), which renames the module to
 `modules/application`; its state moves recorded on the cluster's state
-(2026-10-17). Phases 3 to 6 open.
+(2026-10-17). Phase 3 in progress: every chart already accepted
+`existingSecret`, so the analytics DSNs moved into module-owned Secrets
+first (2026-10-17); value files in Git follow. Phases 4 to 6 open.
 
 ## Context
 

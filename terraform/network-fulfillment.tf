@@ -223,11 +223,10 @@ locals {
       }
     } : {},
     # Analytics data product (PR#18 upstream, ADR 0002 there): its own
-    # analytical database, hand-rolled below (own random_password, own
-    # db/user locals, own kubernetes_secret, own DSN local) rather than
-    # joining local.analytics_services, for the same reason this whole file
-    # exists -- see the header. `analytics.database.existingSecret` (NOT
-    # `projectorUrl`/`reportsUrl`): this chart's own values.yaml has a
+    # analytical database (the module's analytics_database, registered in
+    # applications.tf) rather than joining local.analytics_services, for
+    # the same reason this whole file exists -- see the header.
+    # `analytics.database.existingSecret`: this chart's own values.yaml has a
     # SINGLE `analytics.database.url`/`existingSecret` pair, not the
     # projector/reports URL split facility-layout's chart has (both
     # netfulfil-projector and netfulfil-reports read the one

@@ -17,31 +17,13 @@
 
 # ---------------------------------------------------------------------------
 # Database passwords are GENERATED, never committed: each application's OLTP
-# password (and, where its chart reads a Secret, its analytics password) is a
-# random_password inside modules/application, which also writes the
-# <name>-db Secret. The initdb template below reads them through
-# local.app_db_passwords (applications.tf). The values live ONLY in
+# and analytics passwords are random_passwords inside modules/application,
+# which also writes the <name>-db and <name>-analytics-db Secrets the charts
+# read (existingSecret). The initdb template below reads them through
+# local.app_db_passwords and local.app_analytics_db_passwords
+# (applications.tf). The values live ONLY in
 # Terraform state (gitignored), so warehouse-infra can be a public repo.
 # ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# Per-service ANALYTICS database passwords — same generated-never-committed
-# posture as the module's OLTP passwords, one extra role per service in
-# local.analytics_services (see locals.tf's analytics_* locals). A single
-# role per service for now (the chart's own reportsUrl-falls-back-to-
-# projectorUrl default), not yet the separate read-only reports role the
-# governance charter's promotion path describes.
-# ---------------------------------------------------------------------------
-resource "random_password" "service_analytics_db" {
-  # Stays here for every context, order-management included: these charts
-  # still take the analytics DSN as a value (services.tf), so the password
-  # moves into modules/application with ADR 0002 phase 3, when they read
-  # it from a Secret instead.
-  for_each = local.analytics_services
-
-  length  = 24
-  special = false
-}
 
 resource "helm_release" "postgresql" {
   depends_on = [kubernetes_namespace.data]
@@ -152,7 +134,7 @@ resource "helm_release" "postgresql" {
               analytics_services = merge(
                 {
                   for name in local.analytics_services :
-                  name => merge(local.analytics_db_info[name], { password = local.analytics_service_passwords[name] })
+                  name => merge(local.analytics_db_info[name], { password = local.app_analytics_db_passwords[name] })
                 },
                 {
                   # network-fulfillment is not in local.analytics_services
@@ -169,7 +151,7 @@ resource "helm_release" "postgresql" {
                   "network-fulfillment" = {
                     db       = local.network_fulfillment_analytics_db_name
                     user     = local.network_fulfillment_analytics_db_user
-                    password = module.application["network-fulfillment"].analytics_db_password
+                    password = local.app_analytics_db_passwords["network-fulfillment"]
                   }
                 },
                 {
@@ -179,7 +161,7 @@ resource "helm_release" "postgresql" {
                   "network-inventory-planning" = {
                     db       = local.network_inventory_planning_analytics_db_name
                     user     = local.network_inventory_planning_analytics_db_user
-                    password = module.application["network-inventory-planning"].analytics_db_password
+                    password = local.app_analytics_db_passwords["network-inventory-planning"]
                   }
                 },
               )

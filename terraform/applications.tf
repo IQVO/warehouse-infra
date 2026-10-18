@@ -44,12 +44,17 @@ locals {
       image    = {}
       frontend = contains(keys(local.frontend_remotes), name) ? { source_hash = local.frontend_source_hash[name] } : null
       database = merge(local.oltp_endpoints, { name = svc.db, user = svc.user })
-      # These charts still take the analytics DSN as a value
-      # (analytics.database.projectorUrl, set by services.tf), so their
-      # analytics passwords stay in postgres.tf until ADR 0002 phase 3 moves
-      # the DSN into a Secret.
-      analytics_database = null
-      secrets            = {}
+      # The <name>-analytics-db Secret the chart reads through
+      # analytics.database.existingSecret (analytics.existingSecret for
+      # slotting-optimization), set in services.tf.
+      analytics_database = contains(local.analytics_services, name) ? {
+        name        = local.analytics_db_info[name].db
+        user        = local.analytics_db_info[name].user
+        host        = local.postgres_host
+        port        = local.postgres_port
+        secret_keys = ["ANALYTICS_DATABASE_URL", "ANALYTICS_READER_DATABASE_URL"]
+      } : null
+      secrets = {}
     }
   }
 
@@ -167,9 +172,9 @@ locals {
     },
   )
 
-  # The generated OLTP passwords, for the platform's initdb script and
-  # PgBouncer userlist: the platform's dependency on the applications, which
-  # ADR 0002 phase 4 removes.
+  # The generated passwords ({ db, analytics_db }), for the platform's
+  # initdb script and PgBouncer userlist: the platform's dependency on the
+  # applications, which ADR 0002 phase 4 removes.
   #
   # One LITERAL key per application, never a for expression over
   # module.application: a computed key (module.application[name]) makes the
@@ -177,23 +182,26 @@ locals {
   # included (`terraform graph` shows the edge to "module.application
   # (close)"), so Postgres would wait for every build. A database-backed
   # application missing here fails the plan: local.service_passwords and the
-  # initdb template index this map.
-  app_db_passwords = {
-    "facility-layout"            = module.application["facility-layout"].db_password
-    "fulfillment-execution"      = module.application["fulfillment-execution"].db_password
-    "inbound-receiving"          = module.application["inbound-receiving"].db_password
-    "inventory-storage"          = module.application["inventory-storage"].db_password
-    "labor-performance"          = module.application["labor-performance"].db_password
-    "network-fulfillment"        = module.application["network-fulfillment"].db_password
-    "network-inventory-planning" = module.application["network-inventory-planning"].db_password
-    "order-management"           = module.application["order-management"].db_password
-    "process-path-management"    = module.application["process-path-management"].db_password
-    "product-master"             = module.application["product-master"].db_password
-    "slotting-optimization"      = module.application["slotting-optimization"].db_password
-    "warehouse-planning"         = module.application["warehouse-planning"].db_password
-    "wes-work-planning"          = module.application["wes-work-planning"].db_password
-    "workforce-management"       = module.application["workforce-management"].db_password
+  # initdb template index the maps below.
+  app_passwords = {
+    "facility-layout"            = module.application["facility-layout"].passwords
+    "fulfillment-execution"      = module.application["fulfillment-execution"].passwords
+    "inbound-receiving"          = module.application["inbound-receiving"].passwords
+    "inventory-storage"          = module.application["inventory-storage"].passwords
+    "labor-performance"          = module.application["labor-performance"].passwords
+    "network-fulfillment"        = module.application["network-fulfillment"].passwords
+    "network-inventory-planning" = module.application["network-inventory-planning"].passwords
+    "order-management"           = module.application["order-management"].passwords
+    "process-path-management"    = module.application["process-path-management"].passwords
+    "product-master"             = module.application["product-master"].passwords
+    "slotting-optimization"      = module.application["slotting-optimization"].passwords
+    "warehouse-planning"         = module.application["warehouse-planning"].passwords
+    "wes-work-planning"          = module.application["wes-work-planning"].passwords
+    "workforce-management"       = module.application["workforce-management"].passwords
   }
+
+  app_db_passwords           = { for name, p in local.app_passwords : name => p.db }
+  app_analytics_db_passwords = { for name, p in local.app_passwords : name => p.analytics_db }
 
 }
 

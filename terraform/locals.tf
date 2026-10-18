@@ -242,10 +242,10 @@ locals {
   #
   # Baseline per docs/analytics/governance-charter.md: a dedicated
   # `<svc>_analytics` database in the SAME Postgres release, owned by a
-  # single generated role. The chart's own `analytics.database.reportsUrl`
-  # falls back to `projectorUrl` when left empty (see each chart's
-  # values.yaml comment) — matching the "local/dev" baseline the charts
-  # already document, same posture as this file's single-role OLTP
+  # single generated role, whose DSN modules/application writes into the
+  # <name>-analytics-db Secret under both ANALYTICS_DATABASE_URL (projector)
+  # and ANALYTICS_READER_DATABASE_URL (reports) — the "local/dev" baseline
+  # the charts document, same posture as this file's single-role OLTP
   # database_urls above (no separate read-only role there either). The
   # promotion path to a distinct read-only reports role / a physically
   # separate instance is a later, additive change (see the governance
@@ -264,8 +264,8 @@ locals {
     # topic, "Process Path Catalogue Growth & Change" report bucketed by
     # day) in the same PR that closed this fleet's last remaining
     # analytics gap -- 8 of 8 backend contexts now have one. Every
-    # downstream local (analytics_db_info, analytics_service_passwords,
-    # analytics_database_urls) and the postgres.tf init-job template and
+    # downstream local (analytics_db_info, the module's analytics database
+    # and Secret in applications.tf) and the postgres.tf init-job template and
     # services.tf's `contains(local.analytics_services, each.key)` gate
     # already derive from this single set, so no other file needs a
     # change to pick this service up.
@@ -275,8 +275,8 @@ locals {
     # (writer) and cmd/planning-reports (read-only reader, role/database
     # warehouse_planning_analytics) -- ships in the SAME image as the OLTP api
     # and mcp binaries (one build_and_load resource, no new image). The chart
-    # values it needs (analytics.database.projectorUrl/reportsUrl) are the same
-    # ones every sibling chart takes, so services.tf's
+    # values it needs (analytics.database.existingSecret) are the same ones
+    # every sibling chart takes, so services.tf's
     # `contains(local.analytics_services, name)` branch, the postgres.tf
     # init-job template, the <name>-reports Kong route (services.tf) and
     # ops-agent's reports URL all pick it up from this one entry. On an
@@ -311,8 +311,8 @@ locals {
     # binaries (one image build; its analytical migrations live in a
     # top-level analytics/migrations/, already covered by
     # modules/application's default hash_globs). Its chart takes the
-    # single-DSN shape (analytics.url -- services.tf), NOT the
-    # database.projectorUrl/reportsUrl pair, and ships no reports Kong
+    # single-DSN shape (analytics.existingSecret -- services.tf), NOT the
+    # analytics.database.* pair, and ships no reports Kong
     # route; see services.tf. Same one-time SQL caveat as
     # warehouse-planning above.
     "slotting-optimization",
@@ -326,14 +326,13 @@ locals {
     }
   }
 
-  analytics_service_passwords = {
-    for name in local.analytics_services :
-    name => random_password.service_analytics_db[name].result
-  }
-
+  # The same DSN modules/application writes into each <name>-analytics-db
+  # Secret (ANALYTICS_DATABASE_URL and ANALYTICS_READER_DATABASE_URL), kept
+  # only for the sensitive `analytics_database_urls` output. Charts never
+  # receive it as a value: they read the Secret (existingSecret).
   analytics_database_urls = {
     for name in local.analytics_services :
-    name => "postgres://${local.analytics_db_info[name].user}:${local.analytics_service_passwords[name]}@${local.postgres_host}:${local.postgres_port}/${local.analytics_db_info[name].db}?sslmode=disable"
+    name => "postgres://${local.analytics_db_info[name].user}:${local.app_analytics_db_passwords[name]}@${local.postgres_host}:${local.postgres_port}/${local.analytics_db_info[name].db}?sslmode=disable"
   }
 
   # ---------------------------------------------------------------------
