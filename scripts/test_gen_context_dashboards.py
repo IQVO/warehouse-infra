@@ -21,7 +21,7 @@ What it pins, and why each one exists:
   carries no status code in this fleet, so such a panel is always empty.
 - workforce-management's labor panel groups by `outcome` (the attribute was
   renamed from workforce.assignment.outcome by that repo's ADR-0015 pass).
-- Every context deployed through terraform/locals.tf's local.services map has
+- Every context deployed through terraform/apps.yaml (kind: service) has
   a dashboard, so a newly wired context cannot ship without one.
 - process-path-management has an outbox-lag panel on its real gauge.
 - Alert rules (terraform/alerting/warehouse-alert-rules.json): every context
@@ -81,11 +81,10 @@ def prometheus_exprs(dashboard):
 
 
 def local_services_keys():
-    with open(os.path.join(REPO_ROOT, "terraform", "locals.tf")) as f:
+    """The `kind: service` entries of terraform/apps.yaml (kind is each entry's first field)."""
+    with open(os.path.join(REPO_ROOT, "terraform", "apps.yaml")) as f:
         text = f.read()
-    start = text.index("  services = {")
-    end = text.index("\n  }\n", start)
-    return re.findall(r'^    "([a-z0-9-]+)" = \{', text[start:end], re.MULTILINE)
+    return re.findall(r"^  ([a-z0-9-]+):\n    kind: service$", text, re.MULTILINE)
 
 
 class GeneratedDashboardsTest(unittest.TestCase):
@@ -156,7 +155,7 @@ class GeneratedDashboardsTest(unittest.TestCase):
     def test_every_deployed_context_has_a_dashboard(self):
         keys = {c["key"] for c in GEN.CONTEXTS}
         for name in local_services_keys():
-            self.assertIn(name, keys, f"{name} is in local.services but has no CONTEXTS entry")
+            self.assertIn(name, keys, f"{name} is a kind: service entry in apps.yaml but has no CONTEXTS entry")
         self.assertIn("slotting-optimization", local_services_keys())
 
     def test_process_path_management_has_an_outbox_lag_panel(self):

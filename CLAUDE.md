@@ -11,8 +11,8 @@ per-service values; each service's chart lives in that service's own repo.
 
 ## What this repo deploys
 
-`terraform/applications.tf`'s registry (`local.applications`: every
-`local.services` context plus `local.other_applications`) is the **single
+`terraform/apps.yaml` (the application registry; `terraform/applications.tf`
+turns each entry into module inputs) is the **single
 source of truth** for what gets deployed. It does NOT auto-discover sibling
 repos: a new repo must be added by hand and its own `charts/<repo>/` must
 already exist. Read it and `terraform/locals.tf` before answering "what does

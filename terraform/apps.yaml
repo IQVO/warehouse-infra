@@ -1,0 +1,146 @@
+# ---------------------------------------------------------------------------
+# The application registry: every application deployed on this cluster.
+#
+# One file, read by every part of the Terraform configuration that needs to
+# know which applications exist (ADR 0003 decision 3, ADR 0007): the
+# application layer builds each entry's module inputs from it, and the
+# platform reads only the names and the frontend remotes (the web gateway's
+# routes). Adding an application is one entry here plus its two value files
+# in helm-values/ (ADR 0004); its role and database come with it (ADR 0005).
+#
+# Per entry (all optional unless noted):
+#   kind          service | other (required, and the first field of an entry:
+#                 scripts/test_gen_context_dashboards.py reads it by position). `service` entries get the
+#                 /api/<name> route, a row in the `services` and
+#                 `database_urls` outputs, and take part in analytics_services.
+#   repo_owner    GitHub owner ArgoCD clones the chart from. Default
+#                 claudioed (the older repos resolve through GitHub's
+#                 2026-10-03 transfer redirect); repos created directly under
+#                 IQVO name it.
+#   deploy_with   services (default) | frontends: which switch turns the
+#                 application on (var.deploy_services / var.deploy_frontends).
+#   build_image   false when the image is not built from the repo's Dockerfile
+#                 (a registry image, or a static site). Default true.
+#   database      true: an OLTP role and database named after the application
+#                 with dashes replaced by underscores, reached through
+#                 PgBouncer (MIGRATIONS_DATABASE_URL goes direct).
+#   analytics     true: a second role and database, <db>_analytics, reached
+#                 directly. `{ secret_keys: [...] }` when the chart reads
+#                 fewer keys than the default pair (ANALYTICS_DATABASE_URL and
+#                 ANALYTICS_READER_DATABASE_URL).
+#   frontend_remote  the module-federation remote name of the repo's web/
+#                 remote; its presence builds the frontend image and adds the
+#                 web gateway route.
+#   site          true: a static site built from the repo root (console,
+#                 EventCatalog); its image tag goes to image.tag.
+# ---------------------------------------------------------------------------
+applications:
+
+  ecosystem:
+    kind: other
+    repo_owner: IQVO
+    deploy_with: frontends
+    build_image: false
+    site: true
+
+  facility-layout:
+    kind: service
+    database: true
+    analytics: true
+    frontend_remote: facility_mfe
+
+  fulfillment-execution:
+    kind: service
+    database: true
+    analytics: true
+    frontend_remote: fulfillment_mfe
+
+  inbound-receiving:
+    kind: service
+    repo_owner: IQVO
+    database: true
+    analytics: true
+    frontend_remote: inbound_mfe
+
+  inventory-storage:
+    kind: service
+    database: true
+    analytics: true
+    frontend_remote: inventory_mfe
+
+  labor-performance:
+    kind: service
+    database: true
+    analytics: true
+    frontend_remote: labor_mfe
+
+  network-fulfillment:
+    kind: other
+    repo_owner: IQVO
+    database: true
+    analytics:
+      secret_keys: [ANALYTICS_DATABASE_URL]
+    frontend_remote: netfulfil_mfe
+
+  network-inventory-planning:
+    kind: other
+    repo_owner: IQVO
+    database: true
+    analytics: true
+    frontend_remote: nip_mfe
+
+  order-management:
+    kind: service
+    database: true
+    analytics: true
+    frontend_remote: order_mgmt_mfe
+
+  process-path-management:
+    kind: service
+    database: true
+    analytics: true
+    frontend_remote: process_path_mfe
+
+  product-master:
+    kind: service
+    repo_owner: IQVO
+    database: true
+    analytics: true
+    frontend_remote: productmaster_mfe
+
+  slotting-optimization:
+    kind: service
+    repo_owner: IQVO
+    database: true
+    analytics: true
+
+  warehouse-console:
+    kind: other
+    repo_owner: IQVO
+    deploy_with: frontends
+    build_image: false
+    site: true
+
+  warehouse-ops-agent:
+    kind: other
+    repo_owner: IQVO
+    build_image: false
+
+  warehouse-planning:
+    kind: service
+    repo_owner: IQVO
+    database: true
+    analytics: true
+    frontend_remote: capacity_mfe
+
+  wes-work-planning:
+    kind: service
+    database: true
+    analytics: true
+    frontend_remote: planning_mfe
+
+  workforce-management:
+    kind: service
+    database: true
+    analytics: true
+    frontend_remote: workforce_mfe

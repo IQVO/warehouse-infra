@@ -23,8 +23,7 @@ happens to select more than intended).
 Run from anywhere; paths below are relative to `terraform/` (this script
 lives in `scripts/`, but is invoked via `cd terraform && python3
 ../scripts/check-chart-selectors.py` from the Makefile / CI job so the
-chart paths match `terraform/locals.tf`'s own `../../<repo>/charts/<repo>`
-convention).
+chart paths match the sibling layout `../../<repo>/charts/<repo>`).
 
 Exit 0 if every Service selects exactly one Deployment; exit 1 (with the
 offending Service(s) named) otherwise.
