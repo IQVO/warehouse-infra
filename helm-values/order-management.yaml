@@ -22,6 +22,10 @@ replicaCount: 1
 config:
   httpAddr: ":8080"
   eventPublisher: "kafka"
+  # The release-confirmation timeout sweep rides this loop (default 1h would
+  # flag an unconfirmed line up to 1h15m late); ~5m keeps the 15m timeout
+  # meaningful. Also prunes idempotency keys / outbox rows, which is cheap.
+  housekeepingInterval: "5m"
 
 inventoryStorage:
   mode: "http"
@@ -45,6 +49,24 @@ plannedCapacity:
 productClassification:
   mode: "kafka"
   consumerGroup: "order-management-product-classification"
+
+# Release confirmation (K48, order-management ADR 0043): consumes
+# wes-work-planning's WorkUnitCreated (warehouse.work-planning.events, which
+# carries `reference` + `line_no` since wes-work-planning ADR 0041), confirms
+# each released order line, and flags a line still unconfirmed after `timeout`
+# with one analytics-only OrderReleaseUnconfirmed fact (nothing is cancelled
+# or retried). Dedicated chart values, so NOT in extraEnv. consumerGroup is
+# fixed and stable (a restarted pod resumes; N replicas share partitions).
+# ORDER: only meaningful once the deployed wes-work-planning carries ADR 0041
+# AND this service carries ADR 0043 -- the images are built from the local
+# develop checkouts in the same apply, so apply both together. With an OLD
+# wes-work-planning every WorkUnitCreated lacks `reference` and is ignored, so
+# every line would be flagged after the timeout.
+releaseConfirmation:
+  mode: "kafka"
+  consumerGroup: "order-management-release-confirmation"
+  timeout: "15m"
+  retention: "168h"
 
 analytics:
   enabled: true
