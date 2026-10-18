@@ -258,8 +258,8 @@ fi
 echo "==> 11. Kong plugins: chart-owned, observability on, auth off"
 # Fleet decision 2026-10-13: ALL Kong configuration — routes AND plugins —
 # lives in each application's Helm chart (namespace-scoped KongPlugin CRs
-# attached via konghq.com/plugins), switched on by warehouse-infra's values
-# (terraform/kong-plugins.tf). Terraform no longer kubectl-applies any Kong
+# attached via konghq.com/plugins), switched on by warehouse-infra's value
+# files (helm-values/). Terraform no longer kubectl-applies any Kong
 # object. These checks are the sensor for both halves of that decision:
 # the plugins must EXIST and be attached, and no authentication or
 # authorization plugin may ever appear at the gateway (removed fleet-wide).
@@ -300,7 +300,7 @@ else
 fi
 
 echo "==> 12. Every MCP server is exposed through Kong"
-# Host contract (mcp.tf + each chart's mcp-route.yaml): /api/mcp/<context>
+# Host contract (mcp.route in helm-values/<context>.yaml + each chart's mcp-route.yaml): /api/mcp/<context>
 # rewritten to /mcp. A real initialize — not a TCP probe — is the proof:
 # routing, rewrite, SSE streaming and the SDK handshake in one round trip.
 # NOTE: probe the ROUTE ROOT (/api/mcp/<ctx>), which rewrites to exactly

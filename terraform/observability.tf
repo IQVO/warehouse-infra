@@ -17,8 +17,8 @@
 #
 # Whole stack is gated on var.deploy_observability so
 # `terraform apply -var=deploy_observability=false` stands up the platform and
-# the services without it. Nothing in services.tf depends on anything here; see
-# the note at the bottom of services.tf.
+# the services without it (Kong's traces endpoint in helm-values/_platform.yaml
+# then points at a Collector that is not there, which Kong tolerates).
 # ---------------------------------------------------------------------------
 
 # Deliberately NOT labelled istio-injection=enabled. This namespace carries
@@ -497,6 +497,15 @@ resource "helm_release" "grafana" {
 
 resource "helm_release" "otel_collector" {
   count = var.deploy_observability ? 1 : 0
+
+  # Kong's traces endpoint in helm-values/_platform.yaml (ADR 0002 D2) must
+  # name this Collector's OTLP/HTTP receiver.
+  lifecycle {
+    precondition {
+      condition     = local.platform.kongPlugins.opentelemetry.tracesEndpoint == "http://${local.observability_dns.otel_collector}:${local.otel_otlp_http_port}/v1/traces"
+      error_message = "helm-values/_platform.yaml kongPlugins.opentelemetry.tracesEndpoint must be http://${local.observability_dns.otel_collector}:${local.otel_otlp_http_port}/v1/traces."
+    }
+  }
 
   # Jaeger first: the Collector's exporter needs somewhere to send to. It would
   # start regardless (the exporter retries), but a clean apply should not spend

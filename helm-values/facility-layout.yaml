@@ -16,12 +16,16 @@ config:
   eventPublisher: "kafka"
 
 kafka:
-  enabled: true
-  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
-
+  enabled: 'true'
 analytics:
   enabled: true
 
+  database:
+    existingSecret: facility-layout-analytics-db
+  reports:
+    route:
+      enabled: true
+      path: /api/facility-layout/reports
 livenessProbe:
   httpGet:
     path: /healthz
@@ -37,3 +41,53 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 5
   failureThreshold: 6
+
+# Formerly computed by terraform/services.tf (ADR 0002 phase 3, docs/adr/0002-application-delivery-boundary.md).
+# Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
+# _platform.yaml; image tags from Terraform (the Application's valuesObject).
+database:
+  existingSecret: facility-layout-db
+extraEnv: []
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/facility-layout-frontend
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/facility-layout
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/facility-layout
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/facility-layout
+          pathType: Prefix
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/facility-layout
+pathCatalogue:
+  content: ''
+  enabled: false
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

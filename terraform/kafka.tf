@@ -18,6 +18,16 @@
 resource "helm_release" "kafka" {
   count = var.deploy_kafka ? 1 : 0
 
+  # The application charts read the broker address from
+  # helm-values/_platform.yaml (ADR 0002 D2): it must name this release's
+  # Service.
+  lifecycle {
+    precondition {
+      condition     = local.platform.kafka.brokers == "kafka.${var.apps_namespace}.svc.cluster.local:9092"
+      error_message = "helm-values/_platform.yaml kafka.brokers must be kafka.${var.apps_namespace}.svc.cluster.local:9092 (this release's Service)."
+    }
+  }
+
   depends_on = [kubernetes_namespace.apps]
 
   name       = "kafka"

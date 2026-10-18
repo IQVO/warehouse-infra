@@ -22,7 +22,7 @@ the cluster know about".
 terraform/             Root module: services, Kafka, Postgres + PgBouncer, MCP, ArgoCD,
                        dashboards, the Nginx/Kong localhost edge
 terraform/modules/application/  One application's platform contract (DB, Secrets, images, Application)
-helm-values/           Per-service STATIC values (computed layer in services.tf wins)
+helm-values/           Every application's complete Helm values; ArgoCD reads them from develop (ADR 0002 D2)
 config/process-paths/  Seed data for scripts/seed-process-paths.py
 scripts/               up/down, smoke test, exposure-policy gate, chart selector check
 docs/                  Analytics governance, observability, edge decision, CloudEvents cutover
@@ -55,16 +55,19 @@ instance of `terraform/modules/application`.
    live.** Image tags are content-derived (`local-<hash12>`); never
    simplify them back to a fixed `local` tag (frontends included). Confirm
    with `kubectl rollout status` and the live image tag.
-4. **Adding to `analytics_services` / `mcp_services` on a Postgres that
+4. **Adding to `local.services` / `analytics_services` on a Postgres that
    already has data does nothing alone** (initdb runs once on an empty data
    dir): create the role/DB by hand. See the `add-or-change-a-service` skill.
-5. **`terraform validate`: both branches of a ternary must have the same
-   key set**, even when one side is inert.
-6. **The computed layer in `terraform/services.tf` OVERRIDES
-   `helm-values/*.yaml`.** Per-service env with no chart value goes in
-   `local.sync_edge_env`; an `extraEnv` in a helm-values file is silently dropped.
+5. **Application values deploy from GitHub `develop`, not from a local
+   apply.** `helm-values/<app>.yaml` is the application's whole configuration
+   (after `_platform.yaml`, before `kind-resources/<app>.yaml`); a change
+   reaches the cluster on merge, through an ArgoCD sync. Check it with
+   `helm template` first (`helm-values/_README.md`). Never a credential or an
+   image tag in a values file.
+6. **Never set an env var twice.** `extraEnv` is only for env the chart has
+   no dedicated value for; a duplicate env entry breaks ArgoCD's diff.
 7. **Every `*_MODE` env var defaults to `permissive` if unset.** Wire `MODE`
-   + `BASE_URL` in `local.sync_edge_env` in the SAME PR as a new sync edge.
+   + `BASE_URL` in the consumer's values file in the SAME PR as a new sync edge.
 8. **Every chart `Service` must select exactly ONE Deployment** (scope
    `selectorLabels` by `app.kubernetes.io/component`). Run
    `make chart-selector-check` before touching selector/label wiring.

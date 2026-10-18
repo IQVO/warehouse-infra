@@ -15,10 +15,10 @@ paths:
 ## Edge: Nginx :80 for assets, Kong :8000 for APIs
 
 - `terraform output product_endpoints` prints both edges. They are INDEPENDENT: neither proxies to the other. That split is a reviewed decision (`docs/exposure/localhost-edge-topology.md`); never chain one through the other and never add a `location /api` to the web gateway template.
-- CORS is a `KongClusterPlugin` labelled `global: "true"` (`terraform/kong-cors.tf`; KIC selects global plugins by that label plus a matching ingress class), not a per-route annotation. The charts' `httproute.yaml` templates render no annotations block, so per-route CORS would need N chart PRs.
+- CORS is a `KongPlugin` each application chart renders (its `kong-plugins.yaml`, fleet decision 2026-10-13), switched on by `kongPlugins.cors.enabled` in `helm-values/<context>.yaml`, with the one allowed origin (the web gateway's, never `*`) in `helm-values/_platform.yaml`. Terraform's web-gateway precondition fails the plan if that origin disagrees with `var.web_gateway_host_port`.
 - ArgoCD is deliberately on neither edge; access is `kubectl port-forward` only.
 - `scripts/test-exposure-policy.sh` (30 checks, needs a live cluster) is the conformance gate; run it after any edge change. Its assertions match on content-type and upstream identity, never bare HTTP status, because the gateway's catch-all returns `200 text/html` for unknown `/api/**` paths (SPA fallback).
-- The reports Service of each analytics context is routed by `kubernetes_ingress_v1.service_reports` and `null_resource.service_reports_httproute` in `terraform/services.tf`, not by a chart template; keep routing decisions here.
+- The reports Service of each analytics context is routed by the chart's own `reports-route.yaml` (fleet decision 2026-10-13: Kong config lives in the application charts), switched on by `analytics.reports.route` in `helm-values/<context>.yaml` with the Gateway `parentRefs` from `helm-values/_platform.yaml`. Terraform creates no route.
 
 ## Selectors: each Service selects exactly ONE Deployment
 
