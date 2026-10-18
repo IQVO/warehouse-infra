@@ -198,7 +198,7 @@ jobs:
   # Every chart this repo deploys lives in a SIBLING repo, so this job
   # checks out all eleven (ten service repos + warehouse-console) next to
   # this one, exactly matching the local dev layout the Makefile's CHARTS
-  # variable and terraform/locals.tf's chart_path values already assume.
+  # variable already assumes.
   # develop is checked out for each sibling (not main) to match what a
   # contributor testing against their own in-progress fleet changes would
   # see; this job re-runs on push to develop/main too so a sibling's own

@@ -213,10 +213,10 @@ and the console remote `inbound-receiving-frontend` is `inbound_mfe` at
 `EVENT_PUBLISHER=kafka`.
 
 `slotting-optimization` (forward pick-slot plans by ABC velocity, human
-approval; gap fix D10) is a plain `local.services` member: OLTP API only, no
+approval; gap fix D10) is a plain `kind: service` entry in `terraform/apps.yaml`: OLTP API only, no
 analytics read side, no web remote, and its read-only MCP server stays off
 (no consumer is wired). Its role/database `slotting_optimization` and the
-`slotting-optimization-db` Secret derive from `local.services`; the Kong route
+`slotting-optimization-db` Secret derive from that entry; the Kong route
 `/api/slotting-optimization` is the chart's own `gatewayApi` HTTPRoute. The API
 runs with `EVENT_PUBLISHER=kafka` (topic `warehouse.slotting-optimization.events`)
 and four consumers, each with a stable group
@@ -826,7 +826,7 @@ was staged for commit.
 
 **ArgoCD is now the sole owner of every chart's Helm release lifecycle** —
 every application in `terraform/applications.tf`'s registry (the
-`local.services` contexts, network-inventory-planning, network-fulfillment,
+`kind: service` contexts, network-inventory-planning, network-fulfillment,
 `warehouse-ops-agent`, `warehouse-console` and the EventCatalog: 17
 Applications). Terraform still bootstraps the
 platform (kind, Postgres, Kafka, Istio, Kong, the Nginx web gateway, and
@@ -835,19 +835,16 @@ ArgoCD itself) and each application's platform contract, but it runs no
 Application renders its chart with the value files in `helm-values/`
 (ADR 0002 D2).
 
-**Registering a new database-backed service is two steps** (the
-`add-or-change-a-service` skill has the detail): add it to
-`terraform/locals.tf`'s `local.services` map, and add
-`helm-values/<service>.yaml` plus `helm-values/kind-resources/<service>.yaml`
+**Registering a new application is two steps** (the
+`add-or-change-a-service` skill has the detail): add an entry to
+`terraform/apps.yaml` (its header documents the fields), and add
+`helm-values/<app>.yaml` plus `helm-values/kind-resources/<app>.yaml`
 (the plan fails while either is missing). Its role and database come with it
-(ADR 0005). The map feeds the application registry in
-`terraform/applications.tf`, which gives every entry one instance of
+(ADR 0005). `terraform/applications.tf` turns every entry into one instance of
 `terraform/modules/application`
-([ADR 0004](docs/adr/0004-one-application-registry.md)). Applications with a
-different database shape (`warehouse-ops-agent`, `warehouse-console`, the
-EventCatalog, network-fulfillment, network-inventory-planning) get an explicit
-entry in `local.other_applications` instead. A `terraform apply` after adding
-an entry:
+([ADR 0004](docs/adr/0004-one-application-registry.md), the registry file:
+[ADR 0007](docs/adr/0007-state-split-in-four-steps.md)). A `terraform apply`
+after adding an entry:
 
 1. Builds and side-loads the new service's image (the module's
    `null_resource.build_and_load`).
@@ -883,7 +880,7 @@ API gateway) — both are reserved for product traffic per
 [docs/exposure/localhost-edge-topology.md](docs/exposure/localhost-edge-topology.md).
 Local admin access is `kubectl port-forward` only, same as above.
 
-**Removing a service** is symmetric: delete its entry from `local.services`,
+**Removing a service** is symmetric: delete its entry from `terraform/apps.yaml`,
 `terraform apply`, and `prune: true` deletes both the `Application` and the
 Helm release it owned — no orphaned resources left behind.
 
@@ -986,8 +983,8 @@ the output. Never hand-edit the JSON.
   show on Prometheus `/alerts` and in the `ALERTS` series.
 
 Gates: `make observability-check` (committed JSON equals the generator
-output, valid JSON, no backslash escapes in PromQL, every context in
-`local.services` has a dashboard, every rule names its runbook, every context
+output, valid JSON, no backslash escapes in PromQL, every `kind: service`
+entry of `apps.yaml` has a dashboard, every rule names its runbook, every context
 has the four SLO rules on a bucket Kong exports) and
 `make alert-rules-check` (promtool `check rules` plus the unit tests in
 `terraform/alerting/tests/`, including the burn-rate cases in
@@ -1100,7 +1097,8 @@ warehouse-infra/
     ├── versions.tf              # Terraform + provider pins
     ├── providers.tf             # kind / kubernetes / helm wiring
     ├── variables.tf             # every knob, with the reasoning for each pin
-    ├── locals.tf                # local.services (database-backed contexts) and local.platform (_platform.yaml)
+    ├── apps.yaml                # the application registry (ADR 0007)
+    ├── locals.tf                # derivations from it, and local.platform (_platform.yaml)
     ├── main.tf                  # kind cluster + namespaces
     ├── postgres.tf              # PostgreSQL release + 4 databases
     ├── istio.tf                 # istio-base -> istiod
