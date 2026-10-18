@@ -129,9 +129,12 @@ check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observ
 check-all: check
 
 # --- agent harness (harness-template v3) -----------------------------------
-.PHONY: check-fast guide-lint harness-test
+.PHONY: check-fast secret-files-check guide-lint harness-test
 # Fast local gate used by the agent Stop hook (this repo's own quick checks).
-check-fast: tf-fmt-check shellcheck chart-selector-check observability-check
+check-fast: tf-fmt-check shellcheck chart-selector-check observability-check secret-files-check
+
+secret-files-check: ## no tracked plan, state, tfvars, kubeconfig or API key (the repo is public)
+	./scripts/check-no-secret-files.sh
 
 guide-lint: ## lint agent guides: skills load, references resolve, context budget
 	python3 scripts/harness/guide_lint.py
