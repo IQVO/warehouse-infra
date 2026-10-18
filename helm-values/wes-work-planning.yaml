@@ -13,8 +13,9 @@
 # release (kafka.tf) — see warehouse-infra terraform/kafka.tf.
 #
 # Analytics: the projector+reports pair (ADR-0010) is turned on here.
-# terraform/services.tf feeds analytics.database.projectorUrl/reportsUrl from
-# a Terraform-generated role (see locals.tf's analytics_database_urls); the
+# terraform/services.tf points analytics.database.existingSecret at the
+# wes-work-planning-analytics-db Secret modules/application writes from a
+# Terraform-generated role (applications.tf); the
 # database/role itself is created by hand against the live Postgres instance
 # the same way wes_work_planning's own OLTP migrations are (see the KNOWN GAP
 # note above and init-databases.sql.tftpl — initdb only runs on a truly empty

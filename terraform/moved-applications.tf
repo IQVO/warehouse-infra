@@ -416,3 +416,65 @@ moved {
   from = kubectl_manifest.ecosystem_application[0]
   to   = module.application["ecosystem"].kubectl_manifest.application[0]
 }
+
+# --- ADR 0002 phase 3: analytics passwords move into the module, whose
+# <name>-analytics-db Secret the charts now read (existingSecret) ---
+moved {
+  from = random_password.service_analytics_db["facility-layout"]
+  to   = module.application["facility-layout"].random_password.analytics_db[0]
+}
+
+moved {
+  from = random_password.service_analytics_db["fulfillment-execution"]
+  to   = module.application["fulfillment-execution"].random_password.analytics_db[0]
+}
+
+moved {
+  from = random_password.service_analytics_db["inbound-receiving"]
+  to   = module.application["inbound-receiving"].random_password.analytics_db[0]
+}
+
+moved {
+  from = random_password.service_analytics_db["inventory-storage"]
+  to   = module.application["inventory-storage"].random_password.analytics_db[0]
+}
+
+moved {
+  from = random_password.service_analytics_db["labor-performance"]
+  to   = module.application["labor-performance"].random_password.analytics_db[0]
+}
+
+moved {
+  from = random_password.service_analytics_db["order-management"]
+  to   = module.application["order-management"].random_password.analytics_db[0]
+}
+
+moved {
+  from = random_password.service_analytics_db["process-path-management"]
+  to   = module.application["process-path-management"].random_password.analytics_db[0]
+}
+
+moved {
+  from = random_password.service_analytics_db["product-master"]
+  to   = module.application["product-master"].random_password.analytics_db[0]
+}
+
+moved {
+  from = random_password.service_analytics_db["slotting-optimization"]
+  to   = module.application["slotting-optimization"].random_password.analytics_db[0]
+}
+
+moved {
+  from = random_password.service_analytics_db["warehouse-planning"]
+  to   = module.application["warehouse-planning"].random_password.analytics_db[0]
+}
+
+moved {
+  from = random_password.service_analytics_db["wes-work-planning"]
+  to   = module.application["wes-work-planning"].random_password.analytics_db[0]
+}
+
+moved {
+  from = random_password.service_analytics_db["workforce-management"]
+  to   = module.application["workforce-management"].random_password.analytics_db[0]
+}

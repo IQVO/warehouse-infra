@@ -103,13 +103,14 @@ locals {
       },
       # The "analytics report part" (ADR-0010): a projector (only writer)
       # + reports (read-only HTTP reader) pair, gated behind
-      # analytics.enabled in each of these six charts. A single generated
-      # role/database is used as both projectorUrl and reportsUrl for now
-      # (see locals.tf's analytics_database_urls comment on the promotion
-      # path to a distinct read-only role) -- every chart's own
-      # values.yaml already documents reportsUrl falling back to
-      # projectorUrl when left empty, so this is exactly that documented
-      # local/dev baseline, not a workaround.
+      # analytics.enabled in each of these charts. The DSNs never travel as
+      # values (they would sit in clear text in the ArgoCD Application's
+      # valuesObject): modules/application writes them into the
+      # <name>-analytics-db Secret, ANALYTICS_DATABASE_URL for the projector
+      # and ANALYTICS_READER_DATABASE_URL for the reports reader, and the
+      # chart reads it through analytics.database.existingSecret. One
+      # generated role serves both for now; a distinct read-only role is the
+      # governance charter's promotion path.
       # reports.route (inside the SAME analytics map: merge() is shallow,
       # a second analytics entry would drop enabled/database) is the
       # chart-rendered Kong route /api/<context>/reports -> /reports,
@@ -120,8 +121,7 @@ locals {
         analytics = {
           enabled = true
           database = {
-            projectorUrl = local.analytics_database_urls[name]
-            reportsUrl   = local.analytics_database_urls[name]
+            existingSecret = "${name}-analytics-db"
           }
           reports = {
             route = {
@@ -137,10 +137,9 @@ locals {
         }
       } : {},
       # slotting-optimization's analytics block (ADR 0006, repo PR #37) does
-      # NOT share the generic shape above: its chart takes a single DSN --
-      # analytics.url, rendered by its own analytics-secret.yaml into
-      # ANALYTICS_DATABASE_URL -- instead of the
-      # analytics.database.projectorUrl/reportsUrl pair (the same divergence
+      # NOT share the generic shape above: its chart reads a single DSN from
+      # analytics.existingSecret (or analytics.url, never set here) instead
+      # of the analytics.database.* pair (the same divergence
       # network-fulfillment's chart has; see network-fulfillment.tf), pins
       # its consumer group at analytics.consumerGroup (helm-values, not
       # analytics.projector.consumerGroup) and ships NO chart-rendered
@@ -155,7 +154,9 @@ locals {
       name == "slotting-optimization" ? {
         analytics = {
           enabled = true
-          url     = local.analytics_database_urls[name]
+          # The same <name>-analytics-db Secret; the chart reads its
+          # analytics.existingSecretKey (ANALYTICS_DATABASE_URL).
+          existingSecret = "${name}-analytics-db"
         }
       } : {},
       # Process-path catalogue (ADR-0017 in fulfillment-execution / ADR-0012
@@ -397,7 +398,7 @@ locals {
   # computed layer conditionally ALSO sets eventPublisher for
   # process-path-management/facility-layout's Kafka-source flags) and
   # `analytics` (static sets `enabled: true`; the computed layer adds
-  # `database.projectorUrl/reportsUrl` alongside it). Those two get an
+  # `database.existingSecret` alongside it). Those two get an
   # explicit nested merge so neither layer's keys are silently dropped --
   # verified against every chart's helm-values file: no other top-level
   # key is set by both layers (see the ArgoCD rollout plan's Phase 4 audit).
