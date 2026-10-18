@@ -15,12 +15,8 @@
 # Analytics: the projector+reports pair (ADR-0010) is turned on here.
 # analytics.database.existingSecret names the wes-work-planning-analytics-db
 # Secret modules/application writes from a Terraform-generated role
-# (applications.tf); the
-# database/role itself is created by hand against the live Postgres instance
-# the same way wes_work_planning's own OLTP migrations are (see the KNOWN GAP
-# note above and init-databases.sql.tftpl — initdb only runs on a truly empty
-# data directory, so an already-initialized cluster needs the new CREATE
-# ROLE/DATABASE statements applied manually once).
+# (applications.tf); the database/role itself is created by
+# modules/application's provisioning Job (ADR 0005), as for every application.
 
 replicaCount: 1
 

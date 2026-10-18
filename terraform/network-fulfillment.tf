@@ -14,17 +14,8 @@
 # Databases. The generated passwords, the network-fulfillment-db Secret
 # (DATABASE_URL through PgBouncer, MIGRATIONS_DATABASE_URL direct) and the
 # network-fulfillment-analytics-db Secret come from modules/application
-# (applications.tf, ADR 0002). The role and database names stay here,
-# because the platform's initdb script and PgBouncer userlist read them.
-#
-# NOTE FOR AN ALREADY-RUNNING CLUSTER: Bitnami executes
-# primary.initdb.scripts exactly ONCE, against an empty data directory. On a
-# cluster whose Postgres already has data, adding a role/database renders the
-# SQL but never runs it, and the pod then CrashLoopBackOffs with `password
-# authentication failed`. Create them by hand against the live primary,
-# mirroring templates/init-databases.sql.tftpl's loop body, using the
-# passwords from `terraform output -raw network_fulfillment_db_password` and
-# `terraform output -raw network_fulfillment_analytics_db_password`.
+# (applications.tf, ADR 0002), which also creates the roles and databases in
+# Postgres (ADR 0005). The names stay here, because the registry reads them.
 # ---------------------------------------------------------------------------
 locals {
   network_fulfillment_db_user = "network_fulfillment"
@@ -39,22 +30,11 @@ locals {
   network_fulfillment_analytics_db_name = "network_fulfillment_analytics"
 }
 
-output "network_fulfillment_db_password" {
-  description = "Generated password for the network-fulfillment OLTP role (needed to create the role by hand on an already-initialized Postgres)."
-  value       = module.application["network-fulfillment"].db_password
-  sensitive   = true
-}
-
 output "network_fulfillment_route" {
   description = "Kong/Gateway path this context's REST surface is reachable on."
   value       = "${var.api_path_prefix}/network-fulfillment"
 }
 
-output "network_fulfillment_analytics_db_password" {
-  description = "Generated password for the network-fulfillment analytics role (needed to create the role by hand on an already-initialized Postgres)."
-  value       = module.application["network-fulfillment"].analytics_db_password
-  sensitive   = true
-}
 # Reports route: DELETED (fleet decision 2026-10-13) — the chart's own
 # reports-route.yaml renders it (/api/<context>/reports -> /reports), switched
 # on by the analytics.reports.route values in its helm-values file.

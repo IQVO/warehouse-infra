@@ -3,6 +3,8 @@
 # the platform contract Terraform owns for it, and nothing else.
 #
 #   - generated database passwords (never committed; they live only in state)
+#     and the Jobs that create the role and the database in the platform's
+#     Postgres with them (modules/database, ADR 0005)
 #   - the <name>-db / <name>-analytics-db Secrets the chart reads through
 #     existingSecret, and any other Secret the root supplies (var.secrets)
 #   - the local image build(s), tagged by content so ArgoCD sees a new tag on
@@ -91,6 +93,31 @@ locals {
   migrations_database_url = var.database == null ? null : "postgres://${var.database.user}:${local.db_password}@${var.database.direct_host}:${var.database.direct_port}/${var.database.name}?sslmode=disable"
 
   analytics_database_url = var.analytics_database == null ? null : "postgres://${var.analytics_database.user}:${local.analytics_db_password}@${var.analytics_database.host}:${var.analytics_database.port}/${var.analytics_database.name}?sslmode=disable"
+}
+
+# The role and the database, created inside the cluster before anything that
+# needs them (ADR 0005). Same password as the <name>-db Secret below; a changed
+# password re-runs the Job, so Postgres never keeps an old one.
+module "provision_oltp" {
+  source = "../database"
+  count  = var.deploy && var.database != null ? 1 : 0
+
+  name     = var.name
+  role     = var.database.user
+  database = var.database.name
+  password = local.db_password
+  postgres = var.postgres
+}
+
+module "provision_analytics" {
+  source = "../database"
+  count  = var.deploy && var.analytics_database != null ? 1 : 0
+
+  name     = "${var.name}-analytics"
+  role     = var.analytics_database.user
+  database = var.analytics_database.name
+  password = local.analytics_db_password
+  postgres = var.postgres
 }
 
 resource "kubernetes_secret" "db" {
@@ -226,10 +253,13 @@ resource "kubectl_manifest" "application" {
     }
   }
 
-  # The chart's pods mount these Secrets; create them first.
+  # The chart's pods mount these Secrets and log in with these roles; create
+  # both first, so no pod starts against a database that does not exist yet.
   depends_on = [
     kubernetes_secret.db,
     kubernetes_secret.analytics_db,
     kubernetes_secret.extra,
+    module.provision_oltp,
+    module.provision_analytics,
   ]
 }

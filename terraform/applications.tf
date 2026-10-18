@@ -175,38 +175,6 @@ locals {
     dir             = "helm-values"
     local_dir       = "${path.module}/../helm-values"
   }
-
-  # The generated passwords ({ db, analytics_db }), for the platform's
-  # initdb script and PgBouncer userlist: the platform's dependency on the
-  # applications, which ADR 0002 phase 4 removes.
-  #
-  # One LITERAL key per application, never a for expression over
-  # module.application: a computed key (module.application[name]) makes the
-  # reader depend on the whole module call, image builds and Applications
-  # included (`terraform graph` shows the edge to "module.application
-  # (close)"), so Postgres would wait for every build. A database-backed
-  # application missing here fails the plan: local.service_passwords and the
-  # initdb template index the maps below.
-  app_passwords = {
-    "facility-layout"            = module.application["facility-layout"].passwords
-    "fulfillment-execution"      = module.application["fulfillment-execution"].passwords
-    "inbound-receiving"          = module.application["inbound-receiving"].passwords
-    "inventory-storage"          = module.application["inventory-storage"].passwords
-    "labor-performance"          = module.application["labor-performance"].passwords
-    "network-fulfillment"        = module.application["network-fulfillment"].passwords
-    "network-inventory-planning" = module.application["network-inventory-planning"].passwords
-    "order-management"           = module.application["order-management"].passwords
-    "process-path-management"    = module.application["process-path-management"].passwords
-    "product-master"             = module.application["product-master"].passwords
-    "slotting-optimization"      = module.application["slotting-optimization"].passwords
-    "warehouse-planning"         = module.application["warehouse-planning"].passwords
-    "wes-work-planning"          = module.application["wes-work-planning"].passwords
-    "workforce-management"       = module.application["workforce-management"].passwords
-  }
-
-  app_db_passwords           = { for name, p in local.app_passwords : name => p.db }
-  app_analytics_db_passwords = { for name, p in local.app_passwords : name => p.analytics_db }
-
 }
 
 module "application" {
@@ -222,6 +190,9 @@ module "application" {
   apps_namespace   = kubernetes_namespace.apps.metadata[0].name
   argocd_namespace = helm_release.argocd.namespace
   cluster_name     = kind_cluster.warehouse.name
+
+  # Where the module creates the application's role and database (ADR 0005).
+  postgres = local.postgres
 
   repos_root  = "${path.module}/../.."
   scripts_dir = "${path.module}/../scripts"

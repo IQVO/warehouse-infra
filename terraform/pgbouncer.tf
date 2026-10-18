@@ -60,64 +60,62 @@ locals {
   # range.
   pgbouncer_oltp_pool_size = 12
 
-  # Every OLTP database that should be reached THROUGH PgBouncer rather
-  # than directly against Postgres: the 8 services in local.services plus
-  # network-fulfillment (not in local.services -- see that file's header --
-  # but sharing the same Postgres instance on the same least-privilege
-  # terms). Analytics databases are deliberately EXCLUDED from this map and
-  # stay wired directly at Postgres (local.analytics_database_urls,
-  # postgres.tf/network-fulfillment.tf unchanged) -- see the design doc's
-  # "why analytics stays direct" section.
-  pgbouncer_oltp_services = merge(
-    {
-      for name, svc in local.services :
-      name => merge(svc, { password = local.service_passwords[name] })
-    },
-    {
-      # network-inventory-planning: not in local.services (see
-      # network-inventory-planning.tf's header) but its OLTP database is
-      # pooled on the same terms as network-fulfillment's below.
-      "network-inventory-planning" = {
-        db       = local.network_inventory_planning_db_name
-        user     = local.network_inventory_planning_db_user
-        password = local.app_db_passwords["network-inventory-planning"]
-      }
-    },
-    {
-      "network-fulfillment" = {
-        db       = local.network_fulfillment_db_name
-        user     = local.network_fulfillment_db_user
-        password = local.app_db_passwords["network-fulfillment"]
-      }
-    },
-  )
+  # PgBouncer lists no application (ADR 0005). It resolves any database name
+  # through the `*` fallback entry and authenticates every client with
+  # auth_query, run as this dedicated role through the lookup function that
+  # templates/pgbouncer-auth.sql creates in the postgres database. Adding an
+  # application therefore changes neither pgbouncer.ini nor userlist.txt.
+  # Postgres' own CONNECT privilege is still the access control: each
+  # application database is closed to every role but its owner.
+  pgbouncer_auth_user = "pgbouncer_auth"
 
   pgbouncer_config = templatefile(
     "${path.module}/templates/pgbouncer.ini.tftpl",
     {
-      services       = local.pgbouncer_oltp_services
       postgres_host  = local.postgres_host
       postgres_port  = local.postgres_port
       pgbouncer_port = local.pgbouncer_port
       oltp_pool_size = local.pgbouncer_oltp_pool_size
       admin_user     = local.pgbouncer_admin_user
+      auth_user      = local.pgbouncer_auth_user
     }
   )
 
   pgbouncer_userlist = templatefile(
     "${path.module}/templates/pgbouncer-userlist.txt.tftpl",
     {
-      services       = local.pgbouncer_oltp_services
       admin_user     = local.pgbouncer_admin_user
       admin_password = var.postgres_admin_password
+      auth_user      = local.pgbouncer_auth_user
+      auth_password  = random_password.pgbouncer_auth.result
     }
   )
 }
 
+# The lookup role PgBouncer authenticates clients through (ADR 0005). Its
+# password is generated here and lives in state and in the userlist only.
+resource "random_password" "pgbouncer_auth" {
+  length  = 24
+  special = false
+}
+
+# Creates the role and the lookup function in Postgres. The same Job
+# mechanism the applications use (modules/database), run once per cluster and
+# again whenever the password or the SQL changes.
+module "pgbouncer_auth" {
+  source = "./modules/database"
+
+  name      = "pgbouncer-auth"
+  role      = local.pgbouncer_auth_user
+  password  = random_password.pgbouncer_auth.result
+  extra_sql = file("${path.module}/templates/pgbouncer-auth.sql")
+  postgres  = local.postgres
+}
+
 # Holds both rendered config files as Secret keys (not a ConfigMap: the
-# userlist.txt key carries every OLTP role's real plaintext password --
-# same "never a plaintext DSN/credential in a non-Secret object" posture
-# modules/application's <name>-db Secrets follow).
+# userlist.txt key carries the superuser's and the lookup role's plaintext
+# passwords -- same "never a plaintext DSN/credential in a non-Secret object"
+# posture modules/application's <name>-db Secrets follow).
 # Mounted as a whole directory at PgBouncer's MOUNTED_CONF_DIR
 # (/bitnami/pgbouncer/conf) -- the Bitnami entrypoint's own
 # pgbouncer_copy_mounted_config step copies both files into its real config
@@ -144,6 +142,7 @@ resource "kubernetes_deployment" "pgbouncer" {
   depends_on = [
     kubernetes_secret.pgbouncer_config,
     helm_release.postgresql,
+    module.pgbouncer_auth,
   ]
 
   metadata {
@@ -336,8 +335,8 @@ resource "kubernetes_deployment" "pgbouncer" {
 # Kept as its own Secret (rather than folded into pgbouncer_config above)
 # because it holds the Postgres SUPERUSER password used only for the
 # entrypoint's backend-reachability check -- keeping it separate from the
-# per-service userlist.txt/pgbouncer.ini Secret means a future rotation of
-# one does not require re-rendering the other.
+# userlist.txt/pgbouncer.ini Secret means a future rotation of one does not
+# require re-rendering the other.
 resource "kubernetes_secret" "pgbouncer_admin_password" {
   metadata {
     name      = "${local.pgbouncer_release_name}-admin"

@@ -9,22 +9,13 @@ output "frontend_image_tag" {
 }
 
 output "db_password" {
-  description = "Generated OLTP role password (null without var.database)."
+  description = "Generated OLTP role password (null without var.database). Read by the root's sensitive database_urls output only; the platform no longer depends on it (ADR 0005)."
   value       = local.db_password
   sensitive   = true
 }
 
 output "analytics_db_password" {
-  description = "Generated analytics role password (null without var.analytics_database)."
+  description = "Generated analytics role password (null without var.analytics_database). Read by the root's sensitive analytics_database_urls output only."
   value       = local.analytics_db_password
   sensitive   = true
-}
-
-output "passwords" {
-  description = "Both generated passwords, { db, analytics_db } (each null when absent). The platform's initdb script and PgBouncer userlist read them through the root's local.app_passwords until ADR 0002 phase 4."
-  value = {
-    db           = local.db_password
-    analytics_db = local.analytics_db_password
-  }
-  sensitive = true
 }

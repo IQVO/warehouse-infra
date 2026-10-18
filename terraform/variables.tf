@@ -356,15 +356,12 @@ variable "postgres_persistence_enabled" {
     Defaults to true (PVC) as of 2026-09-26: the user decided data durability
     across pod/node restarts is now preferred over the reproducible-from-any-
     state disposability this flag used to default to. The tradeoff this flips
-    is real and still applies -- `primary.initdb.scripts` only runs when the
-    data directory is empty, so once a volume exists, a NEW logical database
-    added to `local.services`/`local.analytics_services` will NOT be created
-    by initdb on a pod restart; see the "Adding a service to analytics_services
-    ... initdb never re-runs" pitfall in this repo's operational notes and
-    apply the manual CREATE ROLE/DATABASE workaround it documents. Set
-    `-var postgres_persistence_enabled=false` to go back to the old
-    reproducible-emptyDir behavior (e.g. for a disposable CI/throwaway
-    cluster).
+    is real and still applies -- data now survives a pod restart, so a
+    stale database or role can too. Roles and databases are provisioned by
+    Jobs on every apply (ADR 0005), so a new application needs no manual SQL
+    on a populated volume. Set `-var postgres_persistence_enabled=false` to
+    go back to the old reproducible-emptyDir behavior (e.g. for a disposable
+    CI/throwaway cluster).
   EOT
   type        = bool
   default     = true
