@@ -133,3 +133,9 @@ variable "postgres" {
   })
   default = null
 }
+
+variable "platform_ready" {
+  description = "Any value that exists only once the platform objects the chart's manifests need (the Gateway API CRDs and the Gateway) are in the cluster. The Application is created after it, so ArgoCD never syncs a route before its CRD."
+  type        = string
+  default     = null
+}

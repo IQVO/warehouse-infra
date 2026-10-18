@@ -23,3 +23,4 @@ Step-by-step recipes are in the skills `add-or-change-a-service` and `deploy-loc
 - Moving a resource into or out of the module ships a `moved` block in `terraform/moved-applications.tf` and a plan-parity check (same actions and values at the new address).
 - `terraform destroy` leaves about 60 phantom resources in state: back up the tfstate, confirm `kind get clusters` shows none, then `terraform state rm` each. Details in `deploy-local-checkout`.
 - Never add an `EVENT_ENVELOPE_MODE` or similar toggle (see the events rule).
+- The Gateway API CRDs, GatewayClass and Gateway are `kubectl_manifest` resources (`terraform/gateway-api.tf`, `docs/adr/0006-declarative-gateway-api.md`). The CRD bundle is vendored per release under `terraform/gateway-api/`; add one with `scripts/vendor-gateway-api.sh <tag>`, and read the diff for removed documents before bumping `gateway_api_version`. Every `Application` waits on `local.gateway_ready`, so no `-target` staging is needed.

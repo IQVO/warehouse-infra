@@ -716,9 +716,12 @@ variable "deploy_gateway_api" {
 
 variable "gateway_api_version" {
   description = <<-EOT
-    kubernetes-sigs/gateway-api release tag for the standard-channel CRD
-    bundle, resolved from
-    https://github.com/kubernetes-sigs/gateway-api/releases/latest.
+    kubernetes-sigs/gateway-api release tag of the standard-channel bundle
+    (CRDs plus the upstream safe-upgrades admission policy). The bundle is
+    vendored: terraform/gateway-api/standard-install-<tag>.yaml must exist,
+    and scripts/vendor-gateway-api.sh <tag> adds it. Before moving to a new
+    tag, read the diff for removed documents: Terraform deletes a CRD that
+    the bundle no longer carries, and the cluster deletes every route of it.
   EOT
   type        = string
   default     = "v1.6.2"

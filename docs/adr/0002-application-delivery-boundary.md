@@ -18,7 +18,9 @@ a platform fact is a Terraform variable (the Kong namespace, the host ports),
 Terraform checks `_platform.yaml` against it with a precondition instead of
 reading it. Phase 4 implemented by [ADR 0005](0005-database-provisioning-by-jobs.md),
 which decides the database provisioning mechanism: a Job per role, and a
-PgBouncer that lists no application. Phases 5 and 6 open.
+PgBouncer that lists no application. Phase 5 implemented by
+[ADR 0006](0006-declarative-gateway-api.md): the Gateway API objects are
+`kubectl_manifest` resources with a vendored CRD bundle. Phase 6 open.
 
 ## Context
 
