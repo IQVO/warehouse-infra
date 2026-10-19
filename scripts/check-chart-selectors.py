@@ -51,61 +51,115 @@ CHARTS: dict[str, dict[str, str]] = {
     "../../wes-work-planning/charts/wes-work-planning": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
     },
+    # fulfillment-execution: every cmd binary (api, mcp, projector) now runs
+    # on real Postgres and real Kafka only (ADR-0052: Postgres and Kafka are
+    # the only runtime of every cmd binary); give it dummies (no password).
     "../../fulfillment-execution/charts/fulfillment-execution": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
     },
     "../../workforce-management/charts/workforce-management": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
         # This chart's templates fail to render at all without a database
         # URL or existingSecret -- see fleet skill note "workforce-management's
-        # chart refuses to render without a database URL".
-        "database.url": "postgres://u:p@example.invalid:5432/db",
+        # chart refuses to render without a database URL". ADR-0038: Postgres
+        # and Kafka are the only runtime, and analytics needs its own DSN.
+        "database.url": "postgres://u:***@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
     },
+    # facility-layout: ADR 0039 (Postgres and Kafka are the only runtime);
+    # analytics needs its own DSN and a stable consumer group too.
     "../../facility-layout/charts/facility-layout": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
+        "analytics.projector.consumerGroup": "facility-layout-analytics",
     },
+    # labor-performance: ADR 0034 (Postgres and Kafka are the only runtime);
+    # the always-on fulfillment-events consumer needs a stable group id too.
     "../../labor-performance/charts/labor-performance": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.kafkaConsumerGroup": "labor-performance",
     },
+    # process-path-management: ADR 0037 (Postgres and Kafka are the only
+    # runtime); give it dummies (no password).
     "../../process-path-management/charts/process-path-management": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
     },
     # warehouse-planning: OLTP api + the optional mcp, frontend (capacity_mfe)
     # and analytics (projector/reports) components. The chart refuses to render
     # without a database source and refuses analytics without a DSN source and
-    # kafka, so give it dummies (no password).
+    # kafka (ADR 0016), plus three always-on consumers and the order-management
+    # demand projection each need a stable group id / site id, so give it
+    # dummies (no password).
     "../../warehouse-planning/charts/warehouse-planning": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
-        "kafka.enabled": "true",
+        "kafka.enabled": "true", "kafka.brokers": "kafka.example.invalid:9092",
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
         "database.url": "postgres://u@example.invalid:5432/db",
+        "analytics.projector.consumerGroup": "warehouse-planning-analytics",
+        "config.laborCapacityConsumerGroup": "warehouse-planning-labor-capacity",
+        "config.storageCapacityConsumerGroup": "warehouse-planning-storage-capacity",
+        "demand.consumerGroup": "warehouse-planning-demand",
+        "demand.siteId": "SITE1",
     },
     # product-master: OLTP api + the optional mcp, frontend (productmaster_mfe)
     # and analytics (product-projector/product-reports) components. Same render
     # guards as warehouse-planning (database source; analytics needs a DSN
-    # source and kafka), so give it the same dummies (no password).
+    # source, kafka and a stable consumer group id; ADR 0010), so give it the
+    # same dummies (no password).
     "../../product-master/charts/product-master": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
-        "kafka.enabled": "true",
+        "kafka.enabled": "true", "kafka.brokers": "kafka.example.invalid:9092",
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
         "database.url": "postgres://u@example.invalid:5432/db",
+        "analytics.projector.consumerGroup": "product-master-analytics",
     },
     # inbound-receiving: OLTP api + the optional mcp, frontend (inbound_mfe)
     # and analytics (inbound-projector/inbound-reports) components. Same render
     # guards as product-master (database source; analytics needs a DSN source
-    # and kafka), so give it the same dummies (no password).
+    # and kafka; ADR 0011), plus two always-on consumers each need a stable
+    # group id, so give it the same dummies (no password).
     "../../inbound-receiving/charts/inbound-receiving": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
-        "kafka.enabled": "true",
+        "kafka.enabled": "true", "kafka.brokers": "kafka.example.invalid:9092",
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
         "database.url": "postgres://u@example.invalid:5432/db",
+        "config.productConsumerGroup": "inbound-receiving-product",
+        "config.dockDoorConsumerGroup": "inbound-receiving-dock-door",
     },
     # slotting-optimization: OLTP api + the optional mcp component (no
     # frontend, no analytics). The chart refuses to render without a database
-    # source, so give it a dummy (no password).
+    # source and kafka brokers (ADR 0011), and four always-on consumers each
+    # need a stable group id, so give it dummies (no password).
     "../../slotting-optimization/charts/slotting-optimization": {
         "mcp.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.demandConsumerGroup": "slotting-demand",
+        "config.productConsumerGroup": "slotting-product",
+        "config.layoutConsumerGroup": "slotting-layout",
+        "config.relocationConsumerGroup": "slotting-relocation",
+    },
+    # pick-face-replenishment and task-interleaving: a single OLTP api
+    # Deployment/Service each (no mcp, no frontend, no analytics components).
+    # Both charts refuse to render without a database source and without
+    # Kafka brokers (ADR 0006: Postgres and Kafka are the only runtime), so
+    # give them dummies (no password).
+    "../../pick-face-replenishment/charts/pick-face-replenishment": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+    },
+    "../../task-interleaving/charts/task-interleaving": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
     },
     # network-inventory-planning: OLTP api + the optional mcp, frontend
     # (nip_mfe) and analytics (projector/reports) components. The chart needs a

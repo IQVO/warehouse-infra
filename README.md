@@ -133,8 +133,8 @@ Every bounded-context service's OLTP pod listens on container port `8080`
 
 | Service (`warehouse-systems` ns)         | Service port → target | What it is |
 |--------------------------------------------|------------------------|------------|
-| `<service>` (12 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master, inbound-receiving, slotting-optimization) | `80 → 8080` | OLTP REST API, routed by Kong |
-| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — every context whose `helm-values/<context>.yaml` sets `mcp.enabled` (the 12 above plus network-fulfillment and network-inventory-planning) |
+| `<service>` (14 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master, inbound-receiving, slotting-optimization, pick-face-replenishment, task-interleaving) | `80 → 8080` | OLTP REST API, routed by Kong |
+| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — every context whose `helm-values/<context>.yaml` sets `mcp.enabled` (the first 12 above, not pick-face-replenishment or task-interleaving, plus network-fulfillment and network-inventory-planning) |
 | `<service>-reports`                        | `80 → 8092`             | Analytics read-only REST API (only where `analytics.enabled`, see `locals.tf`'s `analytics_services`) |
 | `<service>-frontend`                       | `80 → 8080`             | Module Federation remote, proxied by the web gateway at `/mfes/<context>/` |
 | `warehouse-console`                        | `80 → 8080`             | Console shell SPA, proxied by the web gateway at `/` |
@@ -238,6 +238,30 @@ not do on its own: its chart does not render the Kong plugins yet (no `kong-plug
 `scripts/test-exposure-policy.sh` section 11 flags its HTTPRoute and Kong
 exports no `kong_http_requests_total` series for it until that chart change
 lands in slotting-optimization.
+
+`pick-face-replenishment` (WMS: keeps forward pick faces stocked from reserve bins)
+and `task-interleaving` (WES: recommends a nearby second task for an operator's
+station trip) are plain `kind: service` entries in `terraform/apps.yaml`: OLTP API
+only, no analytics read side, no MCP server, no web remote. Each runs on real
+Postgres and real Kafka only (their ADR 0006), so neither values file sets a `*_MODE`
+variable. Role/database `pick_face_replenishment` / `task_interleaving` and the
+`<name>-db` Secret derive from the entry (provisioning Job, ADR 0005); the Kong
+route `/api/<name>` is the chart's own `gatewayApi` HTTPRoute. Consumer groups
+(`helm-values/<name>.yaml`): pick-face-replenishment `-inventory`
+(`warehouse.inventory.events`), `-slotting` (`warehouse.slotting-optimization.events`)
+and `-layout` (`warehouse.facility.events`); task-interleaving `-fulfillment`
+(`warehouse.fulfillment.events`) and `-layout`. They publish
+`warehouse.pick-face-replenishment.events` / `warehouse.task-interleaving.events`
+(plus a `.analytics` topic each), auto-created on first write. The chains: pick-face
+replenishment → wes-work-planning (`REPLENISHMENT_MODE=kafka`, group
+`wes-work-planning-replenishment`, its ADR 0042) plans `REPLENISH` work →
+fulfillment-execution `REPLENISH` task → `TaskCompleted` → inventory-storage's
+TaskCompleted consumer relocates the stock; task-interleaving ← fulfillment-execution's
+`TaskAvailable`/`TaskClaimed`/`TaskCompleted`, and its `InterleavingHintIssued` →
+fulfillment-execution (`TASK_INTERLEAVING_MODE=kafka`, group
+`fulfillment-execution-interleaving`, its ADR 0051; advisory, fail-open). They need the
+`REPLENISH` process path (post-deploy seed step 1) and the `replenish` capability on
+the operators that should claim those tasks.
 
 **A structural gotcha worth knowing before you `kubectl port-forward pod/…`:**
 every chart's `selectorLabels` helper emits only
@@ -648,6 +672,8 @@ collides head-on with the console shell's own client-side routes —
 | `http://localhost:8000/api/product-master/*`              | `/api/product-master` → `/*`         | `product-master.warehouse-systems.svc.cluster.local` (`/api/product-master/reports/*` is meant for `product-master-reports` but currently lands here and 404s, see the known issue above) |
 | `http://localhost:8000/api/inbound-receiving/*`           | `/api/inbound-receiving` → `/*`      | `inbound-receiving.warehouse-systems.svc.cluster.local` (`/api/inbound-receiving/reports/*` is meant for `inbound-receiving-reports`; same caveat as product-master) |
 | `http://localhost:8000/api/slotting-optimization/*`       | `/api/slotting-optimization` → `/*`  | `slotting-optimization.warehouse-systems.svc.cluster.local` |
+| `http://localhost:8000/api/pick-face-replenishment/*`     | `/api/pick-face-replenishment` → `/*` | `pick-face-replenishment.warehouse-systems.svc.cluster.local` |
+| `http://localhost:8000/api/task-interleaving/*`           | `/api/task-interleaving` → `/*`      | `task-interleaving.warehouse-systems.svc.cluster.local`     |
 | `http://localhost:8000/api/network-inventory-planning/*`  | `/api/network-inventory-planning` → `/*` | `network-inventory-planning.warehouse-systems.svc.cluster.local` |
 | `http://localhost:8000/api/warehouse-ops-agent/*`         | `/api/warehouse-ops-agent` → `/*`    | `warehouse-ops-agent.warehouse-systems.svc.cluster.local`   |
 
@@ -1106,6 +1132,8 @@ warehouse-infra/
 │   ├── inventory-storage.yaml
 │   ├── inbound-receiving.yaml
 │   ├── slotting-optimization.yaml
+│   ├── pick-face-replenishment.yaml
+│   ├── task-interleaving.yaml
 │   ├── product-master.yaml
 │   ├── wes-work-planning.yaml
 │   ├── workforce-management.yaml
