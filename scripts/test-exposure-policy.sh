@@ -120,11 +120,12 @@ done
 echo "==> 6. Every API answers on the API origin"
 # network-inventory-planning's healthz deliberately returns 204 No Content
 # (no body by design) — that is a healthy answer, not a failure.
-# slotting-optimization has no web remote, so it is in this list only (not 5).
+# slotting-optimization, pick-face-replenishment and task-interleaving have no
+# web remote, so they are in this list only (not 5).
 for ctx in order-management inventory-storage wes-work-planning fulfillment-execution \
            workforce-management facility-layout labor-performance process-path-management \
            warehouse-planning product-master inbound-receiving slotting-optimization \
-           network-inventory-planning; do
+           pick-face-replenishment task-interleaving network-inventory-planning; do
   CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${API_URL}/api/${ctx}/healthz" || echo 000)"
   if [[ "${CODE}" == "200" || ( "${CODE}" == "204" && "${ctx}" == "network-inventory-planning" ) ]]; then
     pass "${ctx} /healthz -> ${CODE}"

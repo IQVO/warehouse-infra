@@ -95,6 +95,13 @@ applications:
     analytics: true
     frontend_remote: order_mgmt_mfe
 
+  # pick-face-replenishment: no analytics projector/reports pair and no
+  # frontend (its chart has no analytics: block and ships no web remote).
+  pick-face-replenishment:
+    kind: service
+    repo_owner: IQVO
+    database: true
+
   process-path-management:
     kind: service
     database: true
@@ -113,6 +120,13 @@ applications:
     repo_owner: IQVO
     database: true
     analytics: true
+
+  # task-interleaving: no analytics projector/reports pair and no frontend
+  # (its chart has no analytics: block and ships no web remote).
+  task-interleaving:
+    kind: service
+    repo_owner: IQVO
+    database: true
 
   warehouse-console:
     kind: other

@@ -107,6 +107,19 @@ CHARTS: dict[str, dict[str, str]] = {
         "mcp.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
     },
+    # pick-face-replenishment and task-interleaving: a single OLTP api
+    # Deployment/Service each (no mcp, no frontend, no analytics components).
+    # Both charts refuse to render without a database source and without
+    # Kafka brokers (ADR 0006: Postgres and Kafka are the only runtime), so
+    # give them dummies (no password).
+    "../../pick-face-replenishment/charts/pick-face-replenishment": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+    },
+    "../../task-interleaving/charts/task-interleaving": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+    },
     # network-inventory-planning: OLTP api + the optional mcp, frontend
     # (nip_mfe) and analytics (projector/reports) components. The chart needs a
     # database source and refuses analytics without a DSN source and kafka, so
