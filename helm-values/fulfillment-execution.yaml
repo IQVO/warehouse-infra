@@ -83,6 +83,18 @@ extraEnv:
     value: http
   - name: FACILITY_LAYOUT_BASE_URL
     value: http://facility-layout.warehouse-systems.svc.cluster.local:80
+  # InterleavingHintIssued from task-interleaving (warehouse.task-interleaving.events)
+  # into a local per-station hint copy that claimNext uses only as a tie-break
+  # inside one priority band (fulfillment-execution ADR 0051). Advisory and
+  # fail-open: unset, the mode defaults to permissive and claimNext runs the
+  # pre-0051 path unchanged. The chart has no dedicated value, so it lives
+  # here. Stable group; a brand-new group starts at the LATEST offset.
+  # Rollback: drop both entries. TaskAvailable / TaskClaimed (ADR 0049) need
+  # nothing here: they leave through the outbox under EVENT_PUBLISHER=kafka.
+  - name: TASK_INTERLEAVING_MODE
+    value: kafka
+  - name: TASK_INTERLEAVING_CONSUMER_GROUP
+    value: fulfillment-execution-interleaving
 frontend:
   enabled: true
   image:

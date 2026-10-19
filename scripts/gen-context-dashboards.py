@@ -402,6 +402,33 @@ CONTEXTS = [
         "business_metrics": [],
     },
     {
+        "key": "pick-face-replenishment",
+        "title": "Pick-Face Replenishment",
+        "uid": "warehouse-pick-face-replenishment",
+        # The service exports NO metric today (its observability page on
+        # origin/develop: no meter, no OTel SDK, no /metrics, no otelchi), so
+        # business_metrics stays empty (never invent a metric), there is no
+        # outbox-lag gauge and the HTTP RED and Go-runtime rows stay empty
+        # until it instruments itself. The Kong rows are live: the chart
+        # renders the Kong prometheus plugin (helm-values/pick-face-replenishment.yaml).
+        # service_regex follows the fleet prefix convention.
+        "service_regex": "pick-face-replenishment.*",
+        "loki_app": "pick-face-replenishment",
+        "business_metrics": [],
+    },
+    {
+        "key": "task-interleaving",
+        "title": "Task Interleaving",
+        "uid": "warehouse-task-interleaving",
+        # Same state as pick-face-replenishment: its observability page on
+        # origin/develop registers 0 OTel instruments and wires no otelchi, so
+        # business_metrics stays empty and there is no outbox-lag gauge; the
+        # Kong rows are live (kongPlugins.prometheus in its values file).
+        "service_regex": "task-interleaving.*",
+        "loki_app": "task-interleaving",
+        "business_metrics": [],
+    },
+    {
         "key": "warehouse-ops-agent",
         "title": "Warehouse Ops Agent",
         "uid": "warehouse-warehouse-ops-agent",

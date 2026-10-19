@@ -105,6 +105,16 @@ jobs:
           path: slotting-optimization
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/pick-face-replenishment
+          ref: develop
+          path: pick-face-replenishment
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/task-interleaving
+          ref: develop
+          path: task-interleaving
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/network-inventory-planning
           ref: develop
           path: network-inventory-planning
@@ -274,6 +284,16 @@ jobs:
           path: slotting-optimization
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/pick-face-replenishment
+          ref: develop
+          path: pick-face-replenishment
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/task-interleaving
+          ref: develop
+          path: task-interleaving
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/network-inventory-planning
           ref: develop
           path: network-inventory-planning
@@ -379,6 +399,16 @@ jobs:
           repository: IQVO/slotting-optimization
           ref: develop
           path: slotting-optimization
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/pick-face-replenishment
+          ref: develop
+          path: pick-face-replenishment
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/task-interleaving
+          ref: develop
+          path: task-interleaving
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: IQVO/network-inventory-planning
