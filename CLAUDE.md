@@ -1,5 +1,7 @@
 # Project: warehouse-infra
 
+<!-- harness-template: v4 -->
+
 Terraform + Helm deployment of the entire `warehouse-systems` fleet onto a
 local `kind` cluster named `warehouse`. This repo owns the cluster's
 existence, not any bounded context's business logic: one Terraform root
