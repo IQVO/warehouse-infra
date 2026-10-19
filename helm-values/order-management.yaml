@@ -35,6 +35,15 @@ plannedCapacity:
   consumerGroup: "order-management-planned-capacity"
   siteId: "SIM1"
 
+# Site/SKU demand projection (order-management ADR 0035). With siteId set, every order line that
+# allocates, re-allocates or is re-promised emits a PII-free SiteSkuDemandChanged event on
+# warehouse.order-management.events (static-site-v1: ALL demand projects to this ONE site), which
+# network-inventory-planning consumes as the destination's need for the scheduled rebalance pass
+# (its ADR 0015). AUS3 is a stocked Sub-Same-Day FC that is both a transfer origin and a destination,
+# with lanes to and from its Texas neighbours (scripts/seed-transfer-lanes.py). Unset = projection off.
+demandProjection:
+  siteId: "AUS3"
+
 # Product classification from a local copy of product-master's events
 # (order-management ADR 0036; product-master ADR 0003 stage D). Consumes
 # ProductClassified from warehouse.product-master.events into a Postgres copy
