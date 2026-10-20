@@ -117,6 +117,8 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.laborCapacityConsumerGroup": "warehouse-planning-labor-capacity",
         "config.storageCapacityConsumerGroup": "warehouse-planning-storage-capacity",
         "demand.consumerGroup": "warehouse-planning-demand",
+        "inbound.consumerGroup": "warehouse-planning-inbound-demand",
+        "observed.consumerGroup": "warehouse-planning-observed-capacity",
         "demand.siteId": "SITE1",
     },
     # product-master: OLTP api + the optional mcp, frontend (productmaster_mfe)
