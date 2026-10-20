@@ -31,7 +31,21 @@
 # (the direct, non-pooled DSN Terraform puts in the <svc>-db Secret);
 # DATABASE_URL itself goes through PgBouncer. The role/database are created
 # by modules/application's provisioning Job (ADR 0005), before the first sync.
-# No analytics projector/reports pair, no MCP server and no frontend.
+#
+# Optional components (all switched on below):
+#   - MCP server (cmd/mcp, pick-face-replenishment ADR 0007): mcp.enabled plus
+#     the Kong route /api/mcp/pick-face-replenishment (mcp.route).
+#   - Analytics read side (ADR 0008): pfr-projector (the only writer of the
+#     SEPARATE pick_face_replenishment_analytics database, fed by
+#     warehouse.pick-face-replenishment.analytics) and pfr-reports (read-only,
+#     Service pick-face-replenishment-analytics-reports:80 -- the chart has no
+#     Kong route for reports). The DSN never appears here: modules/application
+#     writes it into the pick-face-replenishment-analytics-db Secret (the chart
+#     reads only ANALYTICS_DATABASE_URL, apps.yaml analytics.secret_keys), which
+#     analytics.existingSecret names.
+#   - The console remote (replenishment_mfe, web/): frontend below; its
+#     content-addressed image tag comes from Terraform (local.frontend_remotes),
+#     the web gateway serves it at /mfes/pick-face-replenishment/.
 
 replicaCount: 1
 
@@ -46,11 +60,27 @@ config:
   slottingConsumerGroup: "pick-face-replenishment-slotting"
   layoutConsumerGroup: "pick-face-replenishment-layout"
 
+# Analytics read side (ADR 0008). The projector's consumer group is a FIXED,
+# stable id (fleet charter naming `<ctx>-analytics`): a restarted pod resumes
+# from its committed offsets, and a brand-new group rebuilds the model from the
+# topic's history. Equal to the chart's default, pinned here so a rename in code
+# cannot silently orphan the committed offsets. MANDATORY when enabled (the
+# chart refuses an empty one).
+analytics:
+  enabled: true
+  consumerGroup: "pick-face-replenishment-analytics"
+  existingSecret: pick-face-replenishment-analytics-db
+
 # Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
 # _platform.yaml; image tags from Terraform (the Application's valuesObject).
 database:
   existingSecret: pick-face-replenishment-db
 extraEnv: []
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/pick-face-replenishment-frontend
 gatewayApi:
   enabled: true
   hosts:
@@ -77,6 +107,11 @@ kongPlugins:
     enabled: true
   prometheus:
     enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/pick-face-replenishment
 service:
   port: 80
   targetPort: 8080

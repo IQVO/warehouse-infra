@@ -95,12 +95,17 @@ applications:
     analytics: true
     frontend_remote: order_mgmt_mfe
 
-  # pick-face-replenishment: no analytics projector/reports pair and no
-  # frontend (its chart has no analytics: block and ships no web remote).
+  # pick-face-replenishment: the chart's analytics projector/reports read only
+  # ANALYTICS_DATABASE_URL (no reader DSN), hence the one-key secret_keys. Its
+  # web remote is replenishment_mfe (web/vite.config.ts), served at
+  # /mfes/pick-face-replenishment/.
   pick-face-replenishment:
     kind: service
     repo_owner: IQVO
     database: true
+    analytics:
+      secret_keys: [ANALYTICS_DATABASE_URL]
+    frontend_remote: replenishment_mfe
 
   process-path-management:
     kind: service
@@ -120,13 +125,19 @@ applications:
     repo_owner: IQVO
     database: true
     analytics: true
+    frontend_remote: slotting_mfe
 
-  # task-interleaving: no analytics projector/reports pair and no frontend
-  # (its chart has no analytics: block and ships no web remote).
+  # task-interleaving: the chart's analytics projector/reports (ti-projector,
+  # ti-reports) read only ANALYTICS_DATABASE_URL, hence the one-key
+  # secret_keys. Its web remote is task_interleaving_mfe (web/vite.config.ts),
+  # served at /mfes/task-interleaving/.
   task-interleaving:
     kind: service
     repo_owner: IQVO
     database: true
+    analytics:
+      secret_keys: [ANALYTICS_DATABASE_URL]
+    frontend_remote: task_interleaving_mfe
 
   warehouse-console:
     kind: other
