@@ -56,6 +56,15 @@ kafka:
 demand:
   consumerGroup: "warehouse-planning-demand"
   siteId: "SIM1"
+# Required by warehouse-planning's chart (warehouse-planning #79, ADR 0017: the
+# chart refuses to render without them). Stable ids, pinned so a rename in code
+# cannot silently orphan the committed offsets.
+#   inbound  <- warehouse.inbound-receiving.events (DockAppointmentBooked / Cancelled)
+#   observed <- warehouse.fulfillment.events (TaskCompleted)
+inbound:
+  consumerGroup: "warehouse-planning-inbound-demand"
+observed:
+  consumerGroup: "warehouse-planning-observed-capacity"
 
 # Analytics read side (ADR 0005). The projector's consumer group is a FIXED, stable id (fleet charter naming
 # `<ctx>-analytics`): a restarted pod resumes from its committed offsets, and a
