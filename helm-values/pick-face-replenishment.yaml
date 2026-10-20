@@ -38,7 +38,7 @@
 #   - Analytics read side (ADR 0008): pfr-projector (the only writer of the
 #     SEPARATE pick_face_replenishment_analytics database, fed by
 #     warehouse.pick-face-replenishment.analytics) and pfr-reports (read-only,
-#     Service pick-face-replenishment-analytics-reports:80 -- the chart has no
+#     Service pick-face-replenishment-reports:80 -- the chart has no
 #     Kong route for reports). The DSN never appears here: modules/application
 #     writes it into the pick-face-replenishment-analytics-db Secret (the chart
 #     reads only ANALYTICS_DATABASE_URL, apps.yaml analytics.secret_keys), which
