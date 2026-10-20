@@ -87,6 +87,7 @@ CHARTS: dict[str, dict[str, str]] = {
     "../../product-master/charts/product-master": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
         "kafka.enabled": "true",
+        "kafka.brokers": "kafka.example.invalid:9092",
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
         "database.url": "postgres://u@example.invalid:5432/db",
     },
