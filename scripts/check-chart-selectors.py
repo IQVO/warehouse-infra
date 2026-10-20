@@ -45,11 +45,20 @@ CHARTS: dict[str, dict[str, str]] = {
     "../../order-management/charts/order-management": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
     },
+    # inventory-storage and wes-work-planning: every binary runs on real
+    # Postgres and real Kafka only, so the chart refuses to render without a
+    # database source, kafka brokers and (analytics on) the analytical DSN.
+    # Dummies, no password.
     "../../inventory-storage/charts/inventory-storage": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
     },
     "../../wes-work-planning/charts/wes-work-planning": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
     },
     # fulfillment-execution: every cmd binary (api, mcp, projector) now runs
     # on real Postgres and real Kafka only (ADR-0052: Postgres and Kafka are
