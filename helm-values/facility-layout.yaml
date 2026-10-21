@@ -34,13 +34,6 @@ livenessProbe:
   periodSeconds: 10
   failureThreshold: 6
 
-readinessProbe:
-  httpGet:
-    path: /healthz
-    port: http
-  initialDelaySeconds: 5
-  periodSeconds: 5
-  failureThreshold: 6
 
 # Formerly computed by terraform/services.tf (ADR 0002 phase 3, docs/adr/0002-application-delivery-boundary.md).
 # Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from

@@ -36,6 +36,9 @@
 # names its site and every site's demand is ingested (no invented default).
 # The read-only MCP server is switched on below (mcp.enabled); the ops-agent
 # consumes it (warehouse-ops-agent.yaml, warehouse-ops-agent #151).
+# The console remote (slotting_mfe, web/): frontend below; its content-addressed
+# image tag comes from Terraform (local.frontend_remotes), the web gateway serves
+# it at /mfes/slotting-optimization/.
 
 replicaCount: 1
 
@@ -78,6 +81,11 @@ analytics:
 database:
   existingSecret: slotting-optimization-db
 extraEnv: []
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/slotting-optimization-frontend
 gatewayApi:
   enabled: true
   hosts:

@@ -134,7 +134,7 @@ Every bounded-context service's OLTP pod listens on container port `8080`
 | Service (`warehouse-systems` ns)         | Service port → target | What it is |
 |--------------------------------------------|------------------------|------------|
 | `<service>` (14 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master, inbound-receiving, slotting-optimization, pick-face-replenishment, task-interleaving) | `80 → 8080` | OLTP REST API, routed by Kong |
-| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — every context whose `helm-values/<context>.yaml` sets `mcp.enabled` (the first 12 above, not pick-face-replenishment or task-interleaving, plus network-fulfillment and network-inventory-planning) |
+| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — every context whose `helm-values/<context>.yaml` sets `mcp.enabled` (all 14 above, plus network-fulfillment and network-inventory-planning) |
 | `<service>-reports`                        | `80 → 8092`             | Analytics read-only REST API (only where `analytics.enabled`, see `locals.tf`'s `analytics_services`) |
 | `<service>-frontend`                       | `80 → 8080`             | Module Federation remote, proxied by the web gateway at `/mfes/<context>/` |
 | `warehouse-console`                        | `80 → 8080`             | Console shell SPA, proxied by the web gateway at `/` |
@@ -213,9 +213,14 @@ and the console remote `inbound-receiving-frontend` is `inbound_mfe` at
 `EVENT_PUBLISHER=kafka`.
 
 `slotting-optimization` (forward pick-slot plans by ABC velocity, human
-approval; gap fix D10) is a plain `kind: service` entry in `terraform/apps.yaml`: OLTP API only, no
-analytics read side, no web remote, and its read-only MCP server stays off
-(no consumer is wired). Its role/database `slotting_optimization` and the
+approval; gap fix D10) is a `kind: service` entry in `terraform/apps.yaml` with
+the full component set: the OLTP API, the analytics read side
+(`analytics: true`; projector group `slotting-optimization-analytics`, topic
+`warehouse.slotting-optimization.analytics`, slotting ADR 0006), the read-only MCP
+server (`mcp.enabled`, Kong route `/api/mcp/slotting-optimization`; read by
+`warehouse-ops-agent`) and the console remote `slotting-optimization-frontend`
+(`slotting_mfe`, `/mfes/slotting-optimization/`, `frontend_remote` in the entry and
+`frontend.enabled` in `helm-values/slotting-optimization.yaml`). Its role/database `slotting_optimization` and the
 `slotting-optimization-db` Secret derive from that entry; the Kong route
 `/api/slotting-optimization` is the chart's own `gatewayApi` HTTPRoute. The API
 runs with `EVENT_PUBLISHER=kafka` (topic `warehouse.slotting-optimization.events`)
@@ -233,16 +238,21 @@ is `SlotPlanApproved` → wes-work-planning (its inbound consumer, on whenever i
 `RELOCATE` task → `TaskCompleted` → inventory-storage's TaskCompleted consumer
 (`config.taskCompletedConsumerMode=kafka`) relocates the stock and raises
 `StockRelocated` → slotting-optimization. It needs the `RELOCATE` process path
-(post-deploy seed step 1). One thing a first `terraform apply` will
-not do on its own: its chart does not render the Kong plugins yet (no `kong-plugins.yaml`), so
-`scripts/test-exposure-policy.sh` section 11 flags its HTTPRoute and Kong
-exports no `kong_http_requests_total` series for it until that chart change
-lands in slotting-optimization.
+(post-deploy seed step 1).
 
 `pick-face-replenishment` (WMS: keeps forward pick faces stocked from reserve bins)
 and `task-interleaving` (WES: recommends a nearby second task for an operator's
-station trip) are plain `kind: service` entries in `terraform/apps.yaml`: OLTP API
-only, no analytics read side, no MCP server, no web remote. Each runs on real
+station trip) are `kind: service` entries in `terraform/apps.yaml` that carry
+every optional component: the OLTP API, the read-only MCP server (`mcp.enabled`,
+Kong route `/api/mcp/<name>`), the analytics read side and a console remote.
+`analytics` is `{ secret_keys: [ANALYTICS_DATABASE_URL] }` because their charts
+read only that key (no reader DSN): projector group
+`pick-face-replenishment-analytics` / `task-interleaving-analytics` (topic
+`warehouse.<name>.analytics`), reports Service `pick-face-replenishment-reports` /
+`task-interleaving-analytics-reports` (the charts have no Kong reports route), DSN
+from the `<name>-analytics-db` Secret, role/database `<db>_analytics`. The remotes
+are `replenishment_mfe` (`/mfes/pick-face-replenishment/`) and
+`task_interleaving_mfe` (`/mfes/task-interleaving/`). Each runs on real
 Postgres and real Kafka only (their ADR 0006), so neither values file sets a `*_MODE`
 variable. Role/database `pick_face_replenishment` / `task_interleaving` and the
 `<name>-db` Secret derive from the entry (provisioning Job, ADR 0005); the Kong

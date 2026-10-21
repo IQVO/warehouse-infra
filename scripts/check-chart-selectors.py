@@ -45,11 +45,20 @@ CHARTS: dict[str, dict[str, str]] = {
     "../../order-management/charts/order-management": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
     },
+    # inventory-storage and wes-work-planning: every binary runs on real
+    # Postgres and real Kafka only, so the chart refuses to render without a
+    # database source, kafka brokers and (analytics on) the analytical DSN.
+    # Dummies, no password.
     "../../inventory-storage/charts/inventory-storage": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
     },
     "../../wes-work-planning/charts/wes-work-planning": {
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
     },
     # fulfillment-execution: every cmd binary (api, mcp, projector) now runs
     # on real Postgres and real Kafka only (ADR-0052: Postgres and Kafka are
@@ -108,6 +117,8 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.laborCapacityConsumerGroup": "warehouse-planning-labor-capacity",
         "config.storageCapacityConsumerGroup": "warehouse-planning-storage-capacity",
         "demand.consumerGroup": "warehouse-planning-demand",
+        "inbound.consumerGroup": "warehouse-planning-inbound-demand",
+        "observed.consumerGroup": "warehouse-planning-observed-capacity",
         "demand.siteId": "SITE1",
     },
     # product-master: OLTP api + the optional mcp, frontend (productmaster_mfe)
@@ -135,12 +146,15 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.productConsumerGroup": "inbound-receiving-product",
         "config.dockDoorConsumerGroup": "inbound-receiving-dock-door",
     },
-    # slotting-optimization: OLTP api + the optional mcp component (no
-    # frontend, no analytics). The chart refuses to render without a database
-    # source and kafka brokers (ADR 0011), and four always-on consumers each
-    # need a stable group id, so give it dummies (no password).
+    # slotting-optimization: OLTP api + the optional mcp, analytics
+    # (projector/reports) and frontend (slotting_mfe) components, all of which
+    # warehouse-infra deploys. The chart refuses to render without a database
+    # source and kafka brokers (ADR 0011), four always-on consumers each
+    # need a stable group id, and analytics needs a DSN source, so give it
+    # dummies (no password).
     "../../slotting-optimization/charts/slotting-optimization": {
-        "mcp.enabled": "true",
+        "mcp.enabled": "true", "frontend.enabled": "true", "analytics.enabled": "true",
+        "analytics.url": "postgres://u@example.invalid:5432/analytics",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.demandConsumerGroup": "slotting-demand",
@@ -148,16 +162,21 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.layoutConsumerGroup": "slotting-layout",
         "config.relocationConsumerGroup": "slotting-relocation",
     },
-    # pick-face-replenishment and task-interleaving: a single OLTP api
-    # Deployment/Service each (no mcp, no frontend, no analytics components).
-    # Both charts refuse to render without a database source and without
-    # Kafka brokers (ADR 0006: Postgres and Kafka are the only runtime), so
-    # give them dummies (no password).
+    # pick-face-replenishment and task-interleaving: OLTP api + the optional
+    # mcp, analytics (projector/reports) and frontend components, all of which
+    # warehouse-infra deploys. Both charts refuse to render without a database
+    # source and without Kafka brokers (ADR 0006: Postgres and Kafka are the
+    # only runtime), and analytics without a DSN source, so give them dummies
+    # (no password).
     "../../pick-face-replenishment/charts/pick-face-replenishment": {
+        "mcp.enabled": "true", "frontend.enabled": "true", "analytics.enabled": "true",
+        "analytics.url": "postgres://u@example.invalid:5432/analytics",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
     },
     "../../task-interleaving/charts/task-interleaving": {
+        "mcp.enabled": "true", "frontend.enabled": "true", "analytics.enabled": "true",
+        "analytics.url": "postgres://u@example.invalid:5432/analytics",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
     },
