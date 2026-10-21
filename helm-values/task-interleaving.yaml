@@ -28,8 +28,22 @@
 # (the direct, non-pooled DSN Terraform puts in the <svc>-db Secret);
 # DATABASE_URL itself goes through PgBouncer. The role/database are created
 # by modules/application's provisioning Job (ADR 0005), before the first sync.
-# HINT_EXPIRY_INTERVAL is left at the binary's default (5s). No analytics
-# projector/reports pair, no MCP server and no frontend.
+# HINT_EXPIRY_INTERVAL is left at the binary's default (5s).
+#
+# Optional components (all switched on below):
+#   - MCP server (cmd/mcp, task-interleaving ADR 0007): mcp.enabled plus the
+#     Kong route /api/mcp/task-interleaving (mcp.route).
+#   - Analytics read side (ADR 0008): ti-projector (the only writer of the
+#     SEPARATE task_interleaving_analytics database, fed by
+#     warehouse.task-interleaving.analytics) and ti-reports (read-only, Service
+#     task-interleaving-analytics-reports:80 -- the chart has no Kong route for
+#     reports). The DSN never appears here: modules/application writes it into
+#     the task-interleaving-analytics-db Secret (the chart reads only
+#     ANALYTICS_DATABASE_URL, apps.yaml analytics.secret_keys), which
+#     analytics.existingSecret names.
+#   - The console remote (task_interleaving_mfe, web/): frontend below; its
+#     content-addressed image tag comes from Terraform (local.frontend_remotes),
+#     the web gateway serves it at /mfes/task-interleaving/.
 
 replicaCount: 1
 
@@ -43,11 +57,27 @@ config:
   fulfillmentConsumerGroup: "task-interleaving-fulfillment"
   layoutConsumerGroup: "task-interleaving-layout"
 
+# Analytics read side (ADR 0008). The projector's consumer group is a FIXED,
+# stable id (fleet charter naming `<ctx>-analytics`): a restarted pod resumes
+# from its committed offsets, and a brand-new group rebuilds the model from the
+# topic's history. Equal to the chart's default, pinned here so a rename in code
+# cannot silently orphan the committed offsets. MANDATORY when enabled (the
+# chart refuses an empty one).
+analytics:
+  enabled: true
+  consumerGroup: "task-interleaving-analytics"
+  existingSecret: task-interleaving-analytics-db
+
 # Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
 # _platform.yaml; image tags from Terraform (the Application's valuesObject).
 database:
   existingSecret: task-interleaving-db
 extraEnv: []
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/task-interleaving-frontend
 gatewayApi:
   enabled: true
   hosts:
@@ -74,6 +104,11 @@ kongPlugins:
     enabled: true
   prometheus:
     enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/task-interleaving
 service:
   port: 80
   targetPort: 8080

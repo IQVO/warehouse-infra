@@ -394,9 +394,9 @@ CONTEXTS = [
         # origin/develop) states it defines NO business metric and no outbox
         # gauge: only otelchi's http.server.request.duration (no status code)
         # and the Go runtime metrics. So business_metrics stays empty (never
-        # invent a metric) and there is no outbox-lag panel; the Kong rows stay
-        # empty until its chart renders the Kong prometheus plugin
-        # (kong-plugins.yaml, not on its develop yet).
+        # invent a metric) and there is no outbox-lag panel; the Kong rows are
+        # live (its chart renders kong-plugins.yaml; kongPlugins.prometheus in
+        # its values file).
         "service_regex": "slotting-optimization.*",
         "loki_app": "slotting-optimization",
         "business_metrics": [],

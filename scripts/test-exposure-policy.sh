@@ -105,7 +105,8 @@ done
 echo "==> 5. Every remote is served through the gateway, as JavaScript"
 for ctx in order-management inventory-storage wes-work-planning fulfillment-execution \
            workforce-management facility-layout labor-performance process-path-management \
-           warehouse-planning product-master inbound-receiving network-inventory-planning; do
+           warehouse-planning product-master inbound-receiving network-inventory-planning \
+           slotting-optimization pick-face-replenishment task-interleaving; do
   URL="${WEB_URL}/mfes/${ctx}/remoteEntry.js"
   read -r CODE CTYPE < <(curl -s -o /dev/null -w '%{http_code} %{content_type}' --max-time 10 "${URL}" || echo "000 none")
   if [[ "${CODE}" == "200" && "${CTYPE}" == *javascript* ]]; then
@@ -120,8 +121,6 @@ done
 echo "==> 6. Every API answers on the API origin"
 # network-inventory-planning's healthz deliberately returns 204 No Content
 # (no body by design) — that is a healthy answer, not a failure.
-# slotting-optimization, pick-face-replenishment and task-interleaving have no
-# web remote, so they are in this list only (not 5).
 for ctx in order-management inventory-storage wes-work-planning fulfillment-execution \
            workforce-management facility-layout labor-performance process-path-management \
            warehouse-planning product-master inbound-receiving slotting-optimization \

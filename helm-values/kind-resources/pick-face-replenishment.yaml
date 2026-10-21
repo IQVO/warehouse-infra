@@ -4,6 +4,23 @@
 # rolling updates (maxSurge 1 per Deployment) could not schedule. Only requests.cpu is lowered;
 # limits and memory keep the chart defaults. The Application's last value file (after
 # _platform.yaml and <app>.yaml, ADR 0002 D2); Helm deep-merges it, so only requests.cpu changes.
+analytics:
+  projector:
+    resources:
+      requests:
+        cpu: 25m
+  reports:
+    resources:
+      requests:
+        cpu: 25m
+frontend:
+  resources:
+    requests:
+      cpu: 25m
+mcp:
+  resources:
+    requests:
+      cpu: 25m
 resources:
   requests:
     cpu: 25m
