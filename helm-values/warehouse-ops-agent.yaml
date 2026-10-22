@@ -10,6 +10,23 @@
 # empty.
 credentials:
   existingSecret: warehouse-ops-agent-anthropic
+# The two new bounded contexts' MCP servers, pre-wired for the
+# returns/exceptions rollout: the ops-agent chart (on develop) has a
+# dedicated upstreams value per context it already knows, but not yet one
+# for returns-processing (cmd/mcp: get_return, list_returns_by_order,
+# get_disposition_policy) or exception-management (cmd/mcp:
+# list_open_exceptions, get_exception, get_exception_policies,
+# get_sla_report). Until that repo grows the two clients, the env names land
+# here through extraEnv -- the skill's prescribed channel for env the chart
+# does not render (the chart renders no RETURNS_PROCESSING_MCP_ENDPOINT /
+# EXCEPTION_MANAGEMENT_MCP_ENDPOINT of its own, so there is no duplicate
+# env entry and ArgoCD's three-way diff is safe). The Go binary ignores
+# unknown env names, so this is inert until the clients ship.
+extraEnv:
+  - name: RETURNS_PROCESSING_MCP_ENDPOINT
+    value: http://returns-processing-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  - name: EXCEPTION_MANAGEMENT_MCP_ENDPOINT
+    value: http://exception-management-mcp.warehouse-systems.svc.cluster.local:8090/mcp
 gatewayApi:
   enabled: true
   hosts:

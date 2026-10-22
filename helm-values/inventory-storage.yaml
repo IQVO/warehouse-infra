@@ -43,6 +43,18 @@ config:
   # consumer off. StockReceived leaves the service through the outbox relay,
   # which needs config.eventPublisher=kafka (set above).
   inboundReceiptConsumerGroup: "inventory-storage-inbound-receipts"
+  # returns-processing handover (inventory-storage ADR 0044): consume
+  # ReturnLineStaged (the RESTOCK disposition's handover) from
+  # warehouse.returns-processing.events and book every line as a staged
+  # receipt through the same ReceiveStock seam as an inbound receipt line;
+  # StockReceived leaves through the outbox. A DEDICATED chart value
+  # (rendered to RETURN_LINE_CONSUMER_GROUP), so it lives here and never in
+  # extraEnv. The group is the chart's own documented default
+  # (charts/inventory-storage/values.yaml on develop), set explicitly so the
+  # Deployment's env is self-describing; a fixed, stable id: a restarted pod
+  # resumes from its committed offsets. Poison messages go to
+  # warehouse.returns-processing.events.dlq.
+  returnLineConsumerGroup: "inventory-storage-return-lines"
   # TaskCompleted consumer (inventory-storage ADR-0035 confirm-pick + ADR 0039
   # relocation): consumes fulfillment-execution's TaskCompleted from
   # warehouse.fulfillment.events. A PICK completion counts toward its order and
