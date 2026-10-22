@@ -133,8 +133,8 @@ Every bounded-context service's OLTP pod listens on container port `8080`
 
 | Service (`warehouse-systems` ns)         | Service port → target | What it is |
 |--------------------------------------------|------------------------|------------|
-| `<service>` (14 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master, inbound-receiving, slotting-optimization, pick-face-replenishment, task-interleaving) | `80 → 8080` | OLTP REST API, routed by Kong |
-| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — every context whose `helm-values/<context>.yaml` sets `mcp.enabled` (all 14 above, plus network-fulfillment and network-inventory-planning) |
+| `<service>` (16 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master, inbound-receiving, slotting-optimization, pick-face-replenishment, task-interleaving, returns-processing, exception-management) | `80 → 8080` | OLTP REST API, routed by Kong — except returns-processing and exception-management, whose charts render no `gatewayApi` HTTPRoute yet (ClusterIP only; see their paragraph below) |
+| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — every context whose `helm-values/<context>.yaml` sets `mcp.enabled` (all 16 above, plus network-fulfillment and network-inventory-planning) |
 | `<service>-reports`                        | `80 → 8092`             | Analytics read-only REST API (only where `analytics.enabled`, see `locals.tf`'s `analytics_services`) |
 | `<service>-frontend`                       | `80 → 8080`             | Module Federation remote, proxied by the web gateway at `/mfes/<context>/` |
 | `warehouse-console`                        | `80 → 8080`             | Console shell SPA, proxied by the web gateway at `/` |
@@ -272,6 +272,50 @@ fulfillment-execution (`TASK_INTERLEAVING_MODE=kafka`, group
 `fulfillment-execution-interleaving`, its ADR 0051; advisory, fail-open). They need the
 `REPLENISH` process path (post-deploy seed step 1) and the `replenish` capability on
 the operators that should claim those tasks.
+
+`returns-processing` (WMS: return authorization, receipt, inspection,
+disposition) and `exception-management` (WES: the exception case ledger fed
+by every sibling context's failure signals, triage/assignment/escalation/
+resolution and the SLA sweeper) are `kind: service` entries in
+`terraform/apps.yaml` with `repo_owner: IQVO`, `database: true`, the
+one-key `analytics: { secret_keys: [ANALYTICS_DATABASE_URL] }` (their
+charts' projector/reports read only that key) and the console remotes
+`returns_mfe` (`/mfes/returns-processing/`) and `exceptions_mfe`
+(`/mfes/exception-management/`). Each runs the OLTP api, the read-only MCP
+server (`mcp.enabled`; no Kong route — the chart renders none, the
+`<name>-mcp:8090` Service stays ClusterIP and warehouse-ops-agent reaches it
+in-cluster), the analytics read side (projector group
+`<name>-analytics`, topic `warehouse.<name>.analytics`, reports Service
+`<name>-reports:80`, also with no Kong route) and the frontend remote
+(`frontend.enabled`, `helm-values/<name>.yaml`). Role/database
+`returns_processing` / `exception_management` and the `<name>-db` /
+`<name>-analytics-db` Secrets derive from the entry (provisioning Job, ADR
+0005). NOTE: unlike every older `kind: service`, these two charts ship no
+`gatewayApi` values block and no httproute/ingress/kong-plugins templates,
+so there is NO Kong route `/api/returns-processing` or
+`/api/exception-management` yet — the OLTP and reports APIs are
+ClusterIP-only until their charts grow the route templates (recorded as a
+follow-up; Kong configuration belongs to the application charts, fleet
+decision 2026-10-13). Consumer groups (`helm-values/<name>.yaml`):
+returns-processing `-product-classification` (`warehouse.product-master.events`),
+`-order-lines` (`warehouse.order-management.events`) and `-manifest`
+(`warehouse.fulfillment.events`); exception-management `-fulfillment`
+(`warehouse.fulfillment.events`), `-work-planning`
+(`warehouse.work-planning.events`), `-network-fulfillment`
+(`warehouse.network-fulfillment.events`), `-order-correlation`
+(`warehouse.order-management.events`, auto-resolve correlation),
+`-inventory` (`warehouse.inventory.events`) and `-returns`
+(`warehouse.returns-processing.events`). They publish
+`warehouse.returns-processing.events` / `warehouse.exception-management.events`
+(plus a `.analytics` topic each), auto-created on first write. The handover:
+`ReturnLineStaged` (the RESTOCK disposition) → inventory-storage's return-line
+consumer (`config.returnLineConsumerGroup=inventory-storage-return-lines`,
+`helm-values/inventory-storage.yaml`, inventory-storage ADR 0044) books
+`StockReceived`; warehouse-ops-agent's two new MCP upstreams are pre-wired
+in `helm-values/warehouse-ops-agent.yaml` (`RETURNS_PROCESSING_MCP_ENDPOINT`,
+`EXCEPTION_MANAGEMENT_MCP_ENDPOINT` via extraEnv, inert until that repo
+grows the clients). Neither values file sets a `*_MODE` variable (their
+charts refuse one at render time).
 
 **A structural gotcha worth knowing before you `kubectl port-forward pod/…`:**
 every chart's `selectorLabels` helper emits only
@@ -1144,6 +1188,8 @@ warehouse-infra/
 │   ├── slotting-optimization.yaml
 │   ├── pick-face-replenishment.yaml
 │   ├── task-interleaving.yaml
+│   ├── returns-processing.yaml
+│   ├── exception-management.yaml
 │   ├── product-master.yaml
 │   ├── wes-work-planning.yaml
 │   ├── workforce-management.yaml
