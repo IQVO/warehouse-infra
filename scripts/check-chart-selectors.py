@@ -180,6 +180,26 @@ CHARTS: dict[str, dict[str, str]] = {
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
     },
+    # returns-processing and exception-management: same shape as
+    # pick-face-replenishment/task-interleaving (OLTP api + the optional mcp,
+    # analytics projector/reports and frontend components, all of which
+    # warehouse-infra deploys). Both charts refuse to render without a
+    # database source and without Kafka brokers (real Postgres and real
+    # Kafka are the only runtime), and analytics without a DSN source, so
+    # give them dummies (no password). Their consumer groups have non-empty
+    # chart defaults, so none needs a --set.
+    "../../returns-processing/charts/returns-processing": {
+        "mcp.enabled": "true", "frontend.enabled": "true", "analytics.enabled": "true",
+        "analytics.url": "postgres://u@example.invalid:5432/analytics",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+    },
+    "../../exception-management/charts/exception-management": {
+        "mcp.enabled": "true", "frontend.enabled": "true", "analytics.enabled": "true",
+        "analytics.url": "postgres://u@example.invalid:5432/analytics",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+    },
     # network-inventory-planning: OLTP api + the optional mcp, frontend
     # (nip_mfe) and analytics (projector/reports) components. The chart needs a
     # database source and refuses analytics without a DSN source and kafka, so

@@ -429,6 +429,33 @@ CONTEXTS = [
         "business_metrics": [],
     },
     {
+        "key": "returns-processing",
+        "title": "Returns Processing",
+        "uid": "warehouse-returns-processing",
+        # Same state as task-interleaving when it was registered: 0 OTel
+        # instruments, no otelchi, no outbox-lag gauge, business_metrics
+        # empty. One difference, deliberate and temporary: its chart ships no
+        # gatewayApi HTTPRoute yet, so the Kong rows (5xx, SLO burn) stay
+        # empty until that template lands in IQVO/returns-processing and the
+        # route /api/returns-processing exists; pod-restart alerts are live
+        # from day one.
+        "service_regex": "returns-processing.*",
+        "loki_app": "returns-processing",
+        "business_metrics": [],
+    },
+    {
+        "key": "exception-management",
+        "title": "Exception Management",
+        "uid": "warehouse-exception-management",
+        # Same state as returns-processing above: 0 OTel instruments, no
+        # gauge, empty business_metrics, and no gatewayApi HTTPRoute in its
+        # chart yet — the Kong rows light up when /api/exception-management
+        # is routed; pod-restart alerts are live from day one.
+        "service_regex": "exception-management.*",
+        "loki_app": "exception-management",
+        "business_metrics": [],
+    },
+    {
         "key": "warehouse-ops-agent",
         "title": "Warehouse Ops Agent",
         "uid": "warehouse-warehouse-ops-agent",

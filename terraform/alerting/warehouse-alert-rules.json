@@ -1676,6 +1676,206 @@
       ]
     },
     {
+      "name": "warehouse-returns-processing",
+      "rules": [
+        {
+          "alert": "WarehouseKong5xxRatioHigh",
+          "expr": "sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[5m])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\"}[5m])) > 0.05",
+          "for": "5m",
+          "labels": {
+            "context": "returns-processing",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Returns Processing: more than 5% of requests on a Kong route answer 5xx",
+            "description": "Kong route {{ $labels.service }} answered 5xx for {{ $value | humanizePercentage }} of its requests over the last 5 minutes (API route = <context>.N, MCP = <context>-mcp.N, reports = <context>-reports.N).",
+            "runbook_url": "https://iqvo.github.io/returns-processing/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-returns-processing"
+          }
+        },
+        {
+          "alert": "WarehousePodRestarting",
+          "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total{namespace=\"warehouse-systems\", pod=~\"returns-processing-.+\"}[15m])) >= 2",
+          "for": "0m",
+          "labels": {
+            "context": "returns-processing",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Returns Processing: a container is restarting",
+            "description": "{{ $labels.pod }}/{{ $labels.container }} restarted {{ $value | humanize }} times in 15 minutes (boot-retry exhaustion, a failed migration, a stopped consumer that exits on purpose, or an OOM kill). Read the previous container's last log lines first.",
+            "runbook_url": "https://iqvo.github.io/returns-processing/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-returns-processing"
+          }
+        }
+      ]
+    },
+    {
+      "name": "warehouse-returns-processing-slo",
+      "rules": [
+        {
+          "alert": "WarehouseApiAvailabilityBurnFast",
+          "expr": "(sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[1h])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\"}[1h])) / 0.01 >= 14.4) and (sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[5m])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\"}[5m])) / 0.01 >= 14.4) and sum by (service) (increase(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\"}[1h])) >= 30",
+          "for": "2m",
+          "labels": {
+            "context": "returns-processing",
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "Returns Processing: API availability SLO burning fast (day's budget gone in ~100 minutes)",
+            "description": "Kong route {{ $labels.service }} answers 5xx at {{ $value | humanize }}x the rate the one-day 99% availability SLO allows, over the last hour and over the last 5 minutes (5xx ratio of 14.4% or more). At this burn the whole day's error budget is gone in about 100 minutes. The alert needs at least 30 requests in the last hour, so one failed request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/returns-processing/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-returns-processing"
+          }
+        },
+        {
+          "alert": "WarehouseApiLatencyBurnFast",
+          "expr": "((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[1h])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\"}[1h]))) / 0.05 >= 14.4) and ((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[5m])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\"}[5m]))) / 0.05 >= 14.4) and sum by (service) (increase(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\"}[1h])) >= 30",
+          "for": "2m",
+          "labels": {
+            "context": "returns-processing",
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "Returns Processing: API latency SLO burning fast (day's budget gone in ~100 minutes)",
+            "description": "Kong route {{ $labels.service }} is missing the 500 ms upstream latency target at {{ $value | humanize }}x the rate the one-day 95% latency SLO allows, over the last hour and over the last 5 minutes (slow ratio of 72% or more). At this burn the whole day's error budget is gone in about 100 minutes. Kong's histogram has no 500 ms bucket, so the nearest boundary, le=400.0 (400 ms), is used: a request between 400 and 500 ms counts as slow. The alert needs at least 30 requests in the last hour, so one slow request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/returns-processing/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-returns-processing"
+          }
+        },
+        {
+          "alert": "WarehouseApiAvailabilityBurnSlow",
+          "expr": "(sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[6h])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\"}[6h])) / 0.01 >= 3) and (sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[30m])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\"}[30m])) / 0.01 >= 3) and sum by (service) (increase(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\"}[6h])) >= 30",
+          "for": "15m",
+          "labels": {
+            "context": "returns-processing",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Returns Processing: API availability SLO burning slowly (day's budget gone in ~8 hours)",
+            "description": "Kong route {{ $labels.service }} answers 5xx at {{ $value | humanize }}x the rate the one-day 99% availability SLO allows, over the last 6 hours and over the last 30 minutes (5xx ratio of 3% or more). At this burn the whole day's error budget is gone in about 8 hours. The alert needs at least 30 requests in the last 6 hours, so one failed request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/returns-processing/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-returns-processing"
+          }
+        },
+        {
+          "alert": "WarehouseApiLatencyBurnSlow",
+          "expr": "((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[6h])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\"}[6h]))) / 0.05 >= 3) and ((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[30m])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\"}[30m]))) / 0.05 >= 3) and sum by (service) (increase(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]returns-processing(-mcp|-reports)?[.][0-9]+\"}[6h])) >= 30",
+          "for": "15m",
+          "labels": {
+            "context": "returns-processing",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Returns Processing: API latency SLO burning slowly (day's budget gone in ~8 hours)",
+            "description": "Kong route {{ $labels.service }} is missing the 500 ms upstream latency target at {{ $value | humanize }}x the rate the one-day 95% latency SLO allows, over the last 6 hours and over the last 30 minutes (slow ratio of 15% or more). At this burn the whole day's error budget is gone in about 8 hours. Kong's histogram has no 500 ms bucket, so the nearest boundary, le=400.0 (400 ms), is used: a request between 400 and 500 ms counts as slow. The alert needs at least 30 requests in the last 6 hours, so one slow request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/returns-processing/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-returns-processing"
+          }
+        }
+      ]
+    },
+    {
+      "name": "warehouse-exception-management",
+      "rules": [
+        {
+          "alert": "WarehouseKong5xxRatioHigh",
+          "expr": "sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[5m])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\"}[5m])) > 0.05",
+          "for": "5m",
+          "labels": {
+            "context": "exception-management",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Exception Management: more than 5% of requests on a Kong route answer 5xx",
+            "description": "Kong route {{ $labels.service }} answered 5xx for {{ $value | humanizePercentage }} of its requests over the last 5 minutes (API route = <context>.N, MCP = <context>-mcp.N, reports = <context>-reports.N).",
+            "runbook_url": "https://iqvo.github.io/exception-management/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-exception-management"
+          }
+        },
+        {
+          "alert": "WarehousePodRestarting",
+          "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total{namespace=\"warehouse-systems\", pod=~\"exception-management-.+\"}[15m])) >= 2",
+          "for": "0m",
+          "labels": {
+            "context": "exception-management",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Exception Management: a container is restarting",
+            "description": "{{ $labels.pod }}/{{ $labels.container }} restarted {{ $value | humanize }} times in 15 minutes (boot-retry exhaustion, a failed migration, a stopped consumer that exits on purpose, or an OOM kill). Read the previous container's last log lines first.",
+            "runbook_url": "https://iqvo.github.io/exception-management/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-exception-management"
+          }
+        }
+      ]
+    },
+    {
+      "name": "warehouse-exception-management-slo",
+      "rules": [
+        {
+          "alert": "WarehouseApiAvailabilityBurnFast",
+          "expr": "(sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[1h])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\"}[1h])) / 0.01 >= 14.4) and (sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[5m])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\"}[5m])) / 0.01 >= 14.4) and sum by (service) (increase(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\"}[1h])) >= 30",
+          "for": "2m",
+          "labels": {
+            "context": "exception-management",
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "Exception Management: API availability SLO burning fast (day's budget gone in ~100 minutes)",
+            "description": "Kong route {{ $labels.service }} answers 5xx at {{ $value | humanize }}x the rate the one-day 99% availability SLO allows, over the last hour and over the last 5 minutes (5xx ratio of 14.4% or more). At this burn the whole day's error budget is gone in about 100 minutes. The alert needs at least 30 requests in the last hour, so one failed request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/exception-management/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-exception-management"
+          }
+        },
+        {
+          "alert": "WarehouseApiLatencyBurnFast",
+          "expr": "((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[1h])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\"}[1h]))) / 0.05 >= 14.4) and ((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[5m])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\"}[5m]))) / 0.05 >= 14.4) and sum by (service) (increase(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\"}[1h])) >= 30",
+          "for": "2m",
+          "labels": {
+            "context": "exception-management",
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "Exception Management: API latency SLO burning fast (day's budget gone in ~100 minutes)",
+            "description": "Kong route {{ $labels.service }} is missing the 500 ms upstream latency target at {{ $value | humanize }}x the rate the one-day 95% latency SLO allows, over the last hour and over the last 5 minutes (slow ratio of 72% or more). At this burn the whole day's error budget is gone in about 100 minutes. Kong's histogram has no 500 ms bucket, so the nearest boundary, le=400.0 (400 ms), is used: a request between 400 and 500 ms counts as slow. The alert needs at least 30 requests in the last hour, so one slow request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/exception-management/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-exception-management"
+          }
+        },
+        {
+          "alert": "WarehouseApiAvailabilityBurnSlow",
+          "expr": "(sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[6h])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\"}[6h])) / 0.01 >= 3) and (sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\", code=~\"5..\"}[30m])) / sum by (service) (rate(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\"}[30m])) / 0.01 >= 3) and sum by (service) (increase(kong_http_requests_total{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\"}[6h])) >= 30",
+          "for": "15m",
+          "labels": {
+            "context": "exception-management",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Exception Management: API availability SLO burning slowly (day's budget gone in ~8 hours)",
+            "description": "Kong route {{ $labels.service }} answers 5xx at {{ $value | humanize }}x the rate the one-day 99% availability SLO allows, over the last 6 hours and over the last 30 minutes (5xx ratio of 3% or more). At this burn the whole day's error budget is gone in about 8 hours. The alert needs at least 30 requests in the last 6 hours, so one failed request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/exception-management/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-exception-management"
+          }
+        },
+        {
+          "alert": "WarehouseApiLatencyBurnSlow",
+          "expr": "((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[6h])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\"}[6h]))) / 0.05 >= 3) and ((1 - sum by (service) (rate(kong_upstream_latency_ms_bucket{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\", le=\"400.0\"}[30m])) / sum by (service) (rate(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\"}[30m]))) / 0.05 >= 3) and sum by (service) (increase(kong_upstream_latency_ms_count{service=~\"httproute[.]warehouse-systems[.]exception-management(-mcp|-reports)?[.][0-9]+\"}[6h])) >= 30",
+          "for": "15m",
+          "labels": {
+            "context": "exception-management",
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Exception Management: API latency SLO burning slowly (day's budget gone in ~8 hours)",
+            "description": "Kong route {{ $labels.service }} is missing the 500 ms upstream latency target at {{ $value | humanize }}x the rate the one-day 95% latency SLO allows, over the last 6 hours and over the last 30 minutes (slow ratio of 15% or more). At this burn the whole day's error budget is gone in about 8 hours. Kong's histogram has no 500 ms bucket, so the nearest boundary, le=400.0 (400 ms), is used: a request between 400 and 500 ms counts as slow. The alert needs at least 30 requests in the last 6 hours, so one slow request on an idle local route cannot fire it.",
+            "runbook_url": "https://iqvo.github.io/exception-management/docs/operations/runbook",
+            "dashboard_url": "http://localhost:3000/d/warehouse-exception-management"
+          }
+        }
+      ]
+    },
+    {
       "name": "warehouse-warehouse-ops-agent",
       "rules": [
         {

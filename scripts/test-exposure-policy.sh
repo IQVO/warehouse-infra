@@ -103,10 +103,15 @@ for probe in "/healthz" "/"; do
 done
 
 echo "==> 5. Every remote is served through the gateway, as JavaScript"
+# returns-processing and exception-management are in this list (their
+# <name>-frontend remotes deploy with everything else) but NOT in the API
+# list below: their charts render no Kong HTTPRoute yet, so
+# /api/<name>/healthz would 404 (see README's returns/exceptions paragraph).
 for ctx in order-management inventory-storage wes-work-planning fulfillment-execution \
            workforce-management facility-layout labor-performance process-path-management \
            warehouse-planning product-master inbound-receiving network-inventory-planning \
-           slotting-optimization pick-face-replenishment task-interleaving; do
+           slotting-optimization pick-face-replenishment task-interleaving \
+           returns-processing exception-management; do
   URL="${WEB_URL}/mfes/${ctx}/remoteEntry.js"
   read -r CODE CTYPE < <(curl -s -o /dev/null -w '%{http_code} %{content_type}' --max-time 10 "${URL}" || echo "000 none")
   if [[ "${CODE}" == "200" && "${CTYPE}" == *javascript* ]]; then
