@@ -96,6 +96,11 @@ jobs:
           path: product-master
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/returns-processing
+          ref: develop
+          path: returns-processing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/inbound-receiving
           ref: develop
           path: inbound-receiving
@@ -139,6 +144,11 @@ jobs:
           repository: IQVO/ecosystem
           ref: develop
           path: ecosystem
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/exception-management
+          ref: develop
+          path: exception-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: IQVO/warehouse-ui-kit
@@ -275,6 +285,11 @@ jobs:
           path: product-master
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/returns-processing
+          ref: develop
+          path: returns-processing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/inbound-receiving
           ref: develop
           path: inbound-receiving
@@ -318,6 +333,11 @@ jobs:
           repository: IQVO/ecosystem
           ref: develop
           path: ecosystem
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/exception-management
+          ref: develop
+          path: exception-management
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: v3.16.4
@@ -392,6 +412,11 @@ jobs:
           path: product-master
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/returns-processing
+          ref: develop
+          path: returns-processing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/inbound-receiving
           ref: develop
           path: inbound-receiving
@@ -435,6 +460,11 @@ jobs:
           repository: IQVO/ecosystem
           ref: develop
           path: ecosystem
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/exception-management
+          ref: develop
+          path: exception-management
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: v3.16.4
