@@ -43,6 +43,19 @@ applications:
     build_image: false
     site: true
 
+  # exception-management: the chart's analytics projector/reports
+  # (exceptions-projector, exceptions-reports) read only
+  # ANALYTICS_DATABASE_URL (no reader DSN), hence the one-key secret_keys. Its
+  # web remote is exceptions_mfe (web/vite.config.ts), served at
+  # /mfes/exception-management/.
+  exception-management:
+    kind: service
+    repo_owner: IQVO
+    database: true
+    analytics:
+      secret_keys: [ANALYTICS_DATABASE_URL]
+    frontend_remote: exceptions_mfe
+
   facility-layout:
     kind: service
     database: true
@@ -119,6 +132,18 @@ applications:
     database: true
     analytics: true
     frontend_remote: productmaster_mfe
+
+  # returns-processing: the chart's analytics projector/reports
+  # (returns-projector, returns-reports) read only ANALYTICS_DATABASE_URL (no
+  # reader DSN), hence the one-key secret_keys. Its web remote is returns_mfe
+  # (web/vite.config.ts), served at /mfes/returns-processing/.
+  returns-processing:
+    kind: service
+    repo_owner: IQVO
+    database: true
+    analytics:
+      secret_keys: [ANALYTICS_DATABASE_URL]
+    frontend_remote: returns_mfe
 
   slotting-optimization:
     kind: service
