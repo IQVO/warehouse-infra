@@ -10,6 +10,15 @@
 # input Secret (the password, the SQL) changes, which re-runs the script with
 # the new values. Removing the module leaves the role and the database alone
 # on purpose: data is never dropped by a plan.
+#
+# Completed Jobs keep their pods until something deletes them, and on the
+# single-worker kind node those pods squat scheduler slots (maxPods 110): the
+# 2026-10-22 returns/exceptions apply wedged exactly there, with ~37 Succeeded
+# provision pods pinning the node at cap. ttl_seconds_after_finished hands the
+# cleanup to the TTL controller instead: 10 minutes keeps the Job (and its
+# logs) readable after an apply, then the pod slot is returned. The TTL
+# controller deleting the Job is not drift: the next plan recreates it and the
+# SQL re-runs idempotently, which is what every apply already does.
 
 locals {
   # The SQL travels in a Secret volume, never in the container's command or
@@ -45,6 +54,10 @@ resource "kubernetes_job_v1" "provision" {
 
   spec {
     backoff_limit = 6
+
+    # See the module header: completed Job pods squat maxPods slots on the
+    # kind worker; the TTL controller returns them 10 minutes after completion.
+    ttl_seconds_after_finished = 600
 
     template {
       metadata {
