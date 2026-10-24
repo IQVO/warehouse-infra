@@ -151,6 +151,56 @@ jobs:
           path: exception-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/customer-ordering
+          ref: develop
+          path: customer-ordering
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/delivery-promise
+          ref: develop
+          path: delivery-promise
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/last-mile-delivery
+          ref: develop
+          path: last-mile-delivery
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/linehaul-transportation
+          ref: develop
+          path: linehaul-transportation
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/node-performance
+          ref: develop
+          path: node-performance
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/node-topology
+          ref: develop
+          path: node-topology
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/offer-availability
+          ref: develop
+          path: offer-availability
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/order-sourcing
+          ref: develop
+          path: order-sourcing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/shipping-and-tracking
+          ref: develop
+          path: shipping-and-tracking
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/vendor-connectivity
+          ref: develop
+          path: vendor-connectivity
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/warehouse-ui-kit
           ref: develop
           path: warehouse-ui-kit
@@ -338,6 +388,56 @@ jobs:
           repository: IQVO/exception-management
           ref: develop
           path: exception-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/customer-ordering
+          ref: develop
+          path: customer-ordering
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/delivery-promise
+          ref: develop
+          path: delivery-promise
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/last-mile-delivery
+          ref: develop
+          path: last-mile-delivery
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/linehaul-transportation
+          ref: develop
+          path: linehaul-transportation
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/node-performance
+          ref: develop
+          path: node-performance
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/node-topology
+          ref: develop
+          path: node-topology
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/offer-availability
+          ref: develop
+          path: offer-availability
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/order-sourcing
+          ref: develop
+          path: order-sourcing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/shipping-and-tracking
+          ref: develop
+          path: shipping-and-tracking
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/vendor-connectivity
+          ref: develop
+          path: vendor-connectivity
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: v3.16.4
@@ -465,6 +565,56 @@ jobs:
           repository: IQVO/exception-management
           ref: develop
           path: exception-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/customer-ordering
+          ref: develop
+          path: customer-ordering
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/delivery-promise
+          ref: develop
+          path: delivery-promise
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/last-mile-delivery
+          ref: develop
+          path: last-mile-delivery
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/linehaul-transportation
+          ref: develop
+          path: linehaul-transportation
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/node-performance
+          ref: develop
+          path: node-performance
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/node-topology
+          ref: develop
+          path: node-topology
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/offer-availability
+          ref: develop
+          path: offer-availability
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/order-sourcing
+          ref: develop
+          path: order-sourcing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/shipping-and-tracking
+          ref: develop
+          path: shipping-and-tracking
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/vendor-connectivity
+          ref: develop
+          path: vendor-connectivity
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: v3.16.4

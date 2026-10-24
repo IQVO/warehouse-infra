@@ -29,7 +29,17 @@ CHARTS := \
 	../network-inventory-planning/charts/network-inventory-planning \
 	../warehouse-ops-agent/charts/warehouse-ops-agent \
 	../warehouse-console/charts/warehouse-console \
-	../ecosystem/charts/ecosystem
+	../ecosystem/charts/ecosystem \
+	../customer-ordering/charts/customer-ordering \
+	../delivery-promise/charts/delivery-promise \
+	../last-mile-delivery/charts/last-mile-delivery \
+	../linehaul-transportation/charts/linehaul-transportation \
+	../node-performance/charts/node-performance \
+	../node-topology/charts/node-topology \
+	../offer-availability/charts/offer-availability \
+	../order-sourcing/charts/order-sourcing \
+	../shipping-and-tracking/charts/shipping-and-tracking \
+	../vendor-connectivity/charts/vendor-connectivity
 
 .PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test check check-all
 
@@ -98,6 +108,8 @@ helm-lint:
 			helm lint "$$c" --set database.url=postgres://u@example.invalid:5432/db || exit 1; \
 		elif [ "$$(basename $$c)" = "pick-face-replenishment" ] || [ "$$(basename $$c)" = "task-interleaving" ] || [ "$$(basename $$c)" = "returns-processing" ] || [ "$$(basename $$c)" = "exception-management" ]; then \
 			helm lint "$$c" --set database.url=postgres://u@example.invalid:5432/db --set kafka.brokers=kafka.example.invalid:9092 || exit 1; \
+		elif [ -f "$$c/ci/default-values.yaml" ]; then \
+			helm lint "$$c" -f "$$c/ci/default-values.yaml" || exit 1; \
 		else \
 			helm lint "$$c" || exit 1; \
 		fi; \

@@ -11,7 +11,6 @@
 
 locals {
   registry = yamldecode(file("${path.module}/../apps.yaml")).applications
-
   # Guarded below by the precondition: `default` and any name missing from
   # the registry fail the plan with a message naming the real problem,
   # instead of a bare "key not found" against local.registry.
@@ -32,6 +31,19 @@ locals {
   application_secrets = {
     "warehouse-ops-agent" = {
       anthropic = { ANTHROPIC_API_KEY = var.anthropic_api_key }
+    }
+
+    # shipping-and-tracking's always-on encryption material: the ship-to
+    # snapshot key (base64 of exactly 32 bytes, hence random_id) and the
+    # stop-key HMAC secret. Generated, never from Git or a variable, so no
+    # key can ever reach this public repo or a tfvars file; the module ships
+    # them as the shipping-and-tracking-crypto Secret the chart's
+    # crypto.existingSecret names (helm-values/shipping-and-tracking.yaml).
+    "shipping-and-tracking" = {
+      crypto = {
+        SHIP_TO_ENCRYPTION_KEY = random_id.shipping_and_tracking_ship_to_key.b64_std
+        STOP_KEY_SECRET        = random_password.shipping_and_tracking_stop_key_secret.result
+      }
     }
   }
 
@@ -101,6 +113,18 @@ locals {
     dir             = "helm-values"
     local_dir       = "${path.module}/../../helm-values"
   }
+}
+
+# shipping-and-tracking's encryption material (see application_secrets above):
+# random_id renders base64 of exactly 32 bytes (the key length the cipher
+# requires); the stop-key HMAC secret is URL-safe like every fleet password.
+resource "random_id" "shipping_and_tracking_ship_to_key" {
+  byte_length = 32
+}
+
+resource "random_password" "shipping_and_tracking_stop_key_secret" {
+  length  = 32
+  special = false
 }
 
 module "application" {

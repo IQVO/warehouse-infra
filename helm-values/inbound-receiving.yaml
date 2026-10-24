@@ -62,9 +62,10 @@ config:
   # enforce against. Stable group id, same reasoning as the product group.
   dockDoorMode: "kafka"
   dockDoorConsumerGroup: "inbound-receiving-dock-doors"
-  # PackagingView (ADR 0012/0013): local copy of product-master's pack levels
-  # (ProductPackLevelDeclared/Retired), read when a case GTIN or an SSCC
-  # carton is scanned. Stable group id, same reasoning as the other two.
+  # ADR 0012 packaging view consumer (PACKAGING_CONSUMER_GROUP, required by
+  # cmd/api since inbound-receiving d17b4f1): STABLE group id, same reasoning
+  # as the two groups above — a rescheduled pod resumes from its committed
+  # offsets; the chart refuses an empty one.
   packagingConsumerGroup: "inbound-receiving-packaging"
 
 kafka:

@@ -145,6 +145,8 @@ CHARTS: dict[str, dict[str, str]] = {
         "database.url": "postgres://u@example.invalid:5432/db",
         "config.productConsumerGroup": "inbound-receiving-product",
         "config.dockDoorConsumerGroup": "inbound-receiving-dock-door",
+        # ADR 0012 (chart d17b4f1): the packaging view consumer is
+        # mandatory too now -- same dummy treatment as the two above.
         "config.packagingConsumerGroup": "inbound-receiving-packaging",
     },
     # slotting-optimization: OLTP api + the optional mcp, analytics
@@ -210,6 +212,91 @@ CHARTS: dict[str, dict[str, str]] = {
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
         "kafka.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
+    },
+    # The ten retail-network contexts: one api Deployment/Service each
+    # (registered 2026-10-24). Every chart refuses to render without a
+    # database source and the Kafka brokers, and each consumer group /
+    # sibling-URL / (shipping-and-tracking) crypto key it mandates gets the
+    # same dummy its own charts/<ctx>/ci/default-values.yaml uses.
+    "../../customer-ordering/charts/customer-ordering": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.deliveryPromiseUrl": "http://delivery-promise.example.invalid",
+        "config.deliveryPromiseConsumerGroup": "customer-ordering-delivery-promise",
+        "config.orderSourcingConsumerGroup": "customer-ordering-order-sourcing",
+        "config.shippingConsumerGroup": "customer-ordering-shipping",
+    },
+    "../../delivery-promise/charts/delivery-promise": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.consumerGroup": "delivery-promise-consumer",
+    },
+    "../../last-mile-delivery/charts/last-mile-delivery": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.linehaulConsumerGroup": "last-mile-delivery-linehaul",
+        "config.nodeTopologyConsumerGroup": "last-mile-delivery-node-topology",
+        "config.shippingConsumerGroup": "last-mile-delivery-shipping",
+    },
+    "../../linehaul-transportation/charts/linehaul-transportation": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.nodeTopologyConsumerGroup": "linehaul-transportation-node-topology",
+        "config.orderSourcingConsumerGroup": "linehaul-transportation-order-sourcing",
+        "config.shippingAndTrackingConsumerGroup": "linehaul-transportation-shipping-and-tracking",
+    },
+    "../../node-performance/charts/node-performance": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.vendorConnectivityConsumerGroup": "node-performance-vendor-connectivity",
+        "config.shippingAndTrackingConsumerGroup": "node-performance-shipping-and-tracking",
+        "config.deliveryPromiseConsumerGroup": "node-performance-delivery-promise",
+        "config.offerAvailabilityConsumerGroup": "node-performance-offer-availability",
+        "config.nodeTopologyConsumerGroup": "node-performance-node-topology",
+    },
+    "../../node-topology/charts/node-topology": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+    },
+    "../../offer-availability/charts/offer-availability": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.nodeTopologyConsumerGroup": "offer-availability-node-topology",
+    },
+    "../../order-sourcing/charts/order-sourcing": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.customerOrderingConsumerGroup": "order-sourcing-customer-ordering",
+        "config.deliveryPromiseConsumerGroup": "order-sourcing-delivery-promise",
+        "config.lastMileDeliveryConsumerGroup": "order-sourcing-last-mile-delivery",
+        "config.linehaulTransportationConsumerGroup": "order-sourcing-linehaul-transportation",
+        "config.nodePerformanceConsumerGroup": "order-sourcing-node-performance",
+        "config.nodeTopologyConsumerGroup": "order-sourcing-node-topology",
+        "config.offerAvailabilityConsumerGroup": "order-sourcing-offer-availability",
+        "config.shippingAndTrackingConsumerGroup": "order-sourcing-shipping-and-tracking",
+        "config.vendorConnectivityConsumerGroup": "order-sourcing-vendor-connectivity",
+    },
+    "../../shipping-and-tracking/charts/shipping-and-tracking": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "crypto.shipToEncryptionKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "crypto.stopKeySecret": "ci-dummy-stop-key-secret",
+        "config.customerOrderingUrl": "http://customer-ordering.example.invalid",
+        "config.vendorConsumerGroup": "shipping-and-tracking-vendor",
+        "config.linehaulConsumerGroup": "shipping-and-tracking-linehaul",
+        "config.lastmileConsumerGroup": "shipping-and-tracking-lastmile",
+        "config.catalogConsumerGroup": "shipping-and-tracking-catalog",
+    },
+    "../../vendor-connectivity/charts/vendor-connectivity": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.nodeConsumerGroup": "vendor-connectivity-node",
+        "config.listingConsumerGroup": "vendor-connectivity-listing",
+        "config.sourcingConsumerGroup": "vendor-connectivity-sourcing",
+        "config.nodeTopologyUrl": "http://node-topology.example.invalid",
+        "config.offerAvailabilityUrl": "http://offer-availability.example.invalid",
+        "config.shippingAndTrackingUrl": "http://shipping-and-tracking.example.invalid",
+        "config.nodePerformanceUrl": "http://node-performance.example.invalid",
     },
     # Single Deployment/Service each, no optional-component toggles that
     # add another pair -- included for completeness/regression coverage,
