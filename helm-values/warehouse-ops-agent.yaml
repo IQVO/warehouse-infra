@@ -10,66 +10,6 @@
 # empty.
 credentials:
   existingSecret: warehouse-ops-agent-anthropic
-# The two new bounded contexts' MCP servers, wired for the
-# returns/exceptions rollout: the ops-agent chart has a dedicated upstreams
-# value per context it already knows, but not yet one for returns-processing
-# (cmd/mcp: get_return, list_returns_by_order, get_disposition_policy) or
-# exception-management (cmd/mcp: list_open_exceptions, get_exception,
-# get_exception_policies, get_sla_report). The binary already builds both
-# clients from these env names (merged in ops-agent #167: cmd/agent/main.go
-# reads RETURNS_PROCESSING_MCP_ENDPOINT / EXCEPTION_MANAGEMENT_MCP_ENDPOINT),
-# so the env lands here through extraEnv -- the skill's prescribed channel
-# for env the chart does not render (the chart renders no such vars of its
-# own, so there is no duplicate env entry and ArgoCD's three-way diff is
-# safe).
-extraEnv:
-  - name: RETURNS_PROCESSING_MCP_ENDPOINT
-    value: http://returns-processing-mcp.warehouse-systems.svc.cluster.local:8090/mcp
-  - name: EXCEPTION_MANAGEMENT_MCP_ENDPOINT
-    value: http://exception-management-mcp.warehouse-systems.svc.cluster.local:8090/mcp
-  # The ten retail-network contexts' read-only MCP servers (each repo's
-  # cmd/mcp, Service <ctx>-mcp:8090, Streamable HTTP at /mcp): the chart has
-  # no dedicated upstreams value for any of them, so the endpoints land here
-  # through extraEnv like the two above. Unlike those two the binary does
-  # not read these ten env names yet -- wiring the in-cluster URLs now means
-  # the ops-agent change that adds the clients needs no infra change. Each
-  # server's read tools, from the repo's
-  # internal/adapters/inbound/mcp/testdata/tool_registry.golden.json:
-  #   customer-ordering (get_order, get_order_tracking, get_ship_to),
-  #   delivery-promise (get_current_policy, get_delivery_offer, get_promise,
-  #     list_promise_books, list_promises_by_order),
-  #   last-mile-delivery (get_route, get_wave_stops, list_waves),
-  #   linehaul-transportation (get_departure, list_departures),
-  #   node-performance (get_scorecard, list_scorecards_by_grade),
-  #   node-topology (get_node, get_region, list_lanes, list_nodes,
-  #     list_regions, resolve_service_area),
-  #   offer-availability (browse_catalog, get_catalog_item,
-  #     get_inventory_feed, list_listings),
-  #   order-sourcing (get_assignment, list_assignments),
-  #   shipping-and-tracking (get_journey),
-  #   vendor-connectivity (get_inbound_shipment, get_node_scorecard,
-  #     get_purchase_order, get_transaction, get_vendor, get_vendor_node,
-  #     list_vendor_nodes, poll_inbound_shipments, poll_purchase_orders).
-  - name: CUSTOMER_ORDERING_MCP_ENDPOINT
-    value: http://customer-ordering-mcp.warehouse-systems.svc.cluster.local:8090/mcp
-  - name: DELIVERY_PROMISE_MCP_ENDPOINT
-    value: http://delivery-promise-mcp.warehouse-systems.svc.cluster.local:8090/mcp
-  - name: LAST_MILE_DELIVERY_MCP_ENDPOINT
-    value: http://last-mile-delivery-mcp.warehouse-systems.svc.cluster.local:8090/mcp
-  - name: LINEHAUL_TRANSPORTATION_MCP_ENDPOINT
-    value: http://linehaul-transportation-mcp.warehouse-systems.svc.cluster.local:8090/mcp
-  - name: NODE_PERFORMANCE_MCP_ENDPOINT
-    value: http://node-performance-mcp.warehouse-systems.svc.cluster.local:8090/mcp
-  - name: NODE_TOPOLOGY_MCP_ENDPOINT
-    value: http://node-topology-mcp.warehouse-systems.svc.cluster.local:8090/mcp
-  - name: OFFER_AVAILABILITY_MCP_ENDPOINT
-    value: http://offer-availability-mcp.warehouse-systems.svc.cluster.local:8090/mcp
-  - name: ORDER_SOURCING_MCP_ENDPOINT
-    value: http://order-sourcing-mcp.warehouse-systems.svc.cluster.local:8090/mcp
-  - name: SHIPPING_AND_TRACKING_MCP_ENDPOINT
-    value: http://shipping-and-tracking-mcp.warehouse-systems.svc.cluster.local:8090/mcp
-  - name: VENDOR_CONNECTIVITY_MCP_ENDPOINT
-    value: http://vendor-connectivity-mcp.warehouse-systems.svc.cluster.local:8090/mcp
 gatewayApi:
   enabled: true
   hosts:
@@ -117,6 +57,12 @@ service:
   targetPort: 8095
   type: ClusterIP
 upstreams:
+  customerOrdering:
+    endpoint: http://customer-ordering-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  deliveryPromise:
+    endpoint: http://delivery-promise-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  exceptionManagement:
+    endpoint: http://exception-management-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   facilityLayout:
     endpoint: http://facility-layout-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   fulfillmentExecution:
@@ -127,16 +73,38 @@ upstreams:
     endpoint: http://inventory-storage-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   laborPerformance:
     endpoint: http://labor-performance-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  lastMileDelivery:
+    endpoint: http://last-mile-delivery-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  linehaulTransportation:
+    endpoint: http://linehaul-transportation-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   networkInventoryPlanning:
     endpoint: http://network-inventory-planning-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  nodePerformance:
+    endpoint: http://node-performance-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  nodeTopology:
+    endpoint: http://node-topology-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  offerAvailability:
+    endpoint: http://offer-availability-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   orderManagement:
     endpoint: http://order-management-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  orderSourcing:
+    endpoint: http://order-sourcing-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  pickFaceReplenishment:
+    endpoint: http://pick-face-replenishment-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   processPathManagement:
     endpoint: http://process-path-management-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   productMaster:
     endpoint: http://product-master-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  returnsProcessing:
+    endpoint: http://returns-processing-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  shippingAndTracking:
+    endpoint: http://shipping-and-tracking-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   slottingOptimization:
     endpoint: http://slotting-optimization-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  taskInterleaving:
+    endpoint: http://task-interleaving-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  vendorConnectivity:
+    endpoint: http://vendor-connectivity-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   warehousePlanning:
     endpoint: http://warehouse-planning-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   wesWorkPlanning:
