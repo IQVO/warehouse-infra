@@ -313,6 +313,14 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.shippingAndTrackingUrl": "http://shipping-and-tracking.example.invalid",
         "config.nodePerformanceUrl": "http://node-performance.example.invalid",
     },
+    "../../seller-inbound/charts/seller-inbound": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.nodeConsumerGroup": "seller-inbound-node",
+        "config.catalogConsumerGroup": "seller-inbound-catalog",
+        "config.receiptConsumerGroup": "seller-inbound-receipt",
+        "config.ssccCompanyPrefix": "0614141",
+    },
     # Single Deployment/Service each, no optional-component toggles that
     # add another pair -- included for completeness/regression coverage,
     # not because they're currently at risk of this specific bug shape.

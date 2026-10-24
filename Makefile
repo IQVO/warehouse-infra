@@ -39,7 +39,8 @@ CHARTS := \
 	../offer-availability/charts/offer-availability \
 	../order-sourcing/charts/order-sourcing \
 	../shipping-and-tracking/charts/shipping-and-tracking \
-	../vendor-connectivity/charts/vendor-connectivity
+	../vendor-connectivity/charts/vendor-connectivity \
+	../seller-inbound/charts/seller-inbound
 
 .PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test seed-network seed-network-dry-run seed-network-verify check check-all
 

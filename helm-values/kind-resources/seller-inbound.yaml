@@ -1,0 +1,10 @@
+# kind CPU-request overlay for seller-inbound (single api container; generated
+# from seller-inbound/charts/seller-inbound/values.yaml on develop). The local kind cluster
+# is ONE worker with the Docker VM's 10 CPUs; chart defaults request
+# 50-100m per container while real use is ~10% of that, so rolling
+# updates (maxSurge 1 per Deployment) could not schedule. Only
+# requests.cpu is lowered; limits and memory keep the chart defaults.
+# The Application's last value file (ADR 0002 D2); Helm deep-merges it.
+resources:
+  requests:
+    cpu: 25m
