@@ -233,6 +233,13 @@ applications:
     kind: service
     repo_owner: IQVO
     database: true
+  # seller-inbound: retail-network service (single api Deployment: OLTP REST :8080 +
+  # transactional-outbox relay + three Kafka consumers + SSCC issuance; no
+  # analytics read side, no MCP, no frontend remote).
+  seller-inbound:
+    kind: service
+    repo_owner: IQVO
+    database: true
 
   warehouse-console:
     kind: other
