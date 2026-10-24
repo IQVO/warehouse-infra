@@ -342,6 +342,207 @@ CONTEXTS = [
         "business_metrics": [],
     },
     {
+        "key": "customer-ordering",
+        "title": "Customer Ordering",
+        "uid": "warehouse-customer-ordering",
+        # Retail-network reference service (registered with the first local
+        # deployment of the network components, 2026-10-24). Same
+        # observability state as pick-face-replenishment when it was
+        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
+        # so business_metrics stays empty (never invent a metric) and the
+        # HTTP RED and Go-runtime rows stay empty until it instruments
+        # itself. The Kong route /api/customer-ordering is live (the chart's
+        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
+        # so the Kong rows stay empty until it does; the pod-restart alerts
+        # are live. No docs site and no runbook page exist yet, so the rules
+        # link the repository itself.
+        "service_regex": "customer-ordering.*",
+        "loki_app": "customer-ordering",
+        "runbook_url": "https://github.com/IQVO/customer-ordering/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
+        "key": "delivery-promise",
+        "title": "Delivery Promise",
+        "uid": "warehouse-delivery-promise",
+        # Retail-network reference service (registered with the first local
+        # deployment of the network components, 2026-10-24). Same
+        # observability state as pick-face-replenishment when it was
+        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
+        # so business_metrics stays empty (never invent a metric) and the
+        # HTTP RED and Go-runtime rows stay empty until it instruments
+        # itself. The Kong route /api/delivery-promise is live (the chart's
+        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
+        # so the Kong rows stay empty until it does; the pod-restart alerts
+        # are live. No docs site and no runbook page exist yet, so the rules
+        # link the repository itself.
+        "service_regex": "delivery-promise.*",
+        "loki_app": "delivery-promise",
+        "runbook_url": "https://github.com/IQVO/delivery-promise/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
+        "key": "last-mile-delivery",
+        "title": "Last-Mile Delivery",
+        "uid": "warehouse-last-mile-delivery",
+        # Retail-network reference service (registered with the first local
+        # deployment of the network components, 2026-10-24). Same
+        # observability state as pick-face-replenishment when it was
+        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
+        # so business_metrics stays empty (never invent a metric) and the
+        # HTTP RED and Go-runtime rows stay empty until it instruments
+        # itself. The Kong route /api/last-mile-delivery is live (the chart's
+        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
+        # so the Kong rows stay empty until it does; the pod-restart alerts
+        # are live. No docs site and no runbook page exist yet, so the rules
+        # link the repository itself.
+        "service_regex": "last-mile-delivery.*",
+        "loki_app": "last-mile-delivery",
+        "runbook_url": "https://github.com/IQVO/last-mile-delivery/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
+        "key": "linehaul-transportation",
+        "title": "Linehaul Transportation",
+        "uid": "warehouse-linehaul-transportation",
+        # Retail-network reference service (registered with the first local
+        # deployment of the network components, 2026-10-24). Same
+        # observability state as pick-face-replenishment when it was
+        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
+        # so business_metrics stays empty (never invent a metric) and the
+        # HTTP RED and Go-runtime rows stay empty until it instruments
+        # itself. The Kong route /api/linehaul-transportation is live (the chart's
+        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
+        # so the Kong rows stay empty until it does; the pod-restart alerts
+        # are live. No docs site and no runbook page exist yet, so the rules
+        # link the repository itself.
+        "service_regex": "linehaul-transportation.*",
+        "loki_app": "linehaul-transportation",
+        "runbook_url": "https://github.com/IQVO/linehaul-transportation/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
+        "key": "node-performance",
+        "title": "Node Performance",
+        "uid": "warehouse-node-performance",
+        # Retail-network reference service (registered with the first local
+        # deployment of the network components, 2026-10-24). Same
+        # observability state as pick-face-replenishment when it was
+        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
+        # so business_metrics stays empty (never invent a metric) and the
+        # HTTP RED and Go-runtime rows stay empty until it instruments
+        # itself. The Kong route /api/node-performance is live (the chart's
+        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
+        # so the Kong rows stay empty until it does; the pod-restart alerts
+        # are live. No docs site and no runbook page exist yet, so the rules
+        # link the repository itself.
+        "service_regex": "node-performance.*",
+        "loki_app": "node-performance",
+        "runbook_url": "https://github.com/IQVO/node-performance/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
+        "key": "node-topology",
+        "title": "Node Topology",
+        "uid": "warehouse-node-topology",
+        # Retail-network reference service (registered with the first local
+        # deployment of the network components, 2026-10-24). Same
+        # observability state as pick-face-replenishment when it was
+        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
+        # so business_metrics stays empty (never invent a metric) and the
+        # HTTP RED and Go-runtime rows stay empty until it instruments
+        # itself. The Kong route /api/node-topology is live (the chart's
+        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
+        # so the Kong rows stay empty until it does; the pod-restart alerts
+        # are live. No docs site and no runbook page exist yet, so the rules
+        # link the repository itself.
+        "service_regex": "node-topology.*",
+        "loki_app": "node-topology",
+        "runbook_url": "https://github.com/IQVO/node-topology/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
+        "key": "offer-availability",
+        "title": "Offer & Availability",
+        "uid": "warehouse-offer-availability",
+        # Retail-network reference service (registered with the first local
+        # deployment of the network components, 2026-10-24). Same
+        # observability state as pick-face-replenishment when it was
+        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
+        # so business_metrics stays empty (never invent a metric) and the
+        # HTTP RED and Go-runtime rows stay empty until it instruments
+        # itself. The Kong route /api/offer-availability is live (the chart's
+        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
+        # so the Kong rows stay empty until it does; the pod-restart alerts
+        # are live. No docs site and no runbook page exist yet, so the rules
+        # link the repository itself.
+        "service_regex": "offer-availability.*",
+        "loki_app": "offer-availability",
+        "runbook_url": "https://github.com/IQVO/offer-availability/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
+        "key": "order-sourcing",
+        "title": "Order Sourcing",
+        "uid": "warehouse-order-sourcing",
+        # Retail-network reference service (registered with the first local
+        # deployment of the network components, 2026-10-24). Same
+        # observability state as pick-face-replenishment when it was
+        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
+        # so business_metrics stays empty (never invent a metric) and the
+        # HTTP RED and Go-runtime rows stay empty until it instruments
+        # itself. The Kong route /api/order-sourcing is live (the chart's
+        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
+        # so the Kong rows stay empty until it does; the pod-restart alerts
+        # are live. No docs site and no runbook page exist yet, so the rules
+        # link the repository itself.
+        "service_regex": "order-sourcing.*",
+        "loki_app": "order-sourcing",
+        "runbook_url": "https://github.com/IQVO/order-sourcing/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
+        "key": "shipping-and-tracking",
+        "title": "Shipping & Tracking",
+        "uid": "warehouse-shipping-and-tracking",
+        # Retail-network reference service (registered with the first local
+        # deployment of the network components, 2026-10-24). Same
+        # observability state as pick-face-replenishment when it was
+        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
+        # so business_metrics stays empty (never invent a metric) and the
+        # HTTP RED and Go-runtime rows stay empty until it instruments
+        # itself. The Kong route /api/shipping-and-tracking is live (the chart's
+        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
+        # so the Kong rows stay empty until it does; the pod-restart alerts
+        # are live. No docs site and no runbook page exist yet, so the rules
+        # link the repository itself.
+        "service_regex": "shipping-and-tracking.*",
+        "loki_app": "shipping-and-tracking",
+        "runbook_url": "https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
+        "key": "vendor-connectivity",
+        "title": "Vendor Connectivity",
+        "uid": "warehouse-vendor-connectivity",
+        # Retail-network reference service (registered with the first local
+        # deployment of the network components, 2026-10-24). Same
+        # observability state as pick-face-replenishment when it was
+        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
+        # so business_metrics stays empty (never invent a metric) and the
+        # HTTP RED and Go-runtime rows stay empty until it instruments
+        # itself. The Kong route /api/vendor-connectivity is live (the chart's
+        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
+        # so the Kong rows stay empty until it does; the pod-restart alerts
+        # are live. No docs site and no runbook page exist yet, so the rules
+        # link the repository itself.
+        "service_regex": "vendor-connectivity.*",
+        "loki_app": "vendor-connectivity",
+        "runbook_url": "https://github.com/IQVO/vendor-connectivity/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+
+    {
         "key": "product-master",
         "title": "Product Master",
         "uid": "warehouse-product-master",
