@@ -35,20 +35,24 @@
 #                 EventCatalog); its image tag goes to image.tag.
 # ---------------------------------------------------------------------------
 applications:
-  # customer-ordering: retail-network reference service (single api Deployment: OLTP
-  # REST :8080 + transactional-outbox relay + local-copy consumers; no
-  # analytics read side, no MCP, no frontend remote).
+  # customer-ordering: retail-network reference service (single api Deployment:
+  # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
+  # plus a read-only MCP server (cmd/mcp); still no analytics read side).
+  # Its web remote is customer_ordering_mfe (web/), served at /mfes/customer-ordering/.
   customer-ordering:
     kind: service
     repo_owner: IQVO
     database: true
-  # delivery-promise: retail-network reference service (single api Deployment: OLTP
-  # REST :8080 + transactional-outbox relay + local-copy consumers; no
-  # analytics read side, no MCP, no frontend remote).
+    frontend_remote: customer_ordering_mfe
+  # delivery-promise: retail-network reference service (single api Deployment:
+  # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
+  # plus a read-only MCP server (cmd/mcp); still no analytics read side).
+  # Its web remote is delivery_promise_mfe (web/), served at /mfes/delivery-promise/.
   delivery-promise:
     kind: service
     repo_owner: IQVO
     database: true
+    frontend_remote: delivery_promise_mfe
 
   ecosystem:
     kind: other
@@ -100,20 +104,24 @@ applications:
     database: true
     analytics: true
     frontend_remote: labor_mfe
-  # last-mile-delivery: retail-network reference service (single api Deployment: OLTP
-  # REST :8080 + transactional-outbox relay + local-copy consumers; no
-  # analytics read side, no MCP, no frontend remote).
+  # last-mile-delivery: retail-network reference service (single api Deployment:
+  # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
+  # plus a read-only MCP server (cmd/mcp); still no analytics read side).
+  # Its web remote is last_mile_mfe (web/), served at /mfes/last-mile-delivery/.
   last-mile-delivery:
     kind: service
     repo_owner: IQVO
     database: true
-  # linehaul-transportation: retail-network reference service (single api Deployment: OLTP
-  # REST :8080 + transactional-outbox relay + local-copy consumers; no
-  # analytics read side, no MCP, no frontend remote).
+    frontend_remote: last_mile_mfe
+  # linehaul-transportation: retail-network reference service (single api Deployment:
+  # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
+  # plus a read-only MCP server (cmd/mcp); still no analytics read side).
+  # Its web remote is linehaul_mfe (web/), served at /mfes/linehaul-transportation/.
   linehaul-transportation:
     kind: service
     repo_owner: IQVO
     database: true
+    frontend_remote: linehaul_mfe
 
   network-fulfillment:
     kind: other
@@ -129,27 +137,33 @@ applications:
     database: true
     analytics: true
     frontend_remote: nip_mfe
-  # node-performance: retail-network reference service (single api Deployment: OLTP
-  # REST :8080 + transactional-outbox relay + local-copy consumers; no
-  # analytics read side, no MCP, no frontend remote).
+  # node-performance: retail-network reference service (single api Deployment:
+  # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
+  # plus a read-only MCP server (cmd/mcp); still no analytics read side).
+  # Its web remote is node_performance_mfe (web/), served at /mfes/node-performance/.
   node-performance:
     kind: service
     repo_owner: IQVO
     database: true
-  # node-topology: retail-network reference service (single api Deployment: OLTP
-  # REST :8080 + transactional-outbox relay + local-copy consumers; no
-  # analytics read side, no MCP, no frontend remote).
+    frontend_remote: node_performance_mfe
+  # node-topology: retail-network reference service (single api Deployment:
+  # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
+  # plus a read-only MCP server (cmd/mcp); still no analytics read side).
+  # Its web remote is node_topology_mfe (web/), served at /mfes/node-topology/.
   node-topology:
     kind: service
     repo_owner: IQVO
     database: true
-  # offer-availability: retail-network reference service (single api Deployment: OLTP
-  # REST :8080 + transactional-outbox relay + local-copy consumers; no
-  # analytics read side, no MCP, no frontend remote).
+    frontend_remote: node_topology_mfe
+  # offer-availability: retail-network reference service (single api Deployment:
+  # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
+  # plus a read-only MCP server (cmd/mcp); still no analytics read side).
+  # Its web remote is offer_availability_mfe (web/), served at /mfes/offer-availability/.
   offer-availability:
     kind: service
     repo_owner: IQVO
     database: true
+    frontend_remote: offer_availability_mfe
 
   order-management:
     kind: service
@@ -157,13 +171,15 @@ applications:
     analytics: true
     frontend_remote: order_mgmt_mfe
 
-  # order-sourcing: retail-network reference service (single api Deployment: OLTP
-  # REST :8080 + transactional-outbox relay + local-copy consumers; no
-  # analytics read side, no MCP, no frontend remote).
+  # order-sourcing: retail-network reference service (single api Deployment:
+  # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
+  # plus a read-only MCP server (cmd/mcp); still no analytics read side).
+  # Its web remote is order_sourcing_mfe (web/), served at /mfes/order-sourcing/.
   order-sourcing:
     kind: service
     repo_owner: IQVO
     database: true
+    frontend_remote: order_sourcing_mfe
   # pick-face-replenishment: the chart's analytics projector/reports read only
   # ANALYTICS_DATABASE_URL (no reader DSN), hence the one-key secret_keys. Its
   # web remote is replenishment_mfe (web/vite.config.ts), served at
@@ -200,13 +216,15 @@ applications:
     analytics:
       secret_keys: [ANALYTICS_DATABASE_URL]
     frontend_remote: returns_mfe
-  # shipping-and-tracking: retail-network reference service (single api Deployment: OLTP
-  # REST :8080 + transactional-outbox relay + local-copy consumers; no
-  # analytics read side, no MCP, no frontend remote).
+  # shipping-and-tracking: retail-network reference service (single api Deployment:
+  # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
+  # plus a read-only MCP server (cmd/mcp); still no analytics read side).
+  # Its web remote is shipping_mfe (web/), served at /mfes/shipping-and-tracking/.
   shipping-and-tracking:
     kind: service
     repo_owner: IQVO
     database: true
+    frontend_remote: shipping_mfe
 
   slotting-optimization:
     kind: service
@@ -226,13 +244,15 @@ applications:
     analytics:
       secret_keys: [ANALYTICS_DATABASE_URL]
     frontend_remote: task_interleaving_mfe
-  # vendor-connectivity: retail-network reference service (single api Deployment: OLTP
-  # REST :8080 + transactional-outbox relay + local-copy consumers; no
-  # analytics read side, no MCP, no frontend remote).
+  # vendor-connectivity: retail-network reference service (single api Deployment:
+  # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
+  # plus a read-only MCP server (cmd/mcp); still no analytics read side).
+  # Its web remote is vendor_connectivity_mfe (web/), served at /mfes/vendor-connectivity/.
   vendor-connectivity:
     kind: service
     repo_owner: IQVO
     database: true
+    frontend_remote: vendor_connectivity_mfe
 
   warehouse-console:
     kind: other

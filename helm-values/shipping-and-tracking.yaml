@@ -1,8 +1,9 @@
 # shipping-and-tracking -- retail-network reference service (a domain-driven design
 # study, not associated with any company). Single api Deployment: OLTP
 # REST on :8080 plus, in the SAME process, a transactional-outbox relay
-# and the local-copy consumers below. No analytics read side, no MCP
-# server, no frontend remote.
+# and the local-copy consumers below. Still no analytics read side, but
+# a read-only MCP server (cmd/mcp) and a console remote (web/, shipping_mfe)
+# now exist and are switched on below.
 #
 # shipping-and-tracking -- the shipping catalog + tracking timeline:
 # consumes vendor, linehaul, lastmile and catalog streams, publishes
@@ -59,6 +60,15 @@ database:
   existingSecretKey: DATABASE_URL
   migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
 
+# The console remote (shipping_mfe, web/): its content-addressed image tag
+# comes from Terraform (local.frontend_remotes); the web gateway
+# serves it at /mfes/shipping-and-tracking/.
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/shipping-and-tracking-frontend
+
 # Kong exposure of the OLTP API (the chart's httproute.yaml):
 # /api/shipping-and-tracking, prefix stripped. The parentRefs come from
 # helm-values/_platform.yaml (the shared warehouse-gateway), never per-app.
@@ -72,6 +82,16 @@ gatewayApi:
 image:
   pullPolicy: IfNotPresent
   repository: warehouse/shipping-and-tracking
+
+# Read-only MCP server (cmd/mcp), Service shipping-and-tracking-mcp:8090:
+# Kong exposure /api/mcp/shipping-and-tracking, prefix rewritten to /mcp
+# (the chart's mcp-route.yaml). The route's parentRefs come from
+# _platform.yaml exactly like the OLTP route above.
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/shipping-and-tracking
 
 service:
   port: 80
