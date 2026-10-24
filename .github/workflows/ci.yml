@@ -201,6 +201,11 @@ jobs:
           path: vendor-connectivity
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/seller-inbound
+          ref: develop
+          path: seller-inbound
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/warehouse-ui-kit
           ref: develop
           path: warehouse-ui-kit
@@ -438,6 +443,11 @@ jobs:
           repository: IQVO/vendor-connectivity
           ref: develop
           path: vendor-connectivity
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/seller-inbound
+          ref: develop
+          path: seller-inbound
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: v3.16.4
@@ -615,6 +625,11 @@ jobs:
           repository: IQVO/vendor-connectivity
           ref: develop
           path: vendor-connectivity
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/seller-inbound
+          ref: develop
+          path: seller-inbound
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: v3.16.4
