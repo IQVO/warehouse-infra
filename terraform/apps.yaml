@@ -35,6 +35,20 @@
 #                 EventCatalog); its image tag goes to image.tag.
 # ---------------------------------------------------------------------------
 applications:
+  # customer-ordering: retail-network reference service (single api Deployment: OLTP
+  # REST :8080 + transactional-outbox relay + local-copy consumers; no
+  # analytics read side, no MCP, no frontend remote).
+  customer-ordering:
+    kind: service
+    repo_owner: IQVO
+    database: true
+  # delivery-promise: retail-network reference service (single api Deployment: OLTP
+  # REST :8080 + transactional-outbox relay + local-copy consumers; no
+  # analytics read side, no MCP, no frontend remote).
+  delivery-promise:
+    kind: service
+    repo_owner: IQVO
+    database: true
 
   ecosystem:
     kind: other
@@ -86,6 +100,20 @@ applications:
     database: true
     analytics: true
     frontend_remote: labor_mfe
+  # last-mile-delivery: retail-network reference service (single api Deployment: OLTP
+  # REST :8080 + transactional-outbox relay + local-copy consumers; no
+  # analytics read side, no MCP, no frontend remote).
+  last-mile-delivery:
+    kind: service
+    repo_owner: IQVO
+    database: true
+  # linehaul-transportation: retail-network reference service (single api Deployment: OLTP
+  # REST :8080 + transactional-outbox relay + local-copy consumers; no
+  # analytics read side, no MCP, no frontend remote).
+  linehaul-transportation:
+    kind: service
+    repo_owner: IQVO
+    database: true
 
   network-fulfillment:
     kind: other
@@ -101,6 +129,27 @@ applications:
     database: true
     analytics: true
     frontend_remote: nip_mfe
+  # node-performance: retail-network reference service (single api Deployment: OLTP
+  # REST :8080 + transactional-outbox relay + local-copy consumers; no
+  # analytics read side, no MCP, no frontend remote).
+  node-performance:
+    kind: service
+    repo_owner: IQVO
+    database: true
+  # node-topology: retail-network reference service (single api Deployment: OLTP
+  # REST :8080 + transactional-outbox relay + local-copy consumers; no
+  # analytics read side, no MCP, no frontend remote).
+  node-topology:
+    kind: service
+    repo_owner: IQVO
+    database: true
+  # offer-availability: retail-network reference service (single api Deployment: OLTP
+  # REST :8080 + transactional-outbox relay + local-copy consumers; no
+  # analytics read side, no MCP, no frontend remote).
+  offer-availability:
+    kind: service
+    repo_owner: IQVO
+    database: true
 
   order-management:
     kind: service
@@ -108,6 +157,13 @@ applications:
     analytics: true
     frontend_remote: order_mgmt_mfe
 
+  # order-sourcing: retail-network reference service (single api Deployment: OLTP
+  # REST :8080 + transactional-outbox relay + local-copy consumers; no
+  # analytics read side, no MCP, no frontend remote).
+  order-sourcing:
+    kind: service
+    repo_owner: IQVO
+    database: true
   # pick-face-replenishment: the chart's analytics projector/reports read only
   # ANALYTICS_DATABASE_URL (no reader DSN), hence the one-key secret_keys. Its
   # web remote is replenishment_mfe (web/vite.config.ts), served at
@@ -144,6 +200,13 @@ applications:
     analytics:
       secret_keys: [ANALYTICS_DATABASE_URL]
     frontend_remote: returns_mfe
+  # shipping-and-tracking: retail-network reference service (single api Deployment: OLTP
+  # REST :8080 + transactional-outbox relay + local-copy consumers; no
+  # analytics read side, no MCP, no frontend remote).
+  shipping-and-tracking:
+    kind: service
+    repo_owner: IQVO
+    database: true
 
   slotting-optimization:
     kind: service
@@ -163,6 +226,13 @@ applications:
     analytics:
       secret_keys: [ANALYTICS_DATABASE_URL]
     frontend_remote: task_interleaving_mfe
+  # vendor-connectivity: retail-network reference service (single api Deployment: OLTP
+  # REST :8080 + transactional-outbox relay + local-copy consumers; no
+  # analytics read side, no MCP, no frontend remote).
+  vendor-connectivity:
+    kind: service
+    repo_owner: IQVO
+    database: true
 
   warehouse-console:
     kind: other
