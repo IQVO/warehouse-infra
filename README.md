@@ -474,6 +474,10 @@ python3 scripts/seed-transfer-lanes.py --dry-run
 python3 scripts/seed-transfer-lanes.py
 ```
 
+The ten retail-network services have their own, separate, owner-run seed that is not one of
+the three above: `make seed-network-dry-run`, then `make seed-network` (vendor `V-WS`, node
+`SIM1`, topology, waves, catalogue, stock; idempotent). See `scripts/README-retail-network-seed.md`.
+
 `seed_catalogue.py` exits 1 if any declared path is not converged (a DEACTIVATED id
 or a changed immutable field such as `direct`: declare a new `pathId` in
 `paths.json` instead); fix that before step 2. The first run after
