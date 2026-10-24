@@ -59,6 +59,9 @@ config:
   inventoryConsumerGroup: "pick-face-replenishment-inventory"
   slottingConsumerGroup: "pick-face-replenishment-slotting"
   layoutConsumerGroup: "pick-face-replenishment-layout"
+  # PACK_LEVEL_CONSUMER_GROUP (ADR 0009): local copy of product-master's pack
+  # levels, from which a PACK_DERIVED policy takes its multiple.
+  packLevelConsumerGroup: "pick-face-replenishment-pack-levels"
 
 # Analytics read side (ADR 0008). The projector's consumer group is a FIXED,
 # stable id (fleet charter naming `<ctx>-analytics`): a restarted pod resumes
