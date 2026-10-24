@@ -213,12 +213,15 @@ CHARTS: dict[str, dict[str, str]] = {
         "kafka.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
     },
-    # The ten retail-network contexts: one api Deployment/Service each
-    # (registered 2026-10-24). Every chart refuses to render without a
-    # database source and the Kafka brokers, and each consumer group /
-    # sibling-URL / (shipping-and-tracking) crypto key it mandates gets the
-    # same dummy its own charts/<ctx>/ci/default-values.yaml uses.
+    # The ten retail-network contexts (registered 2026-10-24): each chart's
+    # api Deployment plus the optional mcp and frontend components its repo
+    # has since merged (same set its ci/all-components-values.yaml renders).
+    # Every chart refuses to render without a database source and the Kafka
+    # brokers, and each consumer group / sibling-URL / (shipping-and-tracking)
+    # crypto key it mandates gets the same dummy its own
+    # charts/<ctx>/ci/default-values.yaml uses.
     "../../customer-ordering/charts/customer-ordering": {
+        "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.deliveryPromiseUrl": "http://delivery-promise.example.invalid",
@@ -227,11 +230,13 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.shippingConsumerGroup": "customer-ordering-shipping",
     },
     "../../delivery-promise/charts/delivery-promise": {
+        "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.consumerGroup": "delivery-promise-consumer",
     },
     "../../last-mile-delivery/charts/last-mile-delivery": {
+        "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.linehaulConsumerGroup": "last-mile-delivery-linehaul",
@@ -239,6 +244,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.shippingConsumerGroup": "last-mile-delivery-shipping",
     },
     "../../linehaul-transportation/charts/linehaul-transportation": {
+        "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.nodeTopologyConsumerGroup": "linehaul-transportation-node-topology",
@@ -246,6 +252,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.shippingAndTrackingConsumerGroup": "linehaul-transportation-shipping-and-tracking",
     },
     "../../node-performance/charts/node-performance": {
+        "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.vendorConnectivityConsumerGroup": "node-performance-vendor-connectivity",
@@ -253,17 +260,21 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.deliveryPromiseConsumerGroup": "node-performance-delivery-promise",
         "config.offerAvailabilityConsumerGroup": "node-performance-offer-availability",
         "config.nodeTopologyConsumerGroup": "node-performance-node-topology",
+        "config.sellerInboundConsumerGroup": "node-performance-seller-inbound",
     },
     "../../node-topology/charts/node-topology": {
+        "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
     },
     "../../offer-availability/charts/offer-availability": {
+        "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.nodeTopologyConsumerGroup": "offer-availability-node-topology",
     },
     "../../order-sourcing/charts/order-sourcing": {
+        "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.customerOrderingConsumerGroup": "order-sourcing-customer-ordering",
@@ -277,6 +288,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.vendorConnectivityConsumerGroup": "order-sourcing-vendor-connectivity",
     },
     "../../shipping-and-tracking/charts/shipping-and-tracking": {
+        "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "crypto.shipToEncryptionKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
@@ -288,9 +300,12 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.catalogConsumerGroup": "shipping-and-tracking-catalog",
     },
     "../../vendor-connectivity/charts/vendor-connectivity": {
+        "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.nodeConsumerGroup": "vendor-connectivity-node",
+        "config.inboundConsumerGroup": "vendor-connectivity-inbound",
+        "config.packagingConsumerGroup": "vendor-connectivity-packaging",
         "config.listingConsumerGroup": "vendor-connectivity-listing",
         "config.sourcingConsumerGroup": "vendor-connectivity-sourcing",
         "config.nodeTopologyUrl": "http://node-topology.example.invalid",

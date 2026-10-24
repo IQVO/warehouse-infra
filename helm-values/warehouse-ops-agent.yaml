@@ -27,6 +27,49 @@ extraEnv:
     value: http://returns-processing-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   - name: EXCEPTION_MANAGEMENT_MCP_ENDPOINT
     value: http://exception-management-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  # The ten retail-network contexts' read-only MCP servers (each repo's
+  # cmd/mcp, Service <ctx>-mcp:8090, Streamable HTTP at /mcp): the chart has
+  # no dedicated upstreams value for any of them, so the endpoints land here
+  # through extraEnv like the two above. Unlike those two the binary does
+  # not read these ten env names yet -- wiring the in-cluster URLs now means
+  # the ops-agent change that adds the clients needs no infra change. Each
+  # server's read tools, from the repo's
+  # internal/adapters/inbound/mcp/testdata/tool_registry.golden.json:
+  #   customer-ordering (get_order, get_order_tracking, get_ship_to),
+  #   delivery-promise (get_current_policy, get_delivery_offer, get_promise,
+  #     list_promise_books, list_promises_by_order),
+  #   last-mile-delivery (get_route, get_wave_stops, list_waves),
+  #   linehaul-transportation (get_departure, list_departures),
+  #   node-performance (get_scorecard, list_scorecards_by_grade),
+  #   node-topology (get_node, get_region, list_lanes, list_nodes,
+  #     list_regions, resolve_service_area),
+  #   offer-availability (browse_catalog, get_catalog_item,
+  #     get_inventory_feed, list_listings),
+  #   order-sourcing (get_assignment, list_assignments),
+  #   shipping-and-tracking (get_journey),
+  #   vendor-connectivity (get_inbound_shipment, get_node_scorecard,
+  #     get_purchase_order, get_transaction, get_vendor, get_vendor_node,
+  #     list_vendor_nodes, poll_inbound_shipments, poll_purchase_orders).
+  - name: CUSTOMER_ORDERING_MCP_ENDPOINT
+    value: http://customer-ordering-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  - name: DELIVERY_PROMISE_MCP_ENDPOINT
+    value: http://delivery-promise-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  - name: LAST_MILE_DELIVERY_MCP_ENDPOINT
+    value: http://last-mile-delivery-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  - name: LINEHAUL_TRANSPORTATION_MCP_ENDPOINT
+    value: http://linehaul-transportation-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  - name: NODE_PERFORMANCE_MCP_ENDPOINT
+    value: http://node-performance-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  - name: NODE_TOPOLOGY_MCP_ENDPOINT
+    value: http://node-topology-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  - name: OFFER_AVAILABILITY_MCP_ENDPOINT
+    value: http://offer-availability-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  - name: ORDER_SOURCING_MCP_ENDPOINT
+    value: http://order-sourcing-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  - name: SHIPPING_AND_TRACKING_MCP_ENDPOINT
+    value: http://shipping-and-tracking-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  - name: VENDOR_CONNECTIVITY_MCP_ENDPOINT
+    value: http://vendor-connectivity-mcp.warehouse-systems.svc.cluster.local:8090/mcp
 gatewayApi:
   enabled: true
   hosts:
