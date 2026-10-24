@@ -75,6 +75,14 @@ extraEnv:
     value: kafka
   - name: PRODUCT_CLASSIFICATION_CONSUMER_GROUP
     value: fulfillment-execution-product-classification
+  # Case/each pick scans (fulfillment-execution ADR 0054): a local PackView of
+  # product-master's pack levels under its OWN group (a second consumer of
+  # warehouse.product-master.events), and the inventory-storage base URL the
+  # BREAK_CASE completion calls (POST /containers/{lpn}:break).
+  - name: PACK_VIEW_CONSUMER_GROUP
+    value: fulfillment-execution-pack-view
+  - name: INVENTORY_STORAGE_BASE_URL
+    value: http://inventory-storage.warehouse-systems.svc.cluster.local:80
   # Station-location role check (ADR-0024, gap R8), ON since 2026-10-17:
   # RegisterStation rejects a supplied locationCode facility-layout knows as a
   # non-WorkCenter role (an unknown location still passes, fail-open by

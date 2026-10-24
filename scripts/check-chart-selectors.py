@@ -145,6 +145,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "database.url": "postgres://u@example.invalid:5432/db",
         "config.productConsumerGroup": "inbound-receiving-product",
         "config.dockDoorConsumerGroup": "inbound-receiving-dock-door",
+        "config.packagingConsumerGroup": "inbound-receiving-packaging",
     },
     # slotting-optimization: OLTP api + the optional mcp, analytics
     # (projector/reports) and frontend (slotting_mfe) components, all of which

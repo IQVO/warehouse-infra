@@ -62,6 +62,10 @@ config:
   # enforce against. Stable group id, same reasoning as the product group.
   dockDoorMode: "kafka"
   dockDoorConsumerGroup: "inbound-receiving-dock-doors"
+  # PackagingView (ADR 0012/0013): local copy of product-master's pack levels
+  # (ProductPackLevelDeclared/Retired), read when a case GTIN or an SSCC
+  # carton is scanned. Stable group id, same reasoning as the other two.
+  packagingConsumerGroup: "inbound-receiving-packaging"
 
 kafka:
   enabled: true
