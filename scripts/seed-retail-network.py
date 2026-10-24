@@ -512,7 +512,8 @@ class Seeder:
                 self.fresh = True
                 node = self.find_fc(fc)
                 if node is None:
-                    raise StepError(f"{label}: the registration transaction succeeded but the node is not in node-topology")
+                    raise StepError(f"{label}: the registration transaction ended without a live node in node-topology "
+                                    f"(a RETIRED node holding vendorNodeCode {code}?)")
         else:
             self.same(label, f"adopted {node['nodeId']}, {node['status']}")
         nid = node["nodeId"]
