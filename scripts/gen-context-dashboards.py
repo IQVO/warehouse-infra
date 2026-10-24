@@ -541,6 +541,25 @@ CONTEXTS = [
         "runbook_url": "https://github.com/IQVO/vendor-connectivity/blob/develop/docs/operations/runbook.md",
         "business_metrics": [],
     },
+    {
+        "key": "seller-inbound",
+        "title": "Seller Inbound",
+        "uid": "warehouse-seller-inbound",
+        # Retail-network service (registered 2026-10-24, before its first
+        # local deployment). Observability state: 0 OTel instruments (the
+        # OTel packages in go.mod are indirect), no otelchi, no outbox-lag
+        # gauge, so business_metrics stays empty (never invent a metric) and
+        # the HTTP RED and Go-runtime rows stay dark until it instruments
+        # itself. The Kong route /api/seller-inbound is live once deployed
+        # (the chart's httproute.yaml) but the chart attaches no Kong
+        # prometheus plugin, so the Kong rows stay dark until it does; the
+        # pod-restart alerts are live. No docs site exists, so the rules link
+        # the repository's runbook directly.
+        "service_regex": "seller-inbound.*",
+        "loki_app": "seller-inbound",
+        "runbook_url": "https://github.com/IQVO/seller-inbound/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
 
     {
         "key": "product-master",
