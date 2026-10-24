@@ -67,6 +67,12 @@ config:
   # its TaskCompleted consumer on (helm-values/inventory-storage.yaml).
   relocationMode: "kafka"
   relocationConsumerGroup: "slotting-optimization-relocation"
+  # Pack-level copy <- warehouse.product-master.events (ProductPackLevelDeclared/
+  # Retired/Measured, slotting ADR 0012): case-pick faces size their capacity from
+  # the CASE level. casePickZoneCodes stays empty until a zone is designated as
+  # case-pick (no case-pick faces, previous behaviour).
+  packLevelMode: "kafka"
+  packLevelConsumerGroup: "slotting-optimization-pack-level"
 
 kafka:
   enabled: true

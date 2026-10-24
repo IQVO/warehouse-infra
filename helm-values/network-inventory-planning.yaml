@@ -54,6 +54,9 @@ kafka:
   siteSkuDemandConsumerGroup: network-inventory-planning-site-sku-demand
   transferFactConsumerGroup: network-inventory-planning-transfer-fact
   transferReplyConsumerGroup: network-inventory-planning-transfer-reply
+  # Pack-level copy <- warehouse.product-master.events (ADR 0017): transfers of a
+  # SKU with an active CASE level are rounded to whole cases.
+  packLevelConsumerGroup: network-inventory-planning-pack-level
 kongPlugins:
   cors:
     enabled: true

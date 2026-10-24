@@ -164,6 +164,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.productConsumerGroup": "slotting-product",
         "config.layoutConsumerGroup": "slotting-layout",
         "config.relocationConsumerGroup": "slotting-relocation",
+        "config.packLevelConsumerGroup": "slotting-pack-level",
     },
     # pick-face-replenishment and task-interleaving: OLTP api + the optional
     # mcp, analytics (projector/reports) and frontend components, all of which
@@ -211,6 +212,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "mcp.enabled": "true", "frontend.enabled": "true", "analytics.enabled": "true",
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
         "kafka.enabled": "true",
+        "kafka.packLevelConsumerGroup": "nip-pack-level",
         "database.url": "postgres://u@example.invalid:5432/db",
     },
     # The ten retail-network contexts (registered 2026-10-24): each chart's
