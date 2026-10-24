@@ -253,6 +253,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.deliveryPromiseConsumerGroup": "node-performance-delivery-promise",
         "config.offerAvailabilityConsumerGroup": "node-performance-offer-availability",
         "config.nodeTopologyConsumerGroup": "node-performance-node-topology",
+        "config.sellerInboundConsumerGroup": "node-performance-seller-inbound",
     },
     "../../node-topology/charts/node-topology": {
         "database.url": "postgres://u@example.invalid:5432/db",
@@ -291,6 +292,8 @@ CHARTS: dict[str, dict[str, str]] = {
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.nodeConsumerGroup": "vendor-connectivity-node",
+        "config.inboundConsumerGroup": "vendor-connectivity-inbound",
+        "config.packagingConsumerGroup": "vendor-connectivity-packaging",
         "config.listingConsumerGroup": "vendor-connectivity-listing",
         "config.sourcingConsumerGroup": "vendor-connectivity-sourcing",
         "config.nodeTopologyUrl": "http://node-topology.example.invalid",
