@@ -38,11 +38,10 @@ config:
   # committed offsets; a brand-new group would re-read the topic
   # from the start. MANDATORY (the binary exits at boot without it).
   sourcingConsumerGroup: "vendor-connectivity-sourcing"
-  # fixed, stable group id (seller-inbound shipment events; the consumer
-  # landed with the mcp/web merge): same rule as the three above.
+  # seller-inbound shipment events -> InboundShipmentView (ADR 0005). Fixed, stable
+  # group id, same reasoning as the three above. MANDATORY.
   inboundConsumerGroup: "vendor-connectivity-inbound"
-  # fixed, stable group id (offer-availability packaging events; the
-  # consumer landed with the mcp/web merge): same rule as the three above.
+  # offer-availability packaging events -> CatalogPackagingView (ADR 0005). MANDATORY.
   packagingConsumerGroup: "vendor-connectivity-packaging"
   # synchronous REST call into the sibling; MANDATORY.
   nodeTopologyUrl: "http://node-topology.warehouse-systems.svc.cluster.local:80"
