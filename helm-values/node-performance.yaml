@@ -45,6 +45,10 @@ config:
   # committed offsets; a brand-new group would re-read the topic
   # from the start. MANDATORY (the binary exits at boot without it).
   nodeTopologyConsumerGroup: "node-performance-node-topology"
+  # seller-inbound InboundShipmentShipped -> the shipped instant of each inbound
+  # shipment (ADR 0009). Fixed, stable group id. MANDATORY once the chart carrying
+  # it is on develop; an older chart ignores the key.
+  sellerInboundConsumerGroup: "node-performance-seller-inbound"
 
 database:
   existingSecret: node-performance-db
