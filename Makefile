@@ -41,7 +41,7 @@ CHARTS := \
 	../shipping-and-tracking/charts/shipping-and-tracking \
 	../vendor-connectivity/charts/vendor-connectivity
 
-.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test check check-all
+.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test seed-network seed-network-dry-run seed-network-verify check check-all
 
 help:
 	@echo "warehouse-infra — local quality gate (no CI workflow yet; this IS the gate)"
@@ -62,8 +62,13 @@ help:
 	@echo "                  and parse as PromQL-safe (scripts/test_gen_context_dashboards.py)"
 	@echo "  alert-rules-check  promtool check + unit tests of the generated alert rules"
 	@echo "                  (promtool if installed, else docker $(PROMETHEUS_IMAGE))"
-	@echo "  seed-scripts-test  unit tests of the post-deploy seed scripts against a fake"
-	@echo "                  facility-layout (scripts/test_seed_transfer_capability.py)"
+	@echo "  seed-scripts-test  unit tests of the post-deploy seed scripts against fakes of the"
+	@echo "                  services they call (scripts/test_seed_*.py; no cluster needed)"
+	@echo "  seed-network    WRITES to the cluster: seed the retail network (vendor V-WS, node SIM1,"
+	@echo "                  topology, waves, catalogue, stock) through Kong; idempotent. Owner-run,"
+	@echo "                  NOT part of check (scripts/README-retail-network-seed.md)"
+	@echo "  seed-network-dry-run   the same plan, GETs only, nothing written"
+	@echo "  seed-network-verify    read-only PASS/FAIL table of the seeded network"
 	@echo ""
 	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test"
 	@echo "  check-all       alias for check — no deeper local gate exists yet"
@@ -154,11 +159,24 @@ alert-rules-check:
 		docker run --rm -v "$(CURDIR)/$(ALERTING_DIR):/w:ro" --entrypoint promtool $(PROMETHEUS_IMAGE) test rules /w/tests/warehouse-alert-rules.test.yml /w/tests/warehouse-slo-burn-rules.test.yml; \
 	fi
 
-# Post-deploy seed scripts (final-gaps E2): stdlib unit tests against a real
-# HTTP fake of facility-layout, so no cluster is needed.
+# Post-deploy seed scripts (final-gaps E2): stdlib unit tests against real
+# HTTP fakes of the services they call, so no cluster is needed.
 seed-scripts-test:
 	python3 scripts/test_seed_transfer_capability.py
 	python3 scripts/test_seed_transfer_lanes.py
+	python3 scripts/test_seed_retail_network.py
+
+# The retail-network seed (scripts/seed-retail-network.py). seed-network WRITES to the
+# live cluster through Kong (override the base with RETAIL_NETWORK_BASE_URL); it is
+# idempotent and NOT part of `check`. Run the dry run first.
+seed-network:
+	python3 scripts/seed-retail-network.py
+
+seed-network-dry-run:
+	python3 scripts/seed-retail-network.py --dry-run
+
+seed-network-verify:
+	python3 scripts/seed-retail-network.py --verify
 
 # The fast self-correction loop: run this after every change, before committing.
 check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test
