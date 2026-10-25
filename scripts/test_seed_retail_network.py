@@ -980,8 +980,8 @@ class CheckTranslationTests(ValuesFileCase):
 
 
 class TranslationFileTests(ValuesFileCase):
-    def parse(self, text):
-        return SEED.parse_translation_file(self.values(text))
+    def parse(self, text, around=True):
+        return SEED.parse_translation_file(self.values(text, around))
 
     def test_it_reads_comments_quotes_blank_lines_and_the_list_at_the_key_indent(self):
         text = ("# the dictionary\n"
@@ -1000,7 +1000,7 @@ class TranslationFileTests(ValuesFileCase):
 
     def test_an_empty_list_and_a_block_ending_at_the_end_of_the_file(self):
         self.assertEqual(self.parse("productTranslation:\n  mappings: []\n"), [])
-        self.assertEqual(self.parse("a: 1\nproductTranslation:\n  mappings:\n    - networkProductId: x\n      sku: y"), [("x", "y")])
+        self.assertEqual(self.parse("a: 1\nproductTranslation:\n  mappings:\n    - networkProductId: x\n      sku: y", around=False), [("x", "y")])
 
     def test_only_the_top_level_key_counts(self):
         text = "nested:\n  productTranslation:\n    mappings:\n      - networkProductId: no\n        sku: no\n" + block([("x", "y")])

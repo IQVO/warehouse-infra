@@ -61,15 +61,40 @@ USAGE
     python3 scripts/seed-retail-network.py --verify --quote   # also ask for a delivery quote
                                                               # (POST /delivery-offers:quote: persists
                                                               # a short-lived offer, the only non-GET)
+    python3 scripts/seed-retail-network.py --emit-translation # READ-ONLY: the productTranslation block for
+                                                              # helm-values/network-fulfillment.yaml, YAML only on stdout
+    python3 scripts/seed-retail-network.py --check-translation helm-values/network-fulfillment.yaml
+                                                              # READ-ONLY: does that file's dictionary match the network?
 
 --base-url defaults to $RETAIL_NETWORK_BASE_URL or http://localhost:8000/api (Kong); each context
 is reached at <base-url>/<context>, e.g. http://localhost:8000/api/node-topology.
 
+THE PRODUCT DICTIONARY OF network-fulfillment (--emit-translation, --check-translation)
+---------------------------------------------------------------------------------------
+network-fulfillment turns the networkProductId of a purchase-order line into a fleet SKU through ONE
+dictionary, `productTranslation.mappings` of helm-values/network-fulfillment.yaml; in live mode the
+networkProductId is the network's LISTING id. The network generates those ids when this script creates
+the listings, so the dictionary can only be read back from the network, and a reseeded network
+(fresh cluster, new ids) leaves it silently stale. Both modes issue GET requests only (the client
+refuses any other verb) and stand alone: no other mode flag combines with them.
+  --emit-translation          for every fulfillment node of the data file, prints on stdout the block to paste at
+                              the top level of the values file, sorted by sku then listing id. Progress goes to
+                              stderr. A node or a SKU that has no listing prints NOTHING on stdout, one stderr line
+                              per problem, exit 1: a partial dictionary must never look complete.
+  --check-translation PATH    reads productTranslation.mappings of PATH (a strict hand parser: stdlib has no
+                              YAML) and compares it with what --emit-translation would print. Equal: one line
+                              "dictionary matches the network (N mappings)", exit 0. Otherwise the diff (missing /
+                              extra / wrong listing / wrong sku) on stdout, exit 1. Stub fixture ids (*-LOCAL-<n>)
+                              are flagged: they must not survive the flip to live.
+
 EXIT CODES
 ----------
   0  everything is seeded (or would be, with --dry-run) and verification passes
-  1  at least one write failed or was skipped because of a failure, or a verification check failed
-  2  a service is unreachable or does not answer JSON, or the data file is unusable (nothing written)
+  1  at least one write failed or was skipped because of a failure, or a verification check failed;
+     with --emit-translation / --check-translation: the dictionary cannot be built (a node or SKU
+     without a listing) or the values file differs from the network
+  2  a service is unreachable or does not answer JSON, or the data file is unusable (nothing written);
+     with --check-translation: the values file is unreadable or not the shape the parser accepts
 
 Stdlib only (zoneinfo needs the system time zone database).
 """
@@ -81,12 +106,13 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any
+from typing import Any, NoReturn
 
 try:
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -121,12 +147,18 @@ class Skip(Exception):
 
 # ------------------------------------------------------------------ HTTP
 class Api:
-    """A tiny JSON-over-HTTP client. 4xx/5xx are returned, never raised; 429 honours Retry-After."""
+    """A tiny JSON-over-HTTP client. 4xx/5xx are returned, never raised; 429 honours Retry-After.
 
-    def __init__(self, base_url: str, timeout: float = 15.0, retries: int = 2, delay_s: float = 0.5):
+    read_only=True refuses every verb but GET before anything is sent (the translation modes).
+    """
+
+    def __init__(self, base_url: str, timeout: float = 15.0, retries: int = 2, delay_s: float = 0.5, read_only: bool = False):
         self.base, self.timeout, self.retries, self.delay_s = base_url.rstrip("/"), timeout, retries, delay_s
+        self.read_only = read_only
 
     def call(self, method: str, path: str, body=None, key: str | None = None):
+        if self.read_only and method != "GET":
+            raise SetupError(f"{method} {self.base + path}: refused, this client is read-only")
         if body is not None:
             data = json.dumps(body).encode()
         else:
@@ -273,6 +305,168 @@ def _validate(cfg: dict) -> None:
             raise ValueError(f"{it['sku']}: duplicate sku or title (the title is the natural key)")
         titles.add(it["title"])
         skus.add(it["sku"])
+
+
+# ------------------------------------------------------------------ network-fulfillment's product dictionary
+# `productTranslation.mappings` of helm-values/network-fulfillment.yaml: networkProductId (the listing id) -> sku.
+STUB_ID = re.compile(r"-LOCAL-\d+\Z")                 # the placeholder ids of the stub fixture: they must not survive the flip to live
+STUB_NOTE = "   [stub fixture id: must not survive the flip to live]"
+PLAIN_SCALAR = re.compile(r"[A-Za-z][A-Za-z0-9_.-]*\Z")
+PLAIN_NOT_A_STRING = frozenset(("y", "n", "yes", "no", "true", "false", "on", "off", "null"))     # YAML 1.1 words
+PRINTABLE = re.compile(r"[ -~]+\Z")
+TOP_KEY = re.compile(r"productTranslation\s*:")
+MAPPINGS_KEY = re.compile(r"( +)mappings:(?: +(\[\s*\]))? *(#.*)?")
+ITEM_KEYS = ("networkProductId", "sku")
+
+
+def yaml_scalar(text: str) -> str:
+    """A YAML scalar that reads back as exactly this string: plain when unambiguous, else single-quoted."""
+    if not PRINTABLE.match(text):
+        raise ValueError(f"{text!r} cannot be written into a values file (printable ASCII only, not empty)")
+    if PLAIN_SCALAR.match(text) and text.lower() not in PLAIN_NOT_A_STRING:
+        return text
+    return "'" + text.replace("'", "''") + "'"
+
+
+def render_translation(mappings: list) -> str:
+    """The block to paste at the top level of the values file: [(listing id, sku), ...] in the order given."""
+    out = ["productTranslation:", "  mappings:"]
+    for pid, sku in mappings:
+        out += [f"    - networkProductId: {yaml_scalar(pid)}", f"      sku: {yaml_scalar(sku)}"]
+    return "\n".join(out) + "\n"
+
+
+def parse_translation_file(path: str) -> list:
+    """[(networkProductId, sku), ...] of `productTranslation.mappings` in a Helm values file.
+
+    python3 has no yaml module here, so this is a strict hand parser of the one shape the block has: a top-level
+    `productTranslation:` with `mappings:` (or `mappings: []`) whose items are `- networkProductId: X` and `sku: Y`
+    on two lines, X and Y plain or quoted strings. Everything else in the file is ignored; anything unexpected
+    inside the block (a flow-style item, an unknown key, a tab, an anchor, a duplicate id...) is a SetupError
+    that names the line: a guard that guessed would be worse than none.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except (OSError, UnicodeError) as e:
+        raise SetupError(f"cannot read values file {path}: {e}") from e
+
+    def bad(n: int, why: str) -> NoReturn:
+        raise SetupError(f"values file {path}, line {n}: {why}")
+
+    def scalar(raw: str, n: int, what: str) -> str:
+        raw, rest = raw.strip(), ""
+        if not raw or raw.startswith("#"):
+            bad(n, f"{what} has no value")
+        if raw[0] == "'":
+            parts, j = [], 1
+            while True:
+                k = raw.find("'", j)
+                if k < 0:
+                    bad(n, f"{what}: unterminated single quote")
+                if raw[k + 1:k + 2] == "'":
+                    parts.append(raw[j:k + 1])
+                    j = k + 2
+                    continue
+                parts.append(raw[j:k])
+                rest = raw[k + 1:]
+                break
+            value = "".join(parts)
+        elif raw[0] == '"':
+            k = raw.find('"', 1)
+            if k < 0:
+                bad(n, f"{what}: unterminated double quote")
+            value, rest = raw[1:k], raw[k + 1:]
+            if "\\" in value:
+                bad(n, f"{what}: escapes in double quotes are not supported (use single quotes)")
+        else:
+            if raw[0] in "[]{}&*!|>%@`,":
+                bad(n, f"{what}: unsupported YAML ({raw[0]!r}); write a plain or a quoted string")
+            value = re.split(r"\s+#", raw, maxsplit=1)[0].strip()
+            if ": " in value or value.endswith(":"):
+                bad(n, f"{what}: a plain value cannot contain ': ' (quote it)")
+        if rest.strip() and not (rest[:1] in " \t" and rest.strip().startswith("#")):
+            bad(n, f"{what}: unexpected text after the closing quote: {rest.strip()!r}")
+        if not value:
+            bad(n, f"{what} is empty")
+        return value
+
+    starts = [i for i, line in enumerate(lines) if TOP_KEY.match(line)]
+    if not starts:
+        raise SetupError(f"values file {path}: no top-level productTranslation key")
+    if len(starts) > 1:
+        bad(starts[1] + 1, "productTranslation appears twice")
+    head = starts[0]
+    if not re.fullmatch(r"productTranslation: *(#.*)?", lines[head]):
+        bad(head + 1, "productTranslation must be a block ('productTranslation:' on its own line), not an inline value")
+    body = []                                   # the non-blank, non-comment lines up to the next top-level line
+    for n, line in enumerate(lines[head + 1:], head + 2):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line[0] not in " \t":
+            break
+        if "\t" in line[:len(line) - len(line.lstrip())]:
+            bad(n, "tab indentation is not supported")
+        body.append((n, line))
+    if not body:
+        bad(head + 1, "productTranslation has no 'mappings:' key")
+    n0, first = body[0]
+    m = MAPPINGS_KEY.fullmatch(first)
+    if not m:
+        bad(n0, f"expected 'mappings:' as the only key of productTranslation, found {first.strip()!r}")
+    items = body[1:]
+    if m.group(2):                              # mappings: []
+        if items:
+            bad(items[0][0], "unexpected line after 'mappings: []'")
+        return []
+    if not items:
+        bad(n0, "'mappings:' has no items (write 'mappings: []' for none)")
+    key_indent, item_indent = len(m.group(1)), None
+    pairs, seen_at = [], {}
+    i = 0
+    while i < len(items):
+        n, line = items[i]
+        first_m = re.fullmatch(r"( *)- (networkProductId|sku):(?: +(.*))?", line)
+        if not first_m or len(first_m.group(1)) < key_indent or item_indent not in (None, len(first_m.group(1))):
+            bad(n, f"expected an item '- networkProductId: <id>' followed by 'sku: <sku>', found {line.strip()!r}")
+        item_indent = len(first_m.group(1))
+        key1, raw1 = first_m.group(2), first_m.group(3) or ""
+        other = ITEM_KEYS[1] if key1 == ITEM_KEYS[0] else ITEM_KEYS[0]
+        if i + 1 >= len(items):
+            bad(n, f"the item is missing its '{other}:' line")
+        n2, line2 = items[i + 1]
+        second = re.fullmatch(r"( *)(networkProductId|sku):(?: +(.*))?", line2)
+        if not second or second.group(2) != other or len(second.group(1)) != item_indent + 2:
+            bad(n2, f"expected '{other}:' aligned with the first key of the item on line {n}, found {line2.strip()!r}")
+        values = {key1: scalar(raw1, n, key1), other: scalar(second.group(3) or "", n2, other)}
+        pid = values[ITEM_KEYS[0]]
+        if pid in seen_at:
+            bad(n if key1 == ITEM_KEYS[0] else n2, f"networkProductId {pid!r} appears twice (first on line {seen_at[pid]})")
+        seen_at[pid] = n if key1 == ITEM_KEYS[0] else n2
+        pairs.append((pid, values[ITEM_KEYS[1]]))
+        i += 2
+    return pairs
+
+
+def diff_translation(network: list, have: list) -> list:
+    """The lines that say how the values file's dictionary `have` differs from the network's; [] when equal."""
+    want, got = dict(network), dict(have)                 # listing id -> sku
+    lines = []
+    for pid in sorted(set(want) & set(got)):
+        if want[pid] != got[pid]:
+            lines.append(f"  wrong    {pid}: the file maps it to sku {got[pid]}, the network's listing is for sku {want[pid]}")
+    missing = {p: s for p, s in want.items() if p not in got}
+    extra = {p: s for p, s in got.items() if p not in want}
+    for sku in sorted(set(missing.values()) | set(extra.values())):
+        m = sorted(p for p, s in missing.items() if s == sku)
+        e = sorted(p for p, s in extra.items() if s == sku)
+        if m and e:                                       # the sku is mapped, but to a listing the network does not have
+            note = STUB_NOTE if any(STUB_ID.search(p) for p in e) else ""
+            lines.append(f"  wrong    {sku}: the file points at listing {', '.join(e)}, the network has {', '.join(m)}{note}")
+            continue
+        lines += [f"  missing  {p} -> {sku}" for p in m]
+        lines += [f"  extra    {p} -> {sku}{STUB_NOTE if STUB_ID.search(p) else ''}" for p in e]
+    return lines
 
 
 # ------------------------------------------------------------------ the seed
@@ -745,6 +939,56 @@ class Seeder:
             except (StepError, SetupError) as e:
                 self.fail(str(e))
 
+    # ---- network-fulfillment's product dictionary: read back from the network, GET only
+    def translation(self) -> tuple:
+        """([(listing id, sku), ...] sorted by sku then listing id, [problem, ...]) for every node and SKU of the data file.
+
+        Any problem (a node that is not on the network, a SKU without an active catalogue item or without a
+        listing, a failing read) means the list is incomplete: the caller must then print no dictionary at all.
+        Progress goes to stderr so that stdout can carry the YAML alone.
+        """
+        problems: list = []
+        mappings: list = []
+
+        def note(text: str) -> None:
+            print(text, file=sys.stderr)
+
+        try:
+            catalog = self.catalog_by_title()
+        except StepError as e:
+            return [], [str(e)]
+        for fc in self.cfg["fulfillmentNodes"]:
+            code = fc["vendorNodeCode"]
+            try:
+                node = self.find_fc(fc)
+                if node is None:
+                    problems.append(f"fulfillment node {code} (vendor {self.vendor_id}) is not in node-topology: seed the network first")
+                    continue
+                by_item = {l["catalogItemId"]: l for l in self.pages(self.oa, "/listings", {"nodeId": node["nodeId"]}, "listings")}
+            except StepError as e:
+                problems.append(str(e))
+                continue
+            note(f"node {code} = {node['nodeId']}")
+            for it in self.cfg["catalog"]:
+                item = catalog.get(it["title"])
+                if item is None:
+                    problems.append(f"{it['sku']}: catalogue item {it['title']!r} is not in offer-availability")
+                elif item.get("state") != "ACTIVE":
+                    problems.append(f"{it['sku']}: catalogue item {item.get('catalogItemId')} is {item.get('state')}, not ACTIVE")
+                elif item.get("catalogItemId") not in by_item:
+                    problems.append(f"{it['sku']}: no listing on node {code} ({node['nodeId']})")
+                else:
+                    listing = by_item[item["catalogItemId"]]
+                    try:
+                        yaml_scalar(listing["listingId"])
+                        yaml_scalar(it["sku"])
+                    except (KeyError, ValueError) as e:
+                        problems.append(f"{it['sku']} @ {code}: {e}")
+                        continue
+                    mappings.append((listing["listingId"], it["sku"]))
+                    note(f"  {it['sku']} @ {code} = {listing['listingId']} ({listing.get('state')})")
+        return sorted(mappings, key=lambda m: (m[1], m[0])), problems
+
     # ---- verification (GET only; --quote adds one POST, opt-in)
     def verify(self, quote=False) -> list:
         rows: list = []
@@ -894,6 +1138,28 @@ def print_table(rows: list) -> bool:
     return passed == len(rows)
 
 
+def translation_report(seeder: Seeder, check_path: str | None, have: list | None) -> int:
+    """--emit-translation (check_path is None) or --check-translation. Returns the exit code; GETs only."""
+    mappings, problems = seeder.translation()
+    if problems:
+        print(f"seed-retail-network: cannot build the dictionary, {len(problems)} problem(s); nothing printed on stdout:", file=sys.stderr)
+        for p in problems:
+            print(f"  {p}", file=sys.stderr)
+        return 1
+    if check_path is None:
+        sys.stdout.write(render_translation(mappings))
+        return 0
+    diff = diff_translation(mappings, have or [])
+    if not diff:
+        print(f"dictionary matches the network ({len(mappings)} mappings)")
+        return 0
+    print(f"dictionary DIFFERS from the network ({len(mappings)} in the network, {len(have or [])} in {check_path}):")
+    print("\n".join(diff))
+    print(f"fix: replace the productTranslation block of {check_path} with the output of --emit-translation "
+          f"(make seed-network-translation)")
+    return 1
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base-url", default=os.environ.get("RETAIL_NETWORK_BASE_URL", DEFAULT_BASE_URL),
@@ -903,6 +1169,10 @@ def main(argv=None) -> int:
     ap.add_argument("--verify", action="store_true", help="read-only PASS/FAIL table, write nothing")
     ap.add_argument("--quote", action="store_true", help="with --verify: also POST one delivery quote (persists a short-lived offer)")
     ap.add_argument("--no-verify", action="store_true", help="skip the verification that follows a seed run")
+    ap.add_argument("--emit-translation", action="store_true",
+                    help="READ-ONLY: print the productTranslation block for helm-values/network-fulfillment.yaml (YAML only on stdout)")
+    ap.add_argument("--check-translation", metavar="PATH",
+                    help="READ-ONLY: compare productTranslation.mappings of this values file with the network; exit 1 on any difference")
     ap.add_argument("--restock", action="store_true", help="refeed the seeded quantities even for listings that already carry a feed")
     ap.add_argument("--reassign", action="store_true", help="take over a postal prefix assigned to another station (version + 1)")
     ap.add_argument("--settle-seconds", type=float, default=5.0, help="wait after creating/activating nodes for the event-fed views (default 5)")
@@ -911,16 +1181,36 @@ def main(argv=None) -> int:
     ap.add_argument("--now", help=argparse.SUPPRESS)      # pin the clock (ISO 8601): tests, reproducible plans
     args = ap.parse_args(argv)
 
+    translation = args.emit_translation or args.check_translation is not None
+    if translation:
+        modes = [flag for flag, on in (("--emit-translation", args.emit_translation),
+                                       ("--check-translation", args.check_translation is not None),
+                                       ("--dry-run", args.dry_run), ("--verify", args.verify), ("--quote", args.quote),
+                                       ("--no-verify", args.no_verify), ("--restock", args.restock),
+                                       ("--reassign", args.reassign)) if on]
+        if len(modes) > 1:
+            print(f"seed-retail-network: --emit-translation and --check-translation stand alone (read-only, one at a time), "
+                  f"got {' '.join(modes)}", file=sys.stderr)
+            return 2
+
     try:
         cfg = load_config(args.data)
+        have = parse_translation_file(args.check_translation) if args.check_translation is not None else None
         now = parse_ts(args.now) if args.now else dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
-        apis = {c: Api(f"{args.base_url.rstrip('/')}/{c}") for c in CONTEXTS}
+        apis = {c: Api(f"{args.base_url.rstrip('/')}/{c}", read_only=translation) for c in CONTEXTS}
         seeder = Seeder(cfg, apis, now=now, dry_run=args.dry_run, restock=args.restock, reassign=args.reassign,
                         settle_s=args.settle_seconds, tx_timeout_s=args.tx_timeout_seconds, tx_poll_s=args.tx_poll_seconds)
         seeder.preflight()
     except (SetupError, ValueError) as e:
         print(f"seed-retail-network: {e}", file=sys.stderr)
         return 2
+
+    if translation:
+        try:
+            return translation_report(seeder, args.check_translation, have)
+        except SetupError as e:
+            print(f"seed-retail-network: {e}", file=sys.stderr)
+            return 2
 
     if args.verify:
         try:
