@@ -12,10 +12,6 @@ CORE = (
     "inventory-storage",
     "wes-work-planning",
     "fulfillment-execution",
-    "workforce-management",
-    "facility-layout",
-    "labor-performance",
-    "process-path-management",
 )
 
 
@@ -28,50 +24,71 @@ def load_module():
 
 
 def write_fixture(root: Path) -> None:
-    terraform = root / "terraform"
-    terraform.mkdir()
-    service_rows = "\n".join(f'    "{name}" = {{ path = "/api/{name}" }}' for name in CORE)
-    remote_rows = "\n".join(f'    "{name}" = {{ remote_name = "{name}" }}' for name in CORE)
-    (terraform / "locals.tf").write_text(
-        textwrap.dedent(
+    """The LAYERED layout: terraform/apps.yaml registry + helm-values/."""
+    (root / "terraform").mkdir()
+    (root / "terraform" / "apps.yaml").write_text(
+        "applications:\n"
+        + "".join(
             f"""
-            locals {{
-              services = {{
-            {service_rows}
-              }}
-            }}
+  {name}:
+    kind: service
+    database: true
+    frontend_remote: {name}_mfe
+"""
+            for name in CORE
+        )
+        + """
+  network-fulfillment:
+    kind: other
+    repo_owner: IQVO
+    database: true
+  warehouse-console:
+    kind: other
+    deploy_with: frontends
+    build_image: false
+    site: true
+"""
+    )
+    values = root / "helm-values"
+    values.mkdir()
+    (values / "_platform.yaml").write_text("kafka:\n  brokers: kafka.example.invalid:9092\n")
+    (values / "argocd.yaml").write_text("# platform-owned values, not an application\n")
+    for name in CORE:
+        (values / f"{name}.yaml").write_text(
+            textwrap.dedent(
+                f"""
+                # {name} values
+                config:
+                  anything: "x"
+                gatewayApi:
+                  enabled: true
+                  hosts:
+                    - path: /api/{name}
+                      pathType: PathPrefix
+                mcp:
+                  enabled: true
+                  route:
+                    enabled: true
+                    path: /api/mcp/{name}
+                """
+            )
+        )
+    # A kind: other context that still owns an /api route through its values.
+    (values / "network-fulfillment.yaml").write_text(
+        textwrap.dedent(
+            """
+            gatewayApi:
+              enabled: true
+              hosts:
+                - path: /api/network-fulfillment
+                  pathType: PathPrefix
             """
         )
-    )
-    (terraform / "frontends.tf").write_text(
-        textwrap.dedent(
-            f"""
-            locals {{
-              frontend_remotes = var.deploy_frontends ? {{
-            {remote_rows}
-              }} : {{}}
-            }}
-            """
-        )
-    )
-    (terraform / "ops-agent.tf").write_text(
-        'locals { ops_agent_chart_path = "../../warehouse-ops-agent/charts/warehouse-ops-agent" }\n'
-        'output "ops_agent_route" { value = "/api/warehouse-ops-agent" }\n'
-    )
-    (terraform / "network-fulfillment.tf").write_text(
-        'locals { network_fulfillment_chart_path = "../../network-fulfillment/charts/network-fulfillment" }\n'
-        'output "network_fulfillment_route" { value = "/api/network-fulfillment" }\n'
-    )
-    (terraform / "mcp.tf").write_text(
-        "locals {\n"
-        "  mcp_services = toset([\n"
-        + "".join(f'    "{name}",\n' for name in reversed(CORE))
-        + "  ])\n}\n"
     )
 
 
 class ExposureInventoryTest(unittest.TestCase):
-    def test_discovers_all_surfaces_from_terraform_sources(self):
+    def test_discovers_all_surfaces_from_the_layered_layout(self):
         module = load_module()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -83,20 +100,29 @@ class ExposureInventoryTest(unittest.TestCase):
         self.assertEqual(set(CORE), set(inventory.remotes))
         self.assertEqual(set(CORE), set(inventory.mcps))
         self.assertEqual(
-            set(CORE) | {"warehouse-ops-agent", "network-fulfillment"},
+            set(CORE) | {"network-fulfillment"},
             set(inventory.apis),
         )
 
-    def test_rejects_mcp_inventory_drift(self):
+    def test_rejects_registry_values_drift(self):
         module = load_module()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             write_fixture(root)
-            (root / "terraform" / "mcp.tf").write_text(
-                'locals { mcp_services = toset(["order-management"]) }\n'
-            )
+            # A values file whose context never made it into apps.yaml.
+            (root / "helm-values" / "ghost-context.yaml").write_text("config: {}\n")
 
-            with self.assertRaisesRegex(ValueError, "MCP service drift"):
+            with self.assertRaisesRegex(ValueError, "without apps.yaml entries"):
+                module.load_inventory(root)
+
+    def test_rejects_service_without_values(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_fixture(root)
+            (root / "helm-values" / "order-management.yaml").unlink()
+
+            with self.assertRaisesRegex(ValueError, "without helm-values files"):
                 module.load_inventory(root)
 
 

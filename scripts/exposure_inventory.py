@@ -68,32 +68,56 @@ def _require_dedicated(path: Path, chart_marker: str, context: str) -> None:
 
 
 def load_inventory(root: Path) -> Inventory:
-    terraform = root / "terraform"
-    core = _map_keys(terraform / "locals.tf", "services =")
-    remotes = _map_keys(terraform / "frontends.tf", "frontend_remotes =")
-    mcps = _string_list(terraform / "mcp.tf", "mcp_services =")
-    if not core:
-        raise ValueError("local.services contains no core APIs")
-    if set(remotes) != set(core):
-        missing = sorted(set(core) - set(remotes))
-        extra = sorted(set(remotes) - set(core))
-        raise ValueError(f"frontend remote drift: missing={missing}, extra={extra}")
-    if set(mcps) != set(core):
-        missing = sorted(set(core) - set(mcps))
-        extra = sorted(set(mcps) - set(core))
-        raise ValueError(f"MCP service drift: missing={missing}, extra={extra}")
+    """Derive the deployed surfaces from the LAYERED layout (ADR 0007).
 
-    _require_dedicated(
-        terraform / "ops-agent.tf", "ops_agent_chart_path", "warehouse-ops-agent"
-    )
-    _require_dedicated(
-        terraform / "network-fulfillment.tf",
-        "network_fulfillment_chart_path",
-        "network-fulfillment",
-    )
+    Sources of truth after the terraform/{00-cluster,10-platform,20-apps}
+    refactor: terraform/apps.yaml is the application registry (kind: service
+    entries get the /api route; frontend_remote names the module-federation
+    remotes), and helm-values/<ctx>.yaml carries each context's own mcp
+    block (the charts render the MCP server and its Kong route from it).
+    """
+    import yaml
+
+    # Platform-owned value files that are not application registrations.
+    PLATFORM_VALUES = {"argocd"}
+    apps = yaml.safe_load((root / "terraform" / "apps.yaml").read_text())["applications"]
+    core = tuple(sorted(name for name, entry in apps.items() if entry.get("kind") == "service"))
+    remotes = tuple(sorted(name for name, entry in apps.items() if entry.get("frontend_remote")))
+    mcps = []
+    for values in sorted((root / "helm-values").glob("*.yaml")):
+        if values.name.startswith("_") or values.stem in PLATFORM_VALUES:
+            continue
+        try:
+            parsed = yaml.safe_load(values.read_text()) or {}
+        except yaml.YAMLError:
+            continue
+        if isinstance(parsed.get("mcp"), dict) and parsed["mcp"].get("enabled", True):
+            mcps.append(values.stem)
+    mcps = tuple(sorted(mcps))
+    api_routed = []
+    for values in sorted((root / "helm-values").glob("*.yaml")):
+        if values.name.startswith("_") or values.stem in PLATFORM_VALUES:
+            continue
+        try:
+            parsed = yaml.safe_load(values.read_text()) or {}
+        except yaml.YAMLError:
+            continue
+        gateway = parsed.get("gatewayApi")
+        if isinstance(gateway, dict) and gateway.get("enabled"):
+            api_routed.append(values.stem)
+    api_routed = tuple(sorted(set(api_routed)))
+    if not core:
+        raise ValueError("apps.yaml contains no kind: service entries")
+    values_files = {p.stem for p in (root / "helm-values").glob("*.yaml") if not p.name.startswith("_")} - PLATFORM_VALUES
+    missing_values = sorted(set(core) - values_files)
+    if missing_values:
+        raise ValueError(f"registry entries without helm-values files: {missing_values}")
+    orphan_values = sorted(values_files - set(apps))
+    if orphan_values:
+        raise ValueError(f"helm-values files without apps.yaml entries: {orphan_values}")
     return Inventory(
         core_apis=core,
-        apis=core + ("warehouse-ops-agent", "network-fulfillment"),
+        apis=api_routed,
         remotes=remotes,
         mcps=mcps,
     )
