@@ -129,6 +129,66 @@ jobs:
           repository: IQVO/e2e-tests
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['e2e-tests'] || 'develop' }}
           path: e2e-tests
+      - name: Checkout customer-ordering
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/customer-ordering
+          ref: \${{ fromJSON(inputs.fleet_shas || '{}')['customer-ordering'] || 'main' }}
+          path: customer-ordering
+      - name: Checkout delivery-promise
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/delivery-promise
+          ref: \${{ fromJSON(inputs.fleet_shas || '{}')['delivery-promise'] || 'main' }}
+          path: delivery-promise
+      - name: Checkout last-mile-delivery
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/last-mile-delivery
+          ref: \${{ fromJSON(inputs.fleet_shas || '{}')['last-mile-delivery'] || 'main' }}
+          path: last-mile-delivery
+      - name: Checkout linehaul-transportation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/linehaul-transportation
+          ref: \${{ fromJSON(inputs.fleet_shas || '{}')['linehaul-transportation'] || 'main' }}
+          path: linehaul-transportation
+      - name: Checkout node-performance
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/node-performance
+          ref: \${{ fromJSON(inputs.fleet_shas || '{}')['node-performance'] || 'main' }}
+          path: node-performance
+      - name: Checkout node-topology
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/node-topology
+          ref: \${{ fromJSON(inputs.fleet_shas || '{}')['node-topology'] || 'main' }}
+          path: node-topology
+      - name: Checkout offer-availability
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/offer-availability
+          ref: \${{ fromJSON(inputs.fleet_shas || '{}')['offer-availability'] || 'main' }}
+          path: offer-availability
+      - name: Checkout order-sourcing
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/order-sourcing
+          ref: \${{ fromJSON(inputs.fleet_shas || '{}')['order-sourcing'] || 'main' }}
+          path: order-sourcing
+      - name: Checkout shipping-and-tracking
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/shipping-and-tracking
+          ref: \${{ fromJSON(inputs.fleet_shas || '{}')['shipping-and-tracking'] || 'main' }}
+          path: shipping-and-tracking
+      - name: Checkout vendor-connectivity
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/vendor-connectivity
+          ref: \${{ fromJSON(inputs.fleet_shas || '{}')['vendor-connectivity'] || 'main' }}
+          path: vendor-connectivity
 
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
