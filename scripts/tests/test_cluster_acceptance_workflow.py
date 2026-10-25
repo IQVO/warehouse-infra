@@ -39,7 +39,7 @@ class ClusterAcceptanceWorkflowTest(unittest.TestCase):
             "warehouse-docs",
             "e2e-tests",
         ):
-            self.assertIn(f"claudioed/{repository}", source)
+            self.assertIn(f"IQVO/{repository}", source)
 
     def test_workflow_checks_out_release_gate_refs_not_ambiguous_branches(self):
         source = WORKFLOW.read_text()

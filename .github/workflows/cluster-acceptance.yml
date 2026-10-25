@@ -48,85 +48,85 @@ jobs:
       - name: Checkout order-management
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/order-management
+          repository: IQVO/order-management
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['order-management'] || 'develop' }}
           path: order-management
       - name: Checkout inventory-storage
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/inventory-storage
+          repository: IQVO/inventory-storage
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['inventory-storage'] || 'develop' }}
           path: inventory-storage
       - name: Checkout wes-work-planning
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/wes-work-planning
+          repository: IQVO/wes-work-planning
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['wes-work-planning'] || 'develop' }}
           path: wes-work-planning
       - name: Checkout fulfillment-execution
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/fulfillment-execution
+          repository: IQVO/fulfillment-execution
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['fulfillment-execution'] || 'develop' }}
           path: fulfillment-execution
       - name: Checkout workforce-management
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/workforce-management
+          repository: IQVO/workforce-management
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['workforce-management'] || 'develop' }}
           path: workforce-management
       - name: Checkout facility-layout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/facility-layout
+          repository: IQVO/facility-layout
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['facility-layout'] || 'develop' }}
           path: facility-layout
       - name: Checkout labor-performance
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/labor-performance
+          repository: IQVO/labor-performance
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['labor-performance'] || 'develop' }}
           path: labor-performance
       - name: Checkout process-path-management
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/process-path-management
+          repository: IQVO/process-path-management
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['process-path-management'] || 'develop' }}
           path: process-path-management
       - name: Checkout warehouse-ops-agent
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-ops-agent
+          repository: IQVO/warehouse-ops-agent
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['warehouse-ops-agent'] || 'develop' }}
           path: warehouse-ops-agent
       - name: Checkout network-fulfillment
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/network-fulfillment
+          repository: IQVO/network-fulfillment
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['network-fulfillment'] || 'develop' }}
           path: network-fulfillment
       - name: Checkout warehouse-console
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-console
+          repository: IQVO/warehouse-console
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['warehouse-console'] || 'develop' }}
           path: warehouse-console
       - name: Checkout warehouse-ui-kit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-ui-kit
+          repository: IQVO/warehouse-ui-kit
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['warehouse-ui-kit'] || 'develop' }}
           path: warehouse-ui-kit
       - name: Checkout warehouse-docs
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-docs
+          repository: IQVO/warehouse-docs
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['warehouse-docs'] || 'main' }}
           path: warehouse-docs
       - name: Checkout e2e-tests
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/e2e-tests
+          repository: IQVO/e2e-tests
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['e2e-tests'] || 'develop' }}
           path: e2e-tests
 

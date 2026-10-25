@@ -22,6 +22,23 @@ jobs:
 
   # Agent-guide sensor (harness-template v3): skills load, references resolve, context budget.
   # BLOCKING: guides are clean, so a stale path or broken skill fails the PR.
+  # ============================================================
+  # Acceptance-harness units: the cluster-acceptance workflow's
+  # python suites and the MCP probe's go tests, on every PR.
+  # ============================================================
+  acceptance-units:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: scripts/mcp-probe/go.mod
+          cache-dependency-path: scripts/mcp-probe/go.sum
+      - run: python3 -m unittest discover -s scripts/tests -v
+      - run: go test ./...
+        working-directory: scripts/mcp-probe
+
   guide-lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
