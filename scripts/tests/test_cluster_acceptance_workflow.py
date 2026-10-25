@@ -12,7 +12,9 @@ class ClusterAcceptanceWorkflowTest(unittest.TestCase):
     def test_workflow_runs_owned_cluster_orchestrator_and_always_uploads_diagnostics(self):
         source = WORKFLOW.read_text()
         self.assertIn("workflow_dispatch:", source)
-        self.assertIn("pull_request:", source)
+        # Full-cluster acceptance is scheduled/manual only: a clean
+        # provision does not fit a shared runner (see the workflow header).
+        self.assertNotIn("pull_request:", source)
         self.assertIn("scripts/run-cluster-acceptance.sh --provision", source)
         self.assertIn("if: ${{ always() }}", source)
         self.assertIn("artifacts/cluster-acceptance", source)

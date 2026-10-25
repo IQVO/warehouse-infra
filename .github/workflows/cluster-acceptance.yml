@@ -1,13 +1,11 @@
 name: Cluster acceptance
 
+# NOT on pull_request: a clean-cluster provision (ArgoCD, Kong, Istio,
+# Kafka, Postgres, observability, the whole fleet) does not fit a shared
+# 2-core runner's time budget -- the ArgoCD chart alone outran a 20-minute
+# helm timeout twice. The PR gate is the fast acceptance-units job in
+# ci.yml; the full acceptance runs scheduled and on demand.
 on:
-  pull_request:
-    branches: [develop]
-    paths:
-      - ".github/workflows/cluster-acceptance.yml"
-      - "helm-values/**"
-      - "scripts/**"
-      - "terraform/**"
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
