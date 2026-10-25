@@ -29,7 +29,7 @@ resource "helm_release" "argocd" {
   version    = "7.7.11"
   namespace  = kubernetes_namespace.argocd.metadata[0].name
 
-  timeout = 600
+  timeout = 1200
   wait    = true
 
   values = [file("${path.module}/../../helm-values/argocd.yaml")]
