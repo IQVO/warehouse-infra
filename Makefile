@@ -42,7 +42,7 @@ CHARTS := \
 	../vendor-connectivity/charts/vendor-connectivity \
 	../seller-inbound/charts/seller-inbound
 
-.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test seed-network seed-network-dry-run seed-network-verify check check-all
+.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test seed-network seed-network-dry-run seed-network-verify seed-network-translation seed-network-translation-check check check-all
 
 help:
 	@echo "warehouse-infra — local quality gate (no CI workflow yet; this IS the gate)"
@@ -70,6 +70,9 @@ help:
 	@echo "                  NOT part of check (scripts/README-retail-network-seed.md)"
 	@echo "  seed-network-dry-run   the same plan, GETs only, nothing written"
 	@echo "  seed-network-verify    read-only PASS/FAIL table of the seeded network"
+	@echo "  seed-network-translation        READ-ONLY: print the productTranslation block (listing id -> sku) for"
+	@echo "                  helm-values/network-fulfillment.yaml; needs the seeded network, NOT part of check"
+	@echo "  seed-network-translation-check  READ-ONLY: exit 1 unless that values file's dictionary matches the network"
 	@echo ""
 	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test"
 	@echo "  check-all       alias for check — no deeper local gate exists yet"
@@ -178,6 +181,17 @@ seed-network-dry-run:
 
 seed-network-verify:
 	python3 scripts/seed-retail-network.py --verify
+
+# network-fulfillment's product dictionary (listing id -> sku) lives ONLY in
+# helm-values/network-fulfillment.yaml. Both targets are READ-ONLY (GET requests
+# only) and need the seeded network, so they are NOT part of `check`. The emit
+# recipe is silent (@) so that `make seed-network-translation > block.yaml`
+# captures the YAML alone: make would otherwise echo the command line to stdout.
+seed-network-translation:
+	@python3 scripts/seed-retail-network.py --emit-translation
+
+seed-network-translation-check:
+	python3 scripts/seed-retail-network.py --check-translation helm-values/network-fulfillment.yaml
 
 # The fast self-correction loop: run this after every change, before committing.
 check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test
