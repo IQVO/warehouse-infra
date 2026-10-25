@@ -133,13 +133,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: IQVO/exception-management
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['exception-management'] || 'main' }}
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['exception-management'] || 'develop' }}
           path: exception-management
       - name: Checkout returns-processing
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: IQVO/returns-processing
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['returns-processing'] || 'main' }}
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['returns-processing'] || 'develop' }}
           path: returns-processing
       - name: Checkout product-master
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
