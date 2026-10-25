@@ -23,6 +23,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import tempfile
 import threading
 import unittest
@@ -78,7 +79,7 @@ class Fake:
     def node_by_code(self, code):
         return next((n for n in self.nodes.values() if (n.get("vendorRef") or {}).get("vendorNodeCode") == code), None)
 
-    def add_vendor_node(self, code="SIM1", status="PROPOSED", revision=None, region=None):
+    def add_vendor_node(self, code="site-1", status="PROPOSED", revision=None, region=None):
         region = region or self.add_region()
         nid = self.next_id("node")
         node = {"nodeId": nid, "nodeType": "FULFILLMENT_CENTER", "subtype": "SORTABLE", "operator": "VENDOR",
@@ -432,7 +433,7 @@ class SeedTests(unittest.TestCase):
             self.assertEqual([r["code"] for r in fake.regions], ["SIM-SC"])
             kinds = sorted(n["nodeType"] for n in fake.nodes.values())
             self.assertEqual(kinds, ["DELIVERY_STATION", "FULFILLMENT_CENTER"])
-            fc = fake.node_by_code("SIM1")
+            fc = fake.node_by_code("site-1")
             self.assertEqual((fc["status"], fc["operationalProfile"]["profileRevision"]), ("ACTIVE", 1))
             self.assertEqual(len(fake.lanes), 1)
             self.assertEqual(sorted(fake.areas), ["786", "787"])
@@ -466,10 +467,10 @@ class SeedTests(unittest.TestCase):
             self.assertEqual(code, 0, out)
             self.assertEqual(fake.writes(), [])
             self.assertEqual((fake.regions, fake.nodes, fake.items), ([], {}, []))
-            for what in ("would CREATE   region SIM-SC", "would CREATE   vendor V-WS", "would CREATE   fulfillment node SIM1",
-                         "would DECLARE  profile r1 of SIM1", "would ACTIVATE", "would CREATE   lane SIM1 -> DS-SIM-1",
+            for what in ("would CREATE   region SIM-SC", "would CREATE   vendor V-WS", "would CREATE   fulfillment node site-1",
+                         "would DECLARE  profile r1 of site-1", "would ACTIVATE", "would CREATE   lane site-1 -> DS-SIM-1",
                          "would CREATE   service area 787", "would CREATE   wave DS-SIM-1", "would CREATE   catalogue item ABO-B000B5KPG8",
-                         "would CREATE   listing ABO-B000B5KPG8 @ SIM1", "would FEED"):
+                         "would CREATE   listing ABO-B000B5KPG8 @ site-1", "would FEED"):
                 self.assertIn(what, out)
             self.assertNotIn("FAILED", out)
 
@@ -493,7 +494,7 @@ class SeedTests(unittest.TestCase):
             code, out, _ = run(base, "--verify")
             self.assertEqual(code, 0, out)
             self.assertEqual(fake.writes(), [])
-            self.assertIn("pickup departures of SIM1", out)
+            self.assertIn("pickup departures of site-1", out)
             self.assertIn("profileRevision 1 (seed 1)", out)
             self.assertIn("ABO-B000B5KPG8=200", out)
 
@@ -513,23 +514,23 @@ class SeedTests(unittest.TestCase):
             next(iter(fake.listings.values()))["availability"]["availableQty"] = 0
             code, out, _ = run(base, "--verify")
             self.assertEqual(code, 1)
-            self.assertIn("listings of SIM1 LIVE with stock", out)
+            self.assertIn("listings of site-1 LIVE with stock", out)
 
     # ---- adoption and revisions (the fleet's ADR 0026 / 0027 contract)
     def test_adopts_an_existing_node_with_the_same_vendor_node_code(self):
         with network() as (fake, base):
-            node = fake.add_vendor_node("SIM1")
+            node = fake.add_vendor_node("site-1")
             code, out, _ = run(base)
             self.assertEqual(code, 0, out)
             self.assertEqual([w for w in fake.writes() if w[1].endswith("/vendor/nodes")], [], "never registered a second time")
             self.assertEqual(len([n for n in fake.nodes.values() if n["nodeType"] == "FULFILLMENT_CENTER"]), 1)
-            self.assertEqual(fake.node_by_code("SIM1")["nodeId"], node["nodeId"])
+            self.assertEqual(fake.node_by_code("site-1")["nodeId"], node["nodeId"])
             self.assertEqual(fake.nodes[node["nodeId"]]["operationalProfile"]["profileRevision"], 1)
             self.assertIn(f"adopted {node['nodeId']}", out)
 
     def test_a_higher_declared_revision_is_left_alone(self):
         with network() as (fake, base):
-            node = fake.add_vendor_node("SIM1", status="ACTIVE", revision=5)
+            node = fake.add_vendor_node("site-1", status="ACTIVE", revision=5)
             code, out, _ = run(base)
             self.assertEqual(code, 0, out)
             self.assertEqual([w for w in fake.writes() if w[1].endswith("/profile")], [])
@@ -565,7 +566,7 @@ class SeedTests(unittest.TestCase):
             fake.fail_tx["NODE_REGISTRATION"] = ["ErrOperatorNotAllowedForNodeType"]
             code, out, _ = run(base)
             self.assertEqual(code, 1, out)
-            self.assertIn("FAILED   fulfillment node SIM1", out)
+            self.assertIn("FAILED   fulfillment node site-1", out)
             self.assertIn("ErrOperatorNotAllowedForNodeType", out)
             self.assertIn("SKIPPED", out)
             self.assertEqual((fake.lanes, fake.listings), ([], {}), "nothing that needs the node was attempted")
@@ -643,7 +644,7 @@ class SeedTests(unittest.TestCase):
 
     def test_the_full_feed_carries_the_nodes_other_listings_at_their_current_values(self):
         with network() as (fake, base):
-            node = fake.add_vendor_node("SIM1")
+            node = fake.add_vendor_node("site-1")
             fake.items.append({"catalogItemId": "item-other", "title": "somebody else's item", "state": "ACTIVE",
                                "lengthMm": 1, "widthMm": 1, "heightMm": 1, "weightG": 1, "hazmat": False, "fragile": False})
             fake.listings["lst-other"] = {"listingId": "lst-other", "catalogItemId": "item-other", "nodeId": node["nodeId"], "state": "LIVE",
@@ -789,7 +790,7 @@ class EmitTranslationTests(ValuesFileCase):
             del fake.listings["lst-003"]
             code, out, err = run(base, "--emit-translation")
             self.assertEqual((code, out), (1, ""), "a partial dictionary must never look complete")
-            self.assertIn("ABO-B000IK09WG: no listing on node SIM1", err)
+            self.assertIn("ABO-B000IK09WG: no listing on node site-1", err)
             self.assertNotIn("ABO-B000B5KPG8: no listing", err)
 
     def test_every_problem_gets_its_own_line_on_stderr(self):
@@ -805,11 +806,11 @@ class EmitTranslationTests(ValuesFileCase):
         with network() as (fake, base):
             code, out, err = run(base, "--emit-translation")                  # nothing seeded
             self.assertEqual((code, out), (1, ""))
-            self.assertIn("fulfillment node SIM1 (vendor V-WS) is not in node-topology", err)
+            self.assertIn("fulfillment node site-1 (vendor V-WS) is not in node-topology", err)
             fake.add_vendor_node("SIM2")                                     # another node does not stand in for it
             code, out, err = run(base, "--emit-translation")
             self.assertEqual((code, out), (1, ""))
-            self.assertIn("SIM1", err)
+            self.assertIn("site-1", err)
 
     def test_a_missing_or_discontinued_catalogue_item_is_a_problem_too(self):
         with seeded() as (fake, base):
@@ -941,7 +942,7 @@ class CheckTranslationTests(ValuesFileCase):
             del fake.listings["lst-004"]
             code, out, err = self.check(base, block(PAIRS))
             self.assertEqual((code, out), (1, ""))
-            self.assertIn("ABO-B000SLW522: no listing on node SIM1", err)
+            self.assertIn("ABO-B000SLW522: no listing on node site-1", err)
 
     def test_a_malformed_file_exits_2_names_the_line_and_reads_nothing_from_the_network(self):
         cases = {
@@ -1044,10 +1045,24 @@ class UnitTests(unittest.TestCase):
 
 
 class DataFileTests(unittest.TestCase):
+    def test_the_seeded_node_code_is_the_site_network_fulfillment_acts_for(self):
+        """In live mode network-fulfillment converges its SITE_ID onto the network node whose vendorNodeCode
+        equals it, and adopts the node when it exists. A node seeded under any other code is not adopted: the
+        service registers a second, empty node and leaves the seeded one (listings, service area, waves) unused,
+        and nothing fails loudly. SIM1 (the facility-layout code of the simulated building) was that mistake."""
+        values = os.path.join(REPO_ROOT, "helm-values", "network-fulfillment.yaml")
+        with open(values, encoding="utf-8") as f:
+            text = f.read()
+        found = re.findall(r"- name: SITE_ID\s*\n\s*value: ['\"]?([^'\"\s]+)['\"]?", text)
+        self.assertEqual(len(found), 1, "helm-values/network-fulfillment.yaml must set SITE_ID exactly once")
+        cfg = SEED.load_config(DATA_FILE)
+        self.assertEqual([f["vendorNodeCode"] for f in cfg["fulfillmentNodes"]], found,
+                         "the seeded fulfillment node must be named after the SITE_ID network-fulfillment runs with")
+
     def test_the_shipped_data_file_is_valid_and_complete(self):
         cfg = SEED.load_config(DATA_FILE)
         self.assertEqual(cfg["vendor"]["vendorId"], "V-WS")
-        self.assertEqual([f["vendorNodeCode"] for f in cfg["fulfillmentNodes"]], ["SIM1"], "vendorNodeCode = the fleet site code (ADR 0026 adoption)")
+        self.assertEqual([f["vendorNodeCode"] for f in cfg["fulfillmentNodes"]], ["site-1"], "vendorNodeCode = network-fulfillment's SITE_ID (ADR 0026 adoption)")
         self.assertEqual(cfg["fulfillmentNodes"][0]["profile"]["profileRevision"], 1)
         skus = [i["sku"] for i in cfg["catalog"]]
         self.assertEqual(len(skus), len(set(skus)))

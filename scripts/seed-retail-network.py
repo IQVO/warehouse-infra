@@ -14,7 +14,7 @@ WHAT IT SEEDS (input: scripts/data/retail-network-seed.json), in dependency orde
 -------------------------------------------------------------------------------
   1. node-topology         region, delivery station(s) (network-operated, activated)
   2. vendor-connectivity   vendor V-WS (POST /vendors), the fulfillment node with
-                           vendorNodeCode = the fleet site code (SIM1), its first
+                           vendorNodeCode = network-fulfillment's SITE_ID (site-1), its first
                            operational profile (PUT /vendor/nodes/{id}/profile)
   3. node-topology         activation of the fulfillment node, lane node -> station,
                            service-area prefixes -> station
@@ -34,7 +34,7 @@ IDEMPOTENCY (every write is an upsert by NATURAL KEY: GET first, write only if n
   region                code                       absent -> POST; 409 region-code-taken = exists
   delivery station      type+region+postal code    absent -> POST, PROPOSED -> :activate
   vendor                vendorId                   absent -> POST /vendors
-  fulfillment node      vendorRef (V-WS, SIM1)     absent -> POST /vendor/nodes (async, polled);
+  fulfillment node      vendorRef (V-WS, site-1)   absent -> POST /vendor/nodes (async, polled);
                                                    an existing node is ADOPTED, never registered twice
   node profile          profileRevision            declared only if the node's revision is LOWER than
                                                    the data file's; a higher one (the fleet's own

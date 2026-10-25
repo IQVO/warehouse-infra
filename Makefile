@@ -65,7 +65,7 @@ help:
 	@echo "                  (promtool if installed, else docker $(PROMETHEUS_IMAGE))"
 	@echo "  seed-scripts-test  unit tests of the post-deploy seed scripts against fakes of the"
 	@echo "                  services they call (scripts/test_seed_*.py; no cluster needed)"
-	@echo "  seed-network    WRITES to the cluster: seed the retail network (vendor V-WS, node SIM1,"
+	@echo "  seed-network    WRITES to the cluster: seed the retail network (vendor V-WS, node site-1,"
 	@echo "                  topology, waves, catalogue, stock) through Kong; idempotent. Owner-run,"
 	@echo "                  NOT part of check (scripts/README-retail-network-seed.md)"
 	@echo "  seed-network-dry-run   the same plan, GETs only, nothing written"

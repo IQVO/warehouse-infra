@@ -4,7 +4,7 @@ The ten retail-network services (namespace `warehouse-systems`, Kong routes
 `/api/<context>`) are deployed **empty**: no vendor, no node, no service area, no
 catalogue, no stock. A storefront checkout therefore finds no offer and no purchase order
 is ever issued. This seed puts the minimum in place so **one order can be quoted, sourced
-and turned into a purchase order from ONE fulfillment node** (the simulation site `SIM1`).
+and turned into a purchase order from ONE fulfillment node** (the simulation site `site-1`).
 
 It is a **stand-in** for the fleet's own supply loop (network-fulfillment ADR 0027:
 node profile and inventory feed). When that loop runs, its declarations win: see
@@ -56,7 +56,7 @@ and joined by a lane. Counts are for a fresh cluster with the shipped data file.
 | # | Context | Seeded through | Count |
 |---|---------|----------------|-------|
 | 1 | node-topology | `POST /regions`; `POST /nodes` (a network-operated `DELIVERY_STATION`) + `POST /nodes/{id}:activate` | 1 region, 1 station |
-| 2 | vendor-connectivity | `POST /vendors` (`V-WS`); `POST /vendor/nodes` (`vendorNodeCode` = `SIM1`, the fleet site code); `PUT /vendor/nodes/{id}/profile` (revision 1); every write is asynchronous and polled via `GET /vendor/transactions/{id}` | 1 vendor, 1 node, 1 profile |
+| 2 | vendor-connectivity | `POST /vendors` (`V-WS`); `POST /vendor/nodes` (`vendorNodeCode` = `site-1`, network-fulfillment's `SITE_ID`); `PUT /vendor/nodes/{id}/profile` (revision 1); every write is asynchronous and polled via `GET /vendor/transactions/{id}` | 1 vendor, 1 node, 1 profile |
 | 3 | node-topology | `POST /nodes/{id}:activate` (the vendor node); `POST /lanes` (node -> station, `GROUND`, 120 min); `PUT /service-areas/{prefix}` (`787`, `786`) | 1 lane, 2 service areas |
 | 4 | last-mile-delivery | `POST /waves`: one daily wave per service date, 14 days | 14 waves |
 | 5 | offer-availability | `POST /catalog-items` (real fleet SKUs of the e2e product catalogue); `POST /listings` (item x node) | 5 items, 5 listings |
@@ -84,7 +84,7 @@ at all** (the unit tests assert it).
 | region | `code` | absent -> create; `409 region-code-taken` = exists |
 | delivery station | type + region + postal code | absent -> create; `PROPOSED` -> activate; any other status is left alone and reported |
 | vendor | `vendorId` | absent -> onboard; a suspended vendor is reported, never reinstated |
-| fulfillment node | `vendorRef` (`V-WS`, `SIM1`) | absent -> register; **an existing node is adopted** (network-fulfillment ADR 0026 adopts, never registers twice) |
+| fulfillment node | `vendorRef` (`V-WS`, `site-1`) | absent -> register; **an existing node is adopted** (network-fulfillment ADR 0026 adopts, never registers twice) |
 | node profile | `profileRevision` | declared only when the node's revision is **lower** than the data file's; a higher one is left alone |
 | lane | origin + destination | an OPEN lane = exists; `409 duplicate-lane` = exists |
 | service area | postal prefix | same station = exists; another station = reported and left alone (`--reassign` bumps the version) |
@@ -102,8 +102,12 @@ asynchronous transaction for 24 hours and block every retry.
 
 ## Hand-over to the fleet
 
-`vendorNodeCode` is the fleet site code (`SIM1`, `e2e-tests` `cmd/warehouse-day`), so
-network-fulfillment in live mode **adopts** the seeded node instead of registering it.
+`vendorNodeCode` is network-fulfillment's own `SITE_ID` (`site-1`, set in
+`helm-values/network-fulfillment.yaml`), so network-fulfillment in live mode **adopts** the
+seeded node instead of registering it. It is NOT `SIM1`, the facility-layout code of the
+simulated building: the service converges its `SITE_ID` onto the node with the same code, so
+a node seeded as `SIM1` would be left unused while a second, empty `site-1` was registered,
+and nothing would fail. A unit test pins the data file to the values file's `SITE_ID`.
 The seeded profile is revision 1: the fleet's own declaration (ADR 0027) will be
 revision 2 or higher, and the seed never lowers or re-declares over it. Likewise a
 listing the fleet has fed is not refed. Bumping a number deliberately is a data-file
@@ -119,9 +123,9 @@ key. The script validates the file before it sends anything (exit 2).
 ## Verify (`--verify`)
 
 A read-only table, e.g. `vendor V-WS ACTIVE`, `region`, `delivery station ... ACTIVE`,
-`service area <prefix> -> <station>`, `node SIM1 ACTIVE`, `node SIM1 profile (vendor API)`
+`service area <prefix> -> <station>`, `node site-1 ACTIVE`, `node site-1 profile (vendor API)`
 (revision and handling time as the vendor sees them), `lane ... OPEN`,
-`pickup departures of SIM1`, `listings of SIM1 LIVE with stock` (availableQty per SKU),
+`pickup departures of site-1`, `listings of site-1 LIVE with stock` (availableQty per SKU),
 `open waves ... (next 3 days)`, `promise policy readable`, and with `--quote` a delivery
 quote. After a seed run it is retried a few times because the node views are fed by events.
 
@@ -151,9 +155,9 @@ to put at the top level of the values file in place of the existing `productTran
 ```yaml
 productTranslation:
   mappings:
-    - networkProductId: <listing id of ABO-B000B5KPG8 on SIM1>
+    - networkProductId: <listing id of ABO-B000B5KPG8 on site-1>
       sku: ABO-B000B5KPG8
-    - networkProductId: <listing id of ABO-B000G0F3CY on SIM1>
+    - networkProductId: <listing id of ABO-B000G0F3CY on site-1>
       sku: ABO-B000G0F3CY
     # ... one pair per SKU
 ```
@@ -201,7 +205,7 @@ another type (a leading digit, `yes`, ...) so it always reads back as a string.
 | wave `422 unknown-station` | last-mile-delivery has not seen the station yet; re-run |
 | service area `left alone` | the prefix belongs to another station; `--reassign` if that is intended |
 | station `is SUSPENDED` | an operator decision; the seed activates only `PROPOSED` nodes |
-| `--emit-translation` exit 1, `node SIM1 ... is not in node-topology` or `no listing on node SIM1` | the network is not seeded (or only partly): run `make seed-network`, then emit again |
+| `--emit-translation` exit 1, `node site-1 ... is not in node-topology` or `no listing on node site-1` | the network is not seeded (or only partly): run `make seed-network`, then emit again |
 | `--check-translation` shows `wrong` / `missing` | the network was reseeded or the values file was pasted from an older run: emit again and replace the block |
 
 ## Not seeded on purpose
