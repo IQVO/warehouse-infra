@@ -22,3 +22,6 @@ terraform/*/.terraform.lock.hcl
 !terraform/terraform.tfvars.example
 .claude/settings.local.json
 __pycache__/
+
+# cluster-acceptance run artifacts (written inside the checkout on CI)
+artifacts/

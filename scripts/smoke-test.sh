@@ -4,6 +4,7 @@
 set -uo pipefail
 
 INFRA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${INFRA_DIR}" || exit 1
 TF="${INFRA_DIR}/scripts/tf.sh"
 
 BASE="$("${TF}" platform output -raw kong_proxy_url)"
@@ -24,14 +25,17 @@ kubectl -n "${NAMESPACE}" get ingress
 echo
 
 echo "=== GET /healthz through Kong ==="
-for svc in inventory-storage wes-work-planning workforce-management fulfillment-execution; do
-  url="${BASE}/${svc}/healthz"
+# Every exposed API context, straight from the source inventory -- never a
+# hardcoded service list that drifts the moment a context is registered.
+mapfile -t APIS < <(python3 scripts/exposure_inventory.py --kind apis)
+for ctx in "${APIS[@]}"; do
+  url="${BASE}/api/${ctx}/healthz"
   code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${url}")"
   body="$(curl -s --max-time 10 "${url}")"
-  if [[ "${code}" == "200" ]]; then
-    printf '  OK   %-24s %s -> %s %s\n' "${svc}" "${url}" "${code}" "${body}"
+  if [ "${code}" = "200" ] && [ "${body}" = '{"status":"ok"}' ]; then
+    echo "ok   ${ctx}: ${code} ${body}"
   else
-    printf '  FAIL %-24s %s -> %s %s\n' "${svc}" "${url}" "${code}" "${body}"
+    echo "FAIL ${ctx}: ${code} ${body}"
     fail=1
   fi
 done
