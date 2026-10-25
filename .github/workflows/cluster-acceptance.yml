@@ -45,198 +45,33 @@ jobs:
         with:
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['warehouse-infra'] || github.event.pull_request.head.sha || github.sha }}
           path: warehouse-infra
-      - name: Checkout order-management
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/order-management
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['order-management'] || 'develop' }}
-          path: order-management
-      - name: Checkout inventory-storage
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/inventory-storage
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['inventory-storage'] || 'develop' }}
-          path: inventory-storage
-      - name: Checkout wes-work-planning
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/wes-work-planning
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['wes-work-planning'] || 'develop' }}
-          path: wes-work-planning
-      - name: Checkout fulfillment-execution
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/fulfillment-execution
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['fulfillment-execution'] || 'develop' }}
-          path: fulfillment-execution
-      - name: Checkout workforce-management
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/workforce-management
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['workforce-management'] || 'develop' }}
-          path: workforce-management
-      - name: Checkout facility-layout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/facility-layout
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['facility-layout'] || 'develop' }}
-          path: facility-layout
-      - name: Checkout labor-performance
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/labor-performance
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['labor-performance'] || 'develop' }}
-          path: labor-performance
-      - name: Checkout process-path-management
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/process-path-management
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['process-path-management'] || 'develop' }}
-          path: process-path-management
-      - name: Checkout warehouse-ops-agent
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/warehouse-ops-agent
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['warehouse-ops-agent'] || 'develop' }}
-          path: warehouse-ops-agent
-      - name: Checkout network-fulfillment
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/network-fulfillment
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['network-fulfillment'] || 'develop' }}
-          path: network-fulfillment
-      - name: Checkout warehouse-console
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/warehouse-console
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['warehouse-console'] || 'develop' }}
-          path: warehouse-console
-      - name: Checkout warehouse-ui-kit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/warehouse-ui-kit
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['warehouse-ui-kit'] || 'develop' }}
-          path: warehouse-ui-kit
-      - name: Checkout warehouse-docs
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/warehouse-docs
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['warehouse-docs'] || 'main' }}
-          path: warehouse-docs
-      - name: Checkout e2e-tests
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/e2e-tests
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['e2e-tests'] || 'develop' }}
-          path: e2e-tests
-      - name: Checkout exception-management
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/exception-management
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['exception-management'] || 'develop' }}
-          path: exception-management
-      - name: Checkout returns-processing
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/returns-processing
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['returns-processing'] || 'develop' }}
-          path: returns-processing
-      - name: Checkout product-master
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/product-master
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['product-master'] || 'main' }}
-          path: product-master
-      - name: Checkout inbound-receiving
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/inbound-receiving
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['inbound-receiving'] || 'main' }}
-          path: inbound-receiving
-      - name: Checkout slotting-optimization
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/slotting-optimization
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['slotting-optimization'] || 'main' }}
-          path: slotting-optimization
-      - name: Checkout pick-face-replenishment
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/pick-face-replenishment
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['pick-face-replenishment'] || 'main' }}
-          path: pick-face-replenishment
-      - name: Checkout task-interleaving
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/task-interleaving
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['task-interleaving'] || 'main' }}
-          path: task-interleaving
-      - name: Checkout network-inventory-planning
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/network-inventory-planning
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['network-inventory-planning'] || 'main' }}
-          path: network-inventory-planning
-      - name: Checkout customer-ordering
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/customer-ordering
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['customer-ordering'] || 'main' }}
-          path: customer-ordering
-      - name: Checkout delivery-promise
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/delivery-promise
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['delivery-promise'] || 'main' }}
-          path: delivery-promise
-      - name: Checkout last-mile-delivery
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/last-mile-delivery
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['last-mile-delivery'] || 'main' }}
-          path: last-mile-delivery
-      - name: Checkout linehaul-transportation
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/linehaul-transportation
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['linehaul-transportation'] || 'main' }}
-          path: linehaul-transportation
-      - name: Checkout node-performance
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/node-performance
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['node-performance'] || 'main' }}
-          path: node-performance
-      - name: Checkout node-topology
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/node-topology
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['node-topology'] || 'main' }}
-          path: node-topology
-      - name: Checkout offer-availability
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/offer-availability
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['offer-availability'] || 'main' }}
-          path: offer-availability
-      - name: Checkout order-sourcing
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/order-sourcing
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['order-sourcing'] || 'main' }}
-          path: order-sourcing
-      - name: Checkout shipping-and-tracking
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/shipping-and-tracking
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['shipping-and-tracking'] || 'main' }}
-          path: shipping-and-tracking
-      - name: Checkout vendor-connectivity
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: IQVO/vendor-connectivity
-          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['vendor-connectivity'] || 'main' }}
-          path: vendor-connectivity
+      # The fleet is whatever terraform/apps.yaml registers (plus the
+      # non-registration repositories the acceptance run consumes) -- derived
+      # at run time, so a newly registered context can never be missed here
+      # again. Refs: the fleet_shas input when given, else the repo's
+      # default branch (main once released, develop until then).
+      - name: Check out the whole fleet (derived from terraform/apps.yaml)
+        env:
+          FLEET_SHAS: ${{ inputs.fleet_shas || '{}' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess, yaml
+          from pathlib import Path
+          shas = json.loads(os.environ.get("FLEET_SHAS") or "{}")
+          apps = yaml.safe_load(Path("terraform/apps.yaml").read_text())["applications"]
+          repos = sorted(apps) + ["warehouse-console", "warehouse-ui-kit", "warehouse-docs", "e2e-tests"]
+          for repo in repos:
+              if repo == "warehouse-infra":
+                  continue  # checked out by the action above, at the PR head
+              url = f"https://x-access-token:{os.environ['GITHUB_TOKEN']}@github.com/IQVO/{repo}.git"
+              ref = shas.get(repo)
+              if not ref:
+                  heads = subprocess.run(["git", "ls-remote", "--heads", url, "main"], capture_output=True, text=True)
+                  ref = "main" if heads.stdout.strip() else "develop"
+              subprocess.run(["git", "clone", "--depth=1", "--branch", ref, url, repo], check=True)
+          print("checked out:", " ".join(repos))
+          PY
 
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:

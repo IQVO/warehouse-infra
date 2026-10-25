@@ -21,25 +21,14 @@ class ClusterAcceptanceWorkflowTest(unittest.TestCase):
         self.assertIn("EXPECTED_FLEET_SHAS", source)
         self.assertIn("setup-go", source)
 
-    def test_workflow_checks_out_every_fleet_repository(self):
+    def test_fleet_checkouts_are_derived_from_the_registry(self):
         source = WORKFLOW.read_text()
-        for repository in (
-            "order-management",
-            "inventory-storage",
-            "wes-work-planning",
-            "fulfillment-execution",
-            "workforce-management",
-            "facility-layout",
-            "labor-performance",
-            "process-path-management",
-            "warehouse-ops-agent",
-            "network-fulfillment",
-            "warehouse-console",
-            "warehouse-ui-kit",
-            "warehouse-docs",
-            "e2e-tests",
-        ):
-            self.assertIn(f"IQVO/{repository}", source)
+        self.assertIn("derived from terraform/apps.yaml", source)
+        self.assertIn('yaml.safe_load(Path("terraform/apps.yaml").read_text())["applications"]', source)
+        self.assertIn('"main" if heads.stdout.strip() else "develop"', source)
+        # No hardcoded per-repository checkout blocks: a newly registered
+        # context must never need a workflow edit again.
+        self.assertNotIn("repository: IQVO/order-management", source)
 
     def test_workflow_checks_out_release_gate_refs_not_ambiguous_branches(self):
         source = WORKFLOW.read_text()
