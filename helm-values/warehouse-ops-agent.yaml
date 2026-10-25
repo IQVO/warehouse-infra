@@ -97,6 +97,8 @@ upstreams:
     endpoint: http://product-master-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   returnsProcessing:
     endpoint: http://returns-processing-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+  sellerInbound:
+    endpoint: http://seller-inbound-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   shippingAndTracking:
     endpoint: http://shipping-and-tracking-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   slottingOptimization:
