@@ -3,8 +3,8 @@
 A fully local Kubernetes environment for the `warehouse-systems` bounded
 contexts: a **kind** cluster running **PostgreSQL**, **Kafka**, **Istio**
 (sidecar mesh), the observability stack, **Kong** (north-south API gateway) and
-an **Nginx web gateway** (the product UI), all provisioned by a single
-`terraform apply`.
+an **Nginx web gateway** (the product UI), all provisioned by `./scripts/up.sh`:
+three Terraform layers (cluster, platform, one state per application), applied in order.
 
 Nothing here talks to a cloud. There is no cloud load balancer, no registry
 push, no remote state — images are built locally and side-loaded into kind, and
@@ -14,7 +14,7 @@ The product has **two independent host-facing edges**, and neither proxies to
 the other:
 
 ```
-http://localhost        ->  Nginx web gateway  ->  console shell + /mfes/<context>/ remotes
+http://localhost        ->  Nginx web gateway  ->  console shell + /mfes/<context>/ remotes + /catalog/ (EventCatalog)
 http://localhost:8000   ->  Kong               ->  /api/<context> REST APIs
 ```
 
@@ -95,11 +95,12 @@ This section is the port-level map (which host port reaches which Service,
 and which container port that Service targets). For the path-level API
 route table (Kong's `/api/<context>` prefixes) see "Route table" below.
 
-### Host-reachable ports (kind `extraPortMappings`, `main.tf`)
+### Host-reachable ports (kind `extraPortMappings`, `terraform/00-cluster/main.tf`)
 
 | Host URL / port                  | `listen_address` | Container (NodePort) | Backing Service                         | What it is |
 |-----------------------------------|-------------------|-----------------------|------------------------------------------|------------|
 | `http://localhost` (`:80`)        | `127.0.0.1`       | `30081`               | `web-gateway` (`warehouse-systems`)       | **Product UI** — Nginx web gateway: console shell + `/mfes/<context>/` remotes |
+| `http://localhost/catalog/` (`:80`) | `127.0.0.1` | `30081` | `web-gateway` -> `ecosystem` (`warehouse-systems`) | **EventCatalog** — architecture catalog at `/catalog/` (base-prefixed SSG, bytes only) |
 | `http://localhost:8000`           | `127.0.0.1`       | `30080`               | `kong-kong-proxy` (`kong`)                | **Product API** — Kong HTTP proxy, `/api/<context>/*` |
 | `https://localhost:443`           | `0.0.0.0`         | `30443`               | `kong-kong-proxy` (`kong`)                | Kong HTTPS proxy (unused by the product today; no chart routes TLS) |
 | `http://localhost:3000`           | `0.0.0.0`         | `30300`               | `grafana-nodeport` (`observability`)      | Grafana (`admin` / `var.grafana_admin_password`, default `admin`) |
@@ -132,8 +133,8 @@ Every bounded-context service's OLTP pod listens on container port `8080`
 
 | Service (`warehouse-systems` ns)         | Service port → target | What it is |
 |--------------------------------------------|------------------------|------------|
-| `<service>` (8 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management) | `80 → 8080` | OLTP REST API, routed by Kong |
-| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — all 8 services above, per `mcp.tf`'s `local.mcp_services` |
+| `<service>` (16 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master, inbound-receiving, slotting-optimization, pick-face-replenishment, task-interleaving, returns-processing, exception-management) | `80 → 8080` | OLTP REST API, routed by Kong — except returns-processing and exception-management, whose charts render no `gatewayApi` HTTPRoute yet (ClusterIP only; see their paragraph below) |
+| `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — every context whose `helm-values/<context>.yaml` sets `mcp.enabled` (all 16 above, plus network-fulfillment and network-inventory-planning) |
 | `<service>-reports`                        | `80 → 8092`             | Analytics read-only REST API (only where `analytics.enabled`, see `locals.tf`'s `analytics_services`) |
 | `<service>-frontend`                       | `80 → 8080`             | Module Federation remote, proxied by the web gateway at `/mfes/<context>/` |
 | `warehouse-console`                        | `80 → 8080`             | Console shell SPA, proxied by the web gateway at `/` |
@@ -141,11 +142,180 @@ Every bounded-context service's OLTP pod listens on container port `8080`
 | `postgres-postgresql` (`warehouse-data` ns)| `5432 → 5432`           | Shared Postgres release, one logical database per service |
 | `kafka` (`warehouse-systems` ns)           | `9092 → 9092`, `9095`   | Kafka's CLIENT listener (in-cluster only — see `kafka-controller-0-external` above for the host-reachable EXTERNAL listener) |
 | `otel-collector` (`observability` ns)      | `4317` (gRPC), `4318` (HTTP) | OTLP ingest — every service's exporter points here |
+| `prometheus-alertmanager` (`observability` ns) | `9093 → 9093`        | Alertmanager (one replica, null receiver: nothing is delivered). `kubectl -n observability port-forward svc/prometheus-alertmanager 9093:9093`, then `http://localhost:9093` or `/api/v2/alerts` |
 | `istiod` (`istio-system` ns)               | `15010`/`15012`/`443`/`15014` | Istio control plane (sidecar injection webhook, xDS) |
 
 The analytics **projector** (`cmd/<svc>-projector`, admin port `8091`) has NO
 Service at all — it is a Kafka consumer with nothing to route HTTP traffic
 to, on purpose.
+
+`warehouse-planning` follows the same shape with its own binary names: the
+projector is `/app/planning-projector` and the reports binary
+`/app/planning-reports` (Service `warehouse-planning-reports`, Kong route
+`/api/warehouse-planning/reports/*` → `/reports/*`), both in the SAME image as the
+api, backed by the separate `warehouse_planning_analytics` database (role
+`warehouse_planning_analytics`; password generated by
+`module.application["warehouse-planning"]`, DSN direct to Postgres, never
+through PgBouncer, read by the chart from the `warehouse-planning-analytics-db`
+Secret). Its projector consumer group is the fixed
+`warehouse-planning-analytics`; its report endpoints are
+`GET /reports/{bottleneck-frequency,shortage-trend,plan-throughput}`.
+
+`product-master` likewise: projector `/app/product-projector` (admin `8091`,
+consumer group `product-master-analytics`, topic
+`warehouse.product-master.analytics`) and reports `/app/product-reports`
+(Service `product-master-reports`, Kong route `/api/product-master/reports/*` →
+`/reports/*`, endpoints `GET /reports/{master-data-quality,freshness}`), backed
+by the separate `product_master_analytics` database (role
+`product_master_analytics`, DSN direct to Postgres).
+
+Known issue (product-master reports through Kong): the
+`product-master-reports` HTTPRoute (`/api/product-master/reports` →
+`/reports`) is declared, but requests to it are answered by the
+`/api/product-master` route instead, so
+`http://localhost:8000/api/product-master/reports/*` returns `404` from the
+OLTP API (which has no `/reports/*` path). The reports service itself works
+in-cluster: `kubectl -n warehouse-systems port-forward svc/product-master-reports 8092:80`.
+
+The rest of product-master's deployment: the OLTP API (`EVENT_PUBLISHER=kafka`,
+legacy importer group `product-master-legacy-import`), the read-only MCP server
+`product-master-mcp` (read by `warehouse-ops-agent` through
+`PRODUCT_MASTER_MCP_ENDPOINT`, `helm-values/warehouse-ops-agent.yaml`) and the
+console remote `product-master-frontend` (`productmaster_mfe`,
+`/mfes/product-master/`, `helm-values/product-master.yaml`). Its `ProductClassified` events on
+`warehouse.product-master.events` feed local copies in inventory-storage
+(`productMasterConsumerGroup`, `helm-values/inventory-storage.yaml`) and in
+order-management, wes-work-planning and fulfillment-execution
+(`PRODUCT_CLASSIFICATION_MODE=kafka`, each one's `helm-values/` file); no service reads classification from inventory-storage over REST
+any more.
+
+`inbound-receiving` (ASN, dock appointment, receipt) follows the same shape:
+projector `/app/inbound-projector` (admin `8091`, consumer group
+`inbound-receiving-analytics`, topic `warehouse.inbound-receiving.analytics`)
+and reports `/app/inbound-reports` (Service `inbound-receiving-reports`, Kong
+route `/api/inbound-receiving/reports/*` → `/reports/*`, endpoints
+`GET /reports/{receiving-performance,freshness}`), backed by the separate
+`inbound_receiving_analytics` database (role `inbound_receiving_analytics`, DSN
+direct to Postgres). The same Kong reports-route caveat as product-master
+above applies until that route issue is fixed. The OLTP API runs with
+`EVENT_PUBLISHER=kafka`, `PRODUCT_MODE=kafka` (group `inbound-receiving-product`,
+SKU copy from `warehouse.product-master.events`) and `DOCK_DOOR_MODE=kafka`
+(group `inbound-receiving-dock-doors`, inbound-door copy from
+`warehouse.facility.events`; `helm-values/inbound-receiving.yaml`). The
+read-only MCP server `inbound-receiving-mcp` is read by `warehouse-ops-agent`
+through `upstreams.inboundReceiving` (`helm-values/warehouse-ops-agent.yaml`),
+and the console remote `inbound-receiving-frontend` is `inbound_mfe` at
+`/mfes/inbound-receiving/` (`helm-values/inbound-receiving.yaml`). The handover: inventory-storage consumes
+`ReceiptLineReceived` from `warehouse.inbound-receiving.events`
+(`config.inboundReceiptConsumerGroup=inventory-storage-inbound-receipts`,
+`helm-values/inventory-storage.yaml`, inventory-storage ADR 0037) and books
+`StockReceived`, which leaves the service because inventory-storage runs
+`EVENT_PUBLISHER=kafka`.
+
+`slotting-optimization` (forward pick-slot plans by ABC velocity, human
+approval; gap fix D10) is a `kind: service` entry in `terraform/apps.yaml` with
+the full component set: the OLTP API, the analytics read side
+(`analytics: true`; projector group `slotting-optimization-analytics`, topic
+`warehouse.slotting-optimization.analytics`, slotting ADR 0006), the read-only MCP
+server (`mcp.enabled`, Kong route `/api/mcp/slotting-optimization`; read by
+`warehouse-ops-agent`) and the console remote `slotting-optimization-frontend`
+(`slotting_mfe`, `/mfes/slotting-optimization/`, `frontend_remote` in the entry and
+`frontend.enabled` in `helm-values/slotting-optimization.yaml`). Its role/database `slotting_optimization` and the
+`slotting-optimization-db` Secret derive from that entry; the Kong route
+`/api/slotting-optimization` is the chart's own `gatewayApi` HTTPRoute. The API
+runs with `EVENT_PUBLISHER=kafka` (topic `warehouse.slotting-optimization.events`)
+and four consumers, each with a stable group
+(`helm-values/slotting-optimization.yaml`): `DEMAND_MODE=kafka`
+(`slotting-optimization-demand`, from `warehouse.order-management.events`),
+`PRODUCT_MODE=kafka` (`slotting-optimization-product`, from
+`warehouse.product-master.events`), `LAYOUT_MODE=kafka`
+(`slotting-optimization-layout`, from `warehouse.facility.events`) and
+`RELOCATION_MODE=kafka` (`slotting-optimization-relocation`, inventory-storage's
+`StockRelocated` from `warehouse.inventory.events`: per-plan execution progress,
+slotting ADR 0010). Approved plans are executed as WES relocation work: the chain
+is `SlotPlanApproved` → wes-work-planning (its inbound consumer, on whenever its
+`kafka.enabled`, plans one `RELOCATE` work unit per move) → fulfillment-execution
+`RELOCATE` task → `TaskCompleted` → inventory-storage's TaskCompleted consumer
+(`config.taskCompletedConsumerMode=kafka`) relocates the stock and raises
+`StockRelocated` → slotting-optimization. It needs the `RELOCATE` process path
+(post-deploy seed step 1).
+
+`pick-face-replenishment` (WMS: keeps forward pick faces stocked from reserve bins)
+and `task-interleaving` (WES: recommends a nearby second task for an operator's
+station trip) are `kind: service` entries in `terraform/apps.yaml` that carry
+every optional component: the OLTP API, the read-only MCP server (`mcp.enabled`,
+Kong route `/api/mcp/<name>`), the analytics read side and a console remote.
+`analytics` is `{ secret_keys: [ANALYTICS_DATABASE_URL] }` because their charts
+read only that key (no reader DSN): projector group
+`pick-face-replenishment-analytics` / `task-interleaving-analytics` (topic
+`warehouse.<name>.analytics`), reports Service `pick-face-replenishment-reports` /
+`task-interleaving-analytics-reports` (the charts have no Kong reports route), DSN
+from the `<name>-analytics-db` Secret, role/database `<db>_analytics`. The remotes
+are `replenishment_mfe` (`/mfes/pick-face-replenishment/`) and
+`task_interleaving_mfe` (`/mfes/task-interleaving/`). Each runs on real
+Postgres and real Kafka only (their ADR 0006), so neither values file sets a `*_MODE`
+variable. Role/database `pick_face_replenishment` / `task_interleaving` and the
+`<name>-db` Secret derive from the entry (provisioning Job, ADR 0005); the Kong
+route `/api/<name>` is the chart's own `gatewayApi` HTTPRoute. Consumer groups
+(`helm-values/<name>.yaml`): pick-face-replenishment `-inventory`
+(`warehouse.inventory.events`), `-slotting` (`warehouse.slotting-optimization.events`)
+and `-layout` (`warehouse.facility.events`); task-interleaving `-fulfillment`
+(`warehouse.fulfillment.events`) and `-layout`. They publish
+`warehouse.pick-face-replenishment.events` / `warehouse.task-interleaving.events`
+(plus a `.analytics` topic each), auto-created on first write. The chains: pick-face
+replenishment → wes-work-planning (`REPLENISHMENT_MODE=kafka`, group
+`wes-work-planning-replenishment`, its ADR 0042) plans `REPLENISH` work →
+fulfillment-execution `REPLENISH` task → `TaskCompleted` → inventory-storage's
+TaskCompleted consumer relocates the stock; task-interleaving ← fulfillment-execution's
+`TaskAvailable`/`TaskClaimed`/`TaskCompleted`, and its `InterleavingHintIssued` →
+fulfillment-execution (`TASK_INTERLEAVING_MODE=kafka`, group
+`fulfillment-execution-interleaving`, its ADR 0051; advisory, fail-open). They need the
+`REPLENISH` process path (post-deploy seed step 1) and the `replenish` capability on
+the operators that should claim those tasks.
+
+`returns-processing` (WMS: return authorization, receipt, inspection,
+disposition) and `exception-management` (WES: the exception case ledger fed
+by every sibling context's failure signals, triage/assignment/escalation/
+resolution and the SLA sweeper) are `kind: service` entries in
+`terraform/apps.yaml` with `repo_owner: IQVO`, `database: true`, the
+one-key `analytics: { secret_keys: [ANALYTICS_DATABASE_URL] }` (their
+charts' projector/reports read only that key) and the console remotes
+`returns_mfe` (`/mfes/returns-processing/`) and `exceptions_mfe`
+(`/mfes/exception-management/`). Each runs the OLTP api, the read-only MCP
+server (`mcp.enabled`; no Kong route — the chart renders none, the
+`<name>-mcp:8090` Service stays ClusterIP and warehouse-ops-agent reaches it
+in-cluster), the analytics read side (projector group
+`<name>-analytics`, topic `warehouse.<name>.analytics`, reports Service
+`<name>-reports:80`, also with no Kong route) and the frontend remote
+(`frontend.enabled`, `helm-values/<name>.yaml`). Role/database
+`returns_processing` / `exception_management` and the `<name>-db` /
+`<name>-analytics-db` Secrets derive from the entry (provisioning Job, ADR
+0005). NOTE: unlike every older `kind: service`, these two charts ship no
+`gatewayApi` values block and no httproute/ingress/kong-plugins templates,
+so there is NO Kong route `/api/returns-processing` or
+`/api/exception-management` yet — the OLTP and reports APIs are
+ClusterIP-only until their charts grow the route templates (recorded as a
+follow-up; Kong configuration belongs to the application charts, fleet
+decision 2026-10-13). Consumer groups (`helm-values/<name>.yaml`):
+returns-processing `-product-classification` (`warehouse.product-master.events`),
+`-order-lines` (`warehouse.order-management.events`) and `-manifest`
+(`warehouse.fulfillment.events`); exception-management `-fulfillment`
+(`warehouse.fulfillment.events`), `-work-planning`
+(`warehouse.work-planning.events`), `-network-fulfillment`
+(`warehouse.network-fulfillment.events`), `-order-correlation`
+(`warehouse.order-management.events`, auto-resolve correlation),
+`-inventory` (`warehouse.inventory.events`) and `-returns`
+(`warehouse.returns-processing.events`). They publish
+`warehouse.returns-processing.events` / `warehouse.exception-management.events`
+(plus a `.analytics` topic each), auto-created on first write. The handover:
+`ReturnLineStaged` (the RESTOCK disposition) → inventory-storage's return-line
+consumer (`config.returnLineConsumerGroup=inventory-storage-return-lines`,
+`helm-values/inventory-storage.yaml`, inventory-storage ADR 0044) books
+`StockReceived`; warehouse-ops-agent's two new MCP upstreams are pre-wired
+in `helm-values/warehouse-ops-agent.yaml` (`RETURNS_PROCESSING_MCP_ENDPOINT`,
+`EXCEPTION_MANAGEMENT_MCP_ENDPOINT` via extraEnv, inert until that repo
+grows the clients). Neither values file sets a `*_MODE` variable (their
+charts refuse one at render time).
 
 **A structural gotcha worth knowing before you `kubectl port-forward pod/…`:**
 every chart's `selectorLabels` helper emits only
@@ -153,11 +323,13 @@ every chart's `selectorLabels` helper emits only
 OLTP, MCP, projector, and reports pods of the same service — so the OLTP
 `Service` actually selects ALL of them, and which pod answers a given
 request is undefined. Port-forward `pod/<exact-name>`, never `deploy/` or
-`svc/`, when you need a specific one.
+`svc/`, when you need a specific one. product-master's chart is the exception:
+each of its Services also selects `app.kubernetes.io/component`, so exactly
+one Deployment answers (its `charts/product-master/tests/test_service_selectors.py`).
 
 ### ArgoCD
 
-Installed by `terraform/argocd.tf` (`helm-values/argocd.yaml`) in its own
+Installed by `terraform/10-platform/argocd.tf` (`helm-values/argocd.yaml`) in its own
 `argocd` namespace. **Deliberately not on any host port** — neither product
 edge (`:80` Nginx, `:8000` Kong) is meant to carry deployment-control-plane
 traffic, and nothing in `main.tf`'s `extraPortMappings` publishes it.
@@ -178,19 +350,236 @@ on `5556`/`5557` (SSO, unused here since auth is off); `argocd-redis` on
 `6379`. None of these need a host port — only `argocd-server` is ever
 reached directly, and only via port-forward.
 
+**Probe budgets and render parallelism** (`helm-values/argocd.yaml`). The
+chart's 1 s timeout on `/healthz?full=true` fails chronically on the single kind
+worker: on 2026-10-14 `argocd-server` had 98 liveness failures in 16 h and
+`argocd-repo-server` was killed 23 times in 5 h (exit 137). When a Terraform
+apply made all 16 Applications re-render at once (`helm template` ~14 s, git
+fetch ~32 s, `GenerateManifest` up to ~78 s) the repo-server entered a
+liveness-kill loop and every Application went `Unknown`, although the process
+was healthy and only slow to answer. Two settings address it
+([#83](https://github.com/IQVO/warehouse-infra/pull/83)):
+
+| Setting | Value | Effect |
+| --- | --- | --- |
+| `server` and `repoServer` `livenessProbe` | `timeoutSeconds: 10`, `periodSeconds: 15`, `failureThreshold: 6` | A slow answer is no longer a kill. |
+| `server` and `repoServer` `readinessProbe` | `timeoutSeconds: 5`, `failureThreshold: 6` | Same budget for readiness. |
+| `configs.params."reposerver.parallelism.limit"` | `4` | Bounds concurrent `helm template` renders (chart default `0` = unlimited); excess requests queue instead of all slowing down together. |
+
+These are Helm values for the ArgoCD release, so they take effect only after a
+Terraform apply of `argocd.tf`; merging the PR changes nothing in a running
+cluster.
+
+### kind CPU-request overlay
+
+The kind cluster is **one worker** with the Docker VM's 10 CPUs. The charts
+request 50-100m CPU per container (about 10 cores for ~76 app containers) while
+measured use is ~10 % of that, and every Deployment is 1 replica with the
+default RollingUpdate (`maxSurge` 1). A fleet-wide rollout therefore left new
+pods `Pending` (`Insufficient cpu`) and stalled (2026-10-14). The overlay lowers
+`requests.cpu` to `25m` for every component whose chart default is higher (API,
+MCP, analytics projector and reports, frontend, console); limits and memory keep
+the chart defaults, so a busy pod can still burst.
+
+* `helm-values/kind-resources/<app>.yaml` — one generated overlay per
+  Application (17 files plus a `README.md`), the LAST of its three value files
+  (ADR 0002 D2): Helm deep-merges it, so only `requests.cpu` changes. Regenerate
+  it when a chart adds a component with a CPU request above `25m`. A change
+  deploys on merge to `develop`, through an ArgoCD sync.
+
+After a sync, check that the containers request `25m` and that the node's
+requested CPU dropped:
+
+```bash
+kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.containers[*].resources.requests.cpu}{"\n"}{end}'
+kubectl describe nodes | grep -A8 'Allocated resources'
+```
+
+The overlay is a kind-environment setting only; a production-like environment
+uses the chart defaults.
+
 ---
 
 ## Process-path catalogue
 
-`config/process-paths/sortable-fc.yaml` is the published-language source of
-truth for this fleet's process paths (`PICK`, `PACK`, `REBIN`, `SLAM`) —
-their ids, and the capability vocabulary each one requires. It is read by
-three services (fulfillment-execution, wes-work-planning,
-workforce-management), none of which owns it individually, for the same
-reason `terraform/locals.tf`'s `services` map lives in this repo: it is a
-fact about what exists in this deployment, not business logic belonging to
-any one bounded context. See the file's own header comment for the full
-schema and rationale.
+process-path-management owns the process-path catalogue. The paths every
+environment must define are declared in its repository
+(`catalogue/paths.json`: `PICK`, `PACK`, `REBIN`, `SLAM`, `RELOCATE`, `DISPATCH`,
+`REPLENISH`, each with its `intake`) and applied by its `scripts/seed_catalogue.py` — step 1 of the
+[post-deploy seeds](#post-deploy-seeds). fulfillment-execution,
+wes-work-planning, workforce-management and order-management read the catalogue
+from `warehouse.process-path-management.events` (`PATH_CATALOGUE_SOURCE=kafka`
+in their `helm-values/` files), not from a file.
+
+`config/process-paths/sortable-fc.yaml` is the **frozen rollback target** of the
+retired file-based catalogue: four paths, no `RELOCATE`, no `intake` (the file
+schema the services' `filecatalog` loaders read is id / matchPrefix / direct /
+requiredCapabilities only, so an `intake` there would be ignored). Do not edit it
+to change paths; see its header and
+`scripts/README-process-path-seed.md` (whose `seed-process-paths.py` was the
+one-time YAML → process-path-management migration and is superseded by
+`seed_catalogue.py`).
+
+---
+
+## Network inventory planning (NIP) runbook
+
+`network-inventory-planning` is deployed like every application: its platform
+contract (image build/load, database secrets, ArgoCD Application) by
+`terraform/modules/application`, its configuration (Kong routes for the API and
+`/reports`, MCP, console remote, analytics) by
+`helm-values/network-inventory-planning.yaml`; `terraform/10-platform/network-inventory-planning.tf`
+keeps its database names. One thing a plain
+`terraform apply` does NOT do on an already-populated cluster:
+
+1. **The dispatch path.** NIP releases the dispatch leg with
+   `TRANSFER_DISPATCH_PATH_ID=dispatch-transfer`. process-path-management is the
+   catalogue's source of truth (the YAML under `config/process-paths/` is frozen) and
+   declares the `DISPATCH` family in `catalogue/paths.json` (its ADR 0035: matchPrefix
+   `dispatch`, direct, capability `dispatch`, intake `STOCK_TRANSFER`). The path id is
+   the fulfillment-execution task type, so the configured value must be `dispatch` or
+   `dispatch-*`. Run `seed_catalogue.py` (step 1 of "Post-deploy seeds") once the
+   declaration is on process-path-management's `develop`; until the path exists the
+   dispatch leg is fail-closed (the saga stops after the pick). Floor stations need the
+   `dispatch` capability to claim the task.
+
+---
+
+## Post-deploy seeds
+
+Three idempotent seeds converge data the services own but no deploy step creates.
+Run them after every deploy that changes their inputs (and once on a fresh
+cluster), **in this order**, all through Kong; each has a `--dry-run` and each is a
+no-op when nothing changed:
+
+| # | Seed                                                                 | Owner / source of truth                                        | Why this position |
+|---|----------------------------------------------------------------------|----------------------------------------------------------------|-------------------|
+| 1 | process-path catalogue: `../process-path-management/scripts/seed_catalogue.py` | process-path-management `catalogue/paths.json` (its ADR 0033/0034) | adds `RELOCATE` (intake `SLOT_RELOCATION`, its ADR 0033), `DISPATCH` (`STOCK_TRANSFER`, ADR 0035) and `REPLENISH` (`REPLENISHMENT`, ADR 0036) and sets every path's `intake` (`PICK` = `CUSTOMER_ORDER`; `PACK`/`REBIN`/`SLAM` = `[]`). Every consumer (wes-work-planning, fulfillment-execution, workforce-management, order-management) gets it live from `warehouse.process-path-management.events`. It must run before anything routes work: before slotting-optimization approves a plan (wes-work-planning plans each move on `RELOCATE`) and before stock-transfer work is released |
+| 2 | site transfer capability: `scripts/seed-transfer-capability.py`      | facility-layout `GET /site-roles/transfer-defaults` (its ADR-0035/0037) | turns on inter-site transfers between the sites whose role allows them; network-inventory-planning starts proposing transfers (and releasing their legs onto process paths) as soon as capabilities land, so the catalogue must already be converged |
+| 3 | transfer lanes: `scripts/seed-transfer-lanes.py`                      | NIP's own lane catalogue (its ADR-0015), computed from the capabilities of step 2 and the sites' geography | NIP proposes a transfer only along an enabled lane whose origin may send and whose destination may receive, so the lanes follow the capabilities |
+
+```bash
+# 1. process-path catalogue (sibling checkout, the same layout the Makefile's CHARTS assume)
+python3 ../process-path-management/scripts/seed_catalogue.py \
+  --base-url http://localhost:8000/api/process-path-management --dry-run
+python3 ../process-path-management/scripts/seed_catalogue.py \
+  --base-url http://localhost:8000/api/process-path-management
+
+# 2. site transfer capability
+python3 scripts/seed-transfer-capability.py --dry-run
+python3 scripts/seed-transfer-capability.py
+
+# 3. transfer lanes (needs step 2: lanes follow the capabilities)
+python3 scripts/seed-transfer-lanes.py --dry-run
+python3 scripts/seed-transfer-lanes.py
+```
+
+The ten retail-network services have their own, separate, owner-run seed that is not one of
+the three above: `make seed-network-dry-run`, then `make seed-network` (vendor `V-WS`, node
+`SIM1`, topology, waves, catalogue, stock; idempotent). See `scripts/README-retail-network-seed.md`.
+
+`seed_catalogue.py` exits 1 if any declared path is not converged (a DEACTIVATED id
+or a changed immutable field such as `direct`: declare a new `pathId` in
+`paths.json` instead); fix that before step 2. The first run after
+process-path-management's `0009_intake` migration writes at most a `POST` for
+each declared path that is absent (`RELOCATE`, `DISPATCH`, `REPLENISH`) and one `PUT` per path whose stored `intake` differs
+from the declaration (`PICK`, and `RELOCATE` if it was created before intake
+existed); every later run writes nothing. Check the result through Kong:
+
+```bash
+curl -s http://localhost:8000/api/process-path-management/process-paths/RELOCATE
+curl -s http://localhost:8000/api/process-path-management/process-paths/PICK   # intake ["CUSTOMER_ORDER"]
+```
+
+`DISPATCH` (NIP's dispatch leg, see the NIP runbook above) is declared in
+`paths.json` too, so the same seed creates it; the catalogue seed never touches
+paths it does not declare.
+
+### Site transfer capability (`scripts/seed-transfer-capability.py`)
+
+Inter-site transfers (network-inventory-planning) only run between sites whose
+transfer capability allows them, and facility-layout keeps that capability an
+explicit, revisioned per-site command (its ADR-0035): nothing sets it
+automatically and a site-role change never flips it (ADR-0037). The fleet decision
+is that capability follows the site's role in the network; facility-layout
+publishes that table as `GET /site-roles/transfer-defaults` and this seed applies it
+once:
+
+| Role (facility-layout `siteRole`)                                                                   | origin | destination |
+|-----------------------------------------------------------------------------------------------------|--------|-------------|
+| Robotics/Non-/Traditional/Soft-Lines Sortable FC, Sub-Same-Day FC, XL FC, Simulated FC              | yes    | yes         |
+| Micro-FC                                                                                            | no     | yes         |
+| Inbound Cross-Dock, National Inbound Cross-Dock, Returns Center                                     | yes    | no          |
+| Fresh Grocery FC, Sortation Center, Delivery Station, Air Hub Gateway                               | no     | no          |
+
+(The table above is for reading only: the script never hard-codes it, it reads the
+endpoint, so facility-layout stays the single source of truth.)
+
+```bash
+# through Kong (default base URL http://localhost:8000/api/facility-layout,
+# overridable with --base-url or $FACILITY_LAYOUT_BASE_URL)
+python3 scripts/seed-transfer-capability.py --dry-run   # prints the plan, writes nothing
+python3 scripts/seed-transfer-capability.py
+```
+
+For every **Active** site it reads `GET /sites/{siteCode}/transfer-capability` and
+compares it with its role's default:
+
+| Site state                                            | Action                                                              |
+|-------------------------------------------------------|---------------------------------------------------------------------|
+| already at the role's default                         | nothing (no PUT, so no revision and no `SiteCapabilityChanged`)     |
+| differs from the role's default                       | `PUT /sites/{siteCode}/transfer-capability` (full snapshot) → revision + 1, `SiteCapabilityChanged` |
+| `siteRole` `UNSPECIFIED`, or a role with no default row | **never touched**; listed under "sites needing an operator decision" |
+| not Active (Decommissioned)                           | never touched (its capability is frozen)                            |
+
+A never-set site reads as capable of nothing at revision 0; if its role's default is
+also "neither" it is already at the target and is not written. The PUT carries no
+version: a concurrent writer makes it lose with 409 `concurrent-modification`, after
+which the script re-reads and re-PUTs (`--retries`, default 3) — or stops if the other
+writer already set the target. A second run against an unchanged facility-layout
+makes zero writes.
+
+Exit codes: `0` every Active, classified site is at its default (or would be, with
+`--dry-run`); `1` at least one site's read or PUT failed (the others are still
+reconciled — re-run after fixing); `2` the defaults table or the site list could not
+be read (nothing written). An `UNSPECIFIED` site is not a failure: classify it with
+`PUT /sites/{siteCode}/role` and re-run. Unit tests: `make seed-scripts-test` (CI job
+`seed-scripts`), against a stdlib fake of the facility-layout contract.
+
+Verify a site afterwards:
+
+```bash
+curl -s http://localhost:8000/api/facility-layout/sites/ABE8/transfer-capability
+```
+
+### Transfer lanes (`scripts/seed-transfer-lanes.py`)
+
+network-inventory-planning (NIP) proposes a transfer only along an **enabled lane** whose
+origin may send and whose destination may receive (its ADR-0015). The lane catalogue is
+NIP's own operator-managed data and no sibling publishes it, so a fresh cluster has none
+and the scheduled rebalance pass can never propose anything. This seed computes the lanes
+from the live capabilities (step 2) and from geography:
+
+- for every origin, one directed lane to each of its **K nearest destinations** (default 4)
+  in the **same country** within **2,500 km** (`--neighbours`, `--max-km`); no cross-border
+  lanes;
+- distance is great-circle between city centres (`scripts/data/site-coordinates.json`,
+  geocoded from the `(City, ST)` in each site name with OpenStreetMap Nominatim, ODbL; a new
+  site is added with `--refresh-coordinates`);
+- `LeadTime` = (1 + ceil(km / 800)) days, `UnitHandlingCost` = 1 + ceil(km / 400). NIP scores a
+  proposal as `quantity x UnitPriority - quantity x UnitHandlingCost - lead-time days`, so the
+  cost is a relative weight, not a currency amount.
+
+Idempotent: an identical lane is not written; a drifted one is updated (revision + 1); a lane
+NIP has that the rule does not compute is **left alone** and listed (NIP has no DELETE;
+disable one with `Enabled: false`). A capable site without coordinates (the simulator `SIM1`
+has no city) gets no lane and is listed. Exit codes: `0` converged, `1` a PUT failed, `2`
+sites/capabilities/lane catalogue/coordinates unreadable (nothing written). Unit tests:
+`make seed-scripts-test`.
+
+Rebalance **policies** (`PUT /v1/rebalance-policies`, per site + SKU: safety stock, target
+stock, priority) are not seeded here: their numbers only mean something against real stock
+and demand per site, so they follow the inventory seed.
 
 ---
 
@@ -219,7 +608,7 @@ guessed (see `terraform/variables.tf` for the reasoning behind each pin):
 ### About that PostgreSQL pin
 
 Bitnami moved its versioned public images behind "Bitnami Secure Images" in
-2025. Two consequences, both handled in `terraform/postgres.tf`:
+2025. Two consequences, both handled in `terraform/10-platform/postgres.tf`:
 
 * The **current** chart (18.x) defaults to `bitnami/postgresql:latest` — an
   unpinned rolling tag, which is not reproducible.
@@ -248,12 +637,14 @@ cd warehouse-infra
 ./scripts/up.sh
 ```
 
-That runs `terraform init` + `terraform apply`, which in order:
+That applies the three Terraform layers in order (ADR 0007): `00-cluster`,
+`10-platform`, then `20-apps`, one state per application (ADR 0003). In order:
 
-1. creates the kind cluster (control-plane + worker) with the Kong port
-   mappings,
-2. installs **PostgreSQL** and creates the four databases via
-   `primary.initdb.scripts`,
+1. `00-cluster` creates the kind cluster (control-plane + worker) with the
+   Kong port mappings; `10-platform` does everything down to step 4, and
+   `20-apps` the rest,
+2. installs **PostgreSQL** (empty: each application's role and database are
+   created later by a Job, see "Databases"),
 3. installs **istio-base**, then **istiod** (base first — it owns the CRDs
    istiod's manifests reference),
 4. installs **Kong**,
@@ -264,9 +655,23 @@ That runs `terraform init` + `terraform apply`, which in order:
 Equivalent by hand:
 
 ```bash
-cd warehouse-infra/terraform
-terraform init
-terraform apply -auto-approve
+cd warehouse-infra
+scripts/tf.sh cluster  apply -auto-approve
+scripts/tf.sh platform apply -auto-approve
+scripts/tf.sh apps     apply -auto-approve      # or: scripts/tf.sh app <name> apply
+```
+
+`scripts/tf.sh` (also `make cluster-plan`, `platform-plan`, `app-plan APP=<name>`,
+`apps-plan` and the `-apply` twins) passes `terraform/terraform.tfvars` to every
+layer, chooses an application's workspace with `TF_WORKSPACE` for that one
+command, rejects a name that is not in `terraform/apps.yaml`, and waits up to
+five minutes for a state lock. Each layer reads the one before it through
+`terraform_remote_state` on the local backend, so apply them in this order the
+first time. Changing one application touches only that application's state:
+
+```bash
+make app-plan  APP=product-master
+make app-apply APP=product-master
 ```
 
 Then verify end to end:
@@ -279,7 +684,8 @@ To stand up only the platform, without building or deploying the four
 services:
 
 ```bash
-terraform apply -auto-approve -var deploy_services=false
+scripts/tf.sh cluster apply -auto-approve
+scripts/tf.sh platform apply -auto-approve
 ```
 
 ### If port 80 is taken
@@ -288,10 +694,12 @@ terraform apply -auto-approve -var deploy_services=false
 to `443`. If something on your machine already owns them, kind cluster creation
 fails with a bind error. Override:
 
-```bash
-terraform apply -auto-approve \
-  -var kong_proxy_http_host_port=8000 \
-  -var kong_proxy_https_host_port=8443
+Put them in `terraform/terraform.tfvars` (every layer reads that file) before
+the first `./scripts/up.sh`:
+
+```hcl
+kong_proxy_http_host_port  = 8000
+kong_proxy_https_host_port = 8443
 ```
 
 ---
@@ -318,6 +726,13 @@ collides head-on with the console shell's own client-side routes —
 | `http://localhost:8000/api/facility-layout/*`             | `/api/facility-layout` → `/*`        | `facility-layout.warehouse-systems.svc.cluster.local`       |
 | `http://localhost:8000/api/labor-performance/*`           | `/api/labor-performance` → `/*`      | `labor-performance.warehouse-systems.svc.cluster.local`     |
 | `http://localhost:8000/api/process-path-management/*`     | `/api/process-path-management` → `/*`| `process-path-management...svc.cluster.local`                |
+| `http://localhost:8000/api/warehouse-planning/*`          | `/api/warehouse-planning` → `/*`     | `warehouse-planning.warehouse-systems.svc.cluster.local`    |
+| `http://localhost:8000/api/product-master/*`              | `/api/product-master` → `/*`         | `product-master.warehouse-systems.svc.cluster.local` (`/api/product-master/reports/*` is meant for `product-master-reports` but currently lands here and 404s, see the known issue above) |
+| `http://localhost:8000/api/inbound-receiving/*`           | `/api/inbound-receiving` → `/*`      | `inbound-receiving.warehouse-systems.svc.cluster.local` (`/api/inbound-receiving/reports/*` is meant for `inbound-receiving-reports`; same caveat as product-master) |
+| `http://localhost:8000/api/slotting-optimization/*`       | `/api/slotting-optimization` → `/*`  | `slotting-optimization.warehouse-systems.svc.cluster.local` |
+| `http://localhost:8000/api/pick-face-replenishment/*`     | `/api/pick-face-replenishment` → `/*` | `pick-face-replenishment.warehouse-systems.svc.cluster.local` |
+| `http://localhost:8000/api/task-interleaving/*`           | `/api/task-interleaving` → `/*`      | `task-interleaving.warehouse-systems.svc.cluster.local`     |
+| `http://localhost:8000/api/network-inventory-planning/*`  | `/api/network-inventory-planning` → `/*` | `network-inventory-planning.warehouse-systems.svc.cluster.local` |
 | `http://localhost:8000/api/warehouse-ops-agent/*`         | `/api/warehouse-ops-agent` → `/*`    | `warehouse-ops-agent.warehouse-systems.svc.cluster.local`   |
 
 Container port 8080 is not an assumption: every `cmd/*/main.go` defaults
@@ -338,18 +753,23 @@ The gateway strips `/mfes/<context>` before proxying, so each remote's own nginx
 sees root-relative paths. Each remote is built with Vite base
 `/mfes/<context>/`, which keeps its chunks inside its own namespace.
 
-`terraform output routes`, `frontend_routes` and `product_endpoints` print the
+`scripts/tf.sh platform output routes`, `frontend_routes` and `product_endpoints` print the
 live tables for the ports you actually applied.
 
 ---
 
 ## Databases
 
-One PostgreSQL release, four logical databases, four least-privilege owners.
-Created by a Terraform-templated init script
-(`terraform/templates/init-databases.sql.tftpl`) fed to the chart's
-`primary.initdb.scripts` — reproducible from a clean `terraform apply`, never a
-manual step.
+One PostgreSQL release, one logical database per application (and one more per
+analytics read side), each with its own least-privilege owner role. They are
+created by a Kubernetes Job per role (`terraform/modules/database`, run by
+`terraform/modules/application`; [ADR 0005](docs/adr/0005-database-provisioning-by-jobs.md)):
+the same apply creates them on an empty cluster or a populated one, sets the
+role's password to the one Terraform generated, and holds the `Application`
+back until they exist. No SQL is written by hand, and removing an application
+never drops its data. The PgBouncer in front lists no database: it resolves any
+name and checks credentials against Postgres. The table below is the original
+set; `terraform/locals.tf` is the full list.
 
 | Bounded context         | Database                | Owning role             |
 |-------------------------|-------------------------|-------------------------|
@@ -373,13 +793,16 @@ kubectl -n warehouse-data exec -it postgres-postgresql-0 -- \
   env PGPASSWORD=postgres psql -U postgres -c '\l'
 ```
 
-**Storage is ephemeral by design.** `postgres_persistence_enabled` defaults to
-`false`. initdb scripts only run against an empty data directory, so a
-PersistentVolumeClaim would cause a restarted pod to silently skip database
-creation. An emptyDir keeps `terraform apply` reproducible from any state,
-which is what a laptop cluster wants. Set
-`-var postgres_persistence_enabled=true` if you need data to survive a pod
-restart, and accept that you then own the migration story.
+**Storage now persists across pod restarts by default.**
+`postgres_persistence_enabled` defaults to `true` (as of 2026-09-26 — data
+durability was decided to matter more here than the old
+reproducible-from-any-state disposability). Data now survives a pod
+restart, and so does a stale database or role: removing an application leaves
+its database behind (drop it by hand). A new application needs no SQL on a
+populated volume, because its Job creates the role and database on the next
+apply (ADR 0005). Set `-var postgres_persistence_enabled=false` to go back to the
+old ephemeral emptyDir behavior, e.g. for a disposable CI/throwaway
+cluster.
 
 Credentials are deterministic dev values (`postgres` / `<db name>`), not
 `random_password`, so the commands in this README are copy-pasteable and a
@@ -388,10 +811,51 @@ only.**
 
 ---
 
+## Secrets you must supply yourself: ANTHROPIC_API_KEY
+
+warehouse-ops-agent's ADR-0004 model-backed Reasoner is wired real in this
+cluster (`LLM_MODE=shadow` — it calls the real Anthropic API alongside the
+deterministic policy, logs agreement, but never acts on the model's output
+alone). Terraform creates the Kubernetes Secret
+(`warehouse-ops-agent-anthropic`, from the ops agent's `secrets` entry in
+`terraform/20-apps/main.tf`) but
+**never generates or hardcodes the API key itself** — `var.anthropic_api_key`
+defaults to `""`.
+
+Supply the real value one of two ways, **never** by editing a tracked file:
+
+```bash
+export TF_VAR_anthropic_api_key="sk-ant-..."
+make app-apply APP=warehouse-ops-agent
+```
+
+or copy `terraform/terraform.tfvars.example` to a gitignored
+`terraform/terraform.tfvars` (already covered by `.gitignore`'s
+`terraform/*.tfvars`) and fill in the real value there.
+
+Leaving the key empty is fine for `terraform validate`/`plan` (the default
+`""` is deliberately valid input, checked by CI). It is **not** fine for a
+real `apply` with `LLM_MODE=shadow`: warehouse-ops-agent's own composition
+root (`cmd/agent/reasoner.go`, ADR-0004) fails loudly at pod startup —
+`LLM_MODE=shadow requires ANTHROPIC_API_KEY` — rather than silently running
+without the model it was told to use. A `check` block in
+`terraform/20-apps/main.tf` surfaces the same condition as a `terraform
+plan`/`apply` warning so you don't have to wait for the crash loop to learn
+it.
+
+---
+
 ## Where the manifests live
 
 **Decision: each service repo owns its own Helm chart; `warehouse-infra` owns
 only the environment.** There is exactly one copy of every manifest.
+
+> [ADR 0002](docs/adr/0002-application-delivery-boundary.md) extends this
+> decision: application configuration lives in value files that ArgoCD reads
+> from this repo (D2), and every application is registered through one
+> `application` module ([ADR 0004](docs/adr/0004-one-application-registry.md),
+> `terraform/20-apps/main.tf`). Both are done; the split below is what the code
+> does.
 
 All four services already ship a complete, well-formed Helm chart at
 `<service>/charts/<service>/` — Deployment, Service, ServiceAccount, ConfigMap,
@@ -404,18 +868,22 @@ So the split is:
 
 * `<service>/charts/<service>/` — **shape of the workload.** Owned by the team
   that owns the service. Unchanged by this task.
-* `warehouse-infra/helm-values/<service>.yaml` — **static environment config**
-  for this cluster: probe timings, event-publisher mode, Kafka settings.
-* `warehouse-infra/terraform/services.tf` — **computed environment config**:
-  image repository/tag, `database.existingSecret` (a pre-created Secret, not
-  a plaintext URL — see "Deploying a new bounded context" below), and the
-  Kong `ingress` block. Appended after the values file, so Terraform always
-  wins. Applied via an ArgoCD `Application` per service, not a direct
-  `helm_release` — see that section for why.
+* `warehouse-infra/helm-values/` — **the environment's configuration**, read by
+  ArgoCD from this repo's `develop` as three value files per Application:
+  `_platform.yaml` (Gateway parentRefs, Kafka brokers, Kong traces endpoint and
+  CORS origin), `<service>.yaml` (everything else: routes, MCP, analytics,
+  consumers, `existingSecret` names, sync-edge env) and
+  `kind-resources/<service>.yaml` (the CPU overlay). See `helm-values/_README.md`.
+* `warehouse-infra/terraform/` — **the platform contract**: the image build and
+  its content-derived tag (the Application's only `valuesObject`), the
+  `<service>-db` / `<service>-analytics-db` Secrets (pre-created, never a
+  plaintext URL — see "Deploying a new bounded context" below) and the ArgoCD
+  `Application` per service, not a direct `helm_release` — see that section
+  for why.
 
 `terraform/locals.tf` points each service at its chart via a relative
 `chart_path` (`${path.module}/../../<service>/charts/<service>`), consumed by
-the ArgoCD `Application` source's `path` field (`argocd-apps.tf`).
+the ArgoCD `Application` source's `path` field (`modules/application`).
 
 ### No application changes were required
 
@@ -460,33 +928,42 @@ was staged for commit.
 ## Deploying a new bounded context (GitOps via ArgoCD)
 
 **ArgoCD is now the sole owner of every chart's Helm release lifecycle** —
-all 8 database-backed bounded-context services, `warehouse-ops-agent`, and
-`warehouse-console` (10 Applications total). Terraform still bootstraps the
+every application in `terraform/20-apps/main.tf`'s registry (the
+`kind: service` contexts, network-inventory-planning, network-fulfillment,
+`warehouse-ops-agent`, `warehouse-console` and the EventCatalog: 17
+Applications). Terraform still bootstraps the
 platform (kind, Postgres, Kafka, Istio, Kong, the Nginx web gateway, and
-ArgoCD itself) and still computes every release's full environment values,
-but it no longer runs `helm install`/`upgrade` directly for any of them — it
-hands each one to ArgoCD instead.
+ArgoCD itself) and each application's platform contract, but it runs no
+`helm install`/`upgrade` and writes no application configuration: each
+Application renders its chart with the value files in `helm-values/`
+(ADR 0002 D2).
 
-**Registering a new service is still exactly one step: add it to
-`terraform/locals.tf`'s `local.services` map.** Nothing else changes. That
-map feeds BOTH `terraform/services.tf`'s `local.service_full_values`
-computation (image tag, database secret ref, Kong/Gateway route, analytics,
-MCP, and every other conditional block already documented there) AND
-`terraform/argocd-apps.tf`'s `kubectl_manifest.application` resource, which
-`for_each`-es over that same map. (`warehouse-ops-agent` and
-`warehouse-console` sit outside `local.services` — no database — and each
-gets its own single, explicitly-named `kubectl_manifest` resource instead;
-see `ops-agent.tf`'s `local.ops_agent_helm_values` and `frontends.tf`'s
-`local.console_helm_values`.) A `terraform apply` after adding an entry:
+**Registering a new application is two steps** (the
+`add-or-change-a-service` skill has the detail): add an entry to
+`terraform/apps.yaml` (its header documents the fields), and add
+`helm-values/<app>.yaml` plus `helm-values/kind-resources/<app>.yaml`
+(the plan fails while either is missing). Its role and database come with it
+(ADR 0005). `terraform/20-apps/main.tf` turns the entry named after the selected
+workspace into one instance of `terraform/modules/application`
+([ADR 0004](docs/adr/0004-one-application-registry.md), the registry file:
+[ADR 0007](docs/adr/0007-state-split-in-four-steps.md)). `make app-apply
+APP=<name>` after adding an entry:
 
-1. Builds and side-loads the new service's image
-   (`null_resource.build_and_load`, unchanged from before).
-2. Creates its `<service>-db` Secret directly
-   (`kubernetes_secret.service_db` in `postgres.tf`) — no chart ever sees a
-   plaintext `DATABASE_URL` value through an ArgoCD `Application`'s
-   Git/cluster-visible spec.
+> **ADR 0007 status**: done. The registry (`terraform/apps.yaml`),
+> `terraform/20-apps` (one workspace per application) and the layers
+> `00-cluster` and `10-platform` are merged, and the live state was moved into
+> them on 2026-10-18 by `scripts/migrate-state-to-layers.sh`
+> ([ADR 0008](docs/adr/0008-one-migration-for-the-layers.md)). A checkout older
+> than that layout must not apply: its root has no state any more.
+
+1. Builds and side-loads the new service's image (the module's
+   `null_resource.build_and_load`).
+2. Creates its `<service>-db` Secret directly (the module's
+   `kubernetes_secret.db`) — no chart ever sees a plaintext `DATABASE_URL`
+   value through an ArgoCD `Application`'s Git/cluster-visible spec.
 3. Applies a new `Application` CR pointed at that service's own
-   `charts/<service>` in ITS OWN repo, with `syncPolicy.automated.prune` and
+   `charts/<service>` in ITS OWN repo, with this repo's `helm-values/` files
+   as its values (a second source, `ref: values`), `syncPolicy.automated.prune` and
    `.selfHeal` both on. ArgoCD picks it up, installs the release, and from
    then on continuously reconciles it — including reverting manual
    `kubectl` drift automatically, something the old one-shot `terraform
@@ -513,18 +990,117 @@ API gateway) — both are reserved for product traffic per
 [docs/exposure/localhost-edge-topology.md](docs/exposure/localhost-edge-topology.md).
 Local admin access is `kubectl port-forward` only, same as above.
 
-**Removing a service** is symmetric: delete its entry from `local.services`,
+**Removing a service** is symmetric: delete its entry from `terraform/apps.yaml`,
 `terraform apply`, and `prune: true` deletes both the `Application` and the
 Helm release it owned — no orphaned resources left behind.
 
 **Image tags are content-derived**, not the fixed `"local"` value from
-before this GitOps rollout: `local.service_image_tags[name]` hashes each
-service's Go source/migrations/Dockerfile/go.mod/go.sum (mirroring the
-existing `service_source_hash`). This is required, not cosmetic — ArgoCD's
+before this GitOps rollout: `modules/application` tags each image
+`local-<hash12>` over the service's Go source/migrations/Dockerfile/go.mod/
+go.sum. This is required, not cosmetic — ArgoCD's
 sync only fires on an actual diff, and a tag that never changes on rebuild
 gives it nothing to detect. This also happens to fix the older
 "rebuilt image alone does not roll a running Deployment" pitfall documented
 below, as a side effect.
+
+---
+
+## metrics-server (HPA support)
+
+`var.deploy_metrics_server` (default `true`) installs the
+kubernetes-sigs/metrics-server chart into `kube-system`. Every service
+chart in this fleet already ships an `autoscaling/v2` HPA targeting
+CPU/memory utilization; without a `metrics.k8s.io` API server in the
+cluster those HPAs sit at `<unknown>` forever
+(`kubectl describe hpa <name>` reports `FailedGetResourceMetrics`). This
+resource is what makes them work.
+
+It sets `--kubelet-insecure-tls` in the chart's `args` — a genuine
+kind-specific need, not a general shortcut: kind's kubelet serving certs
+are self-signed per-node at cluster boot and aren't trusted by
+metrics-server by default, so without the flag every node scrape fails
+with `x509: certificate signed by unknown authority`. See
+`terraform/10-platform/metrics-server.tf`'s header comment for the full rationale.
+Verify it after an apply with:
+
+```bash
+kubectl top nodes
+kubectl get hpa -n warehouse-systems
+```
+
+---
+
+## Dashboards and alert rules (observability as code)
+
+Both are GENERATED by `scripts/gen-context-dashboards.py` from one
+per-context table (`CONTEXTS`); edit the table, re-run the script, commit
+the output. Never hand-edit the JSON.
+
+- `terraform/dashboards/contexts/<context>.json`: one Grafana dashboard per
+  bounded context (plus `kong-gateway-overview.json`, `logs-overview.json`).
+  5xx panels read Kong's `kong_http_requests_total` per route (API
+  `<context>`, MCP `<context>-mcp`, reports `<context>-reports`), because
+  otelchi records no status code. Contexts that export an outbox-lag gauge
+  get a "Transactional outbox" row.
+- `terraform/alerting/warehouse-alert-rules.json`: Prometheus alert rules,
+  loaded by `observability.tf` into the prometheus chart's
+  `serverFiles."alerting_rules.yml"`. Per context: `WarehouseKong5xxRatioHigh`
+  (more than 5 % 5xx on one Kong route for 5 m), `WarehouseOutboxLagHigh`
+  (outbox gauge above 60 s for 5 m; order-management, wes-work-planning,
+  workforce-management, labor-performance, process-path-management) and
+  `WarehousePodRestarting` (2 or more restarts in 15 m, from
+  kube-state-metrics, which the same release now enables). Every rule's
+  `runbook_url` annotation is that context's runbook page. There is no
+  outbox dead-row rule (no context exports an attempt-cap metric; it is a log
+  line and a SQL query) and no consumer-lag rule (no Kafka exporter runs).
+- SLO burn-rate alerts, four per context in the sibling group
+  `warehouse-<context>-slo` (same table, so rules, dashboards and runbook URLs
+  cannot disagree). SLO 1 is API availability (99 % of Kong requests do not
+  answer 5xx per day), SLO 2 is API latency (95 % of Kong requests have
+  `kong_upstream_latency_ms` at or under 500 ms per day). Prometheus keeps 24 h
+  (`retention`), so every window is one day, not 28 days. Burn = bad ratio /
+  (1 − target); the day's budget lasts 24 h / burn:
+
+  | Alert | SLO | Severity | Fires when (both windows hold, `for`) | Budget gone in |
+  |---|---|---|---|---|
+  | `WarehouseApiAvailabilityBurnFast` | 1 | critical | burn ≥ 14.4 over 1 h and 5 m (5xx ≥ 14.4 %), 2 m | ~100 min |
+  | `WarehouseApiAvailabilityBurnSlow` | 1 | warning | burn ≥ 3 over 6 h and 30 m (5xx ≥ 3 %), 15 m | ~8 h |
+  | `WarehouseApiLatencyBurnFast` | 2 | critical | burn ≥ 14.4 over 1 h and 5 m (slow ≥ 72 %), 2 m | ~100 min |
+  | `WarehouseApiLatencyBurnSlow` | 2 | warning | burn ≥ 3 over 6 h and 30 m (slow ≥ 15 %), 15 m | ~8 h |
+
+  Each is evaluated per Kong route and needs at least 30 requests in the long
+  window, so one failed request on an idle local route cannot fire a critical
+  alert. Kong 3.9 exports no `le="500"` bucket (its boundaries are 25, 50, 80,
+  100, 250, 400, 700, 1000, … spelled `"400.0"`), so the latency rule counts on
+  the nearest one, `le="400.0"`: a request between 400 and 500 ms counts as
+  slow, which makes the alert slightly stricter than the 500 ms SLO. The
+  existing `WarehouseKong5xxRatioHigh` stays as the coarse 5 %-for-5-minutes
+  signal. The thresholds are constants at the top of the alert section of
+  `scripts/gen-context-dashboards.py`.
+- Alertmanager is ON in the Prometheus release (`observability.tf`): one
+  replica, no PVC (emptyDir; silences on a disposable cluster are not worth a
+  volume), 10m / 32Mi. Its only receiver is `null`, a receiver with no
+  integrations, because a local cluster has no pager: **nothing is delivered
+  anywhere**. What it gives is grouping (`group_by` alertname, context,
+  service), inhibition (a `severity="critical"` alert inhibits the
+  `severity="warning"` alerts with the same context and service), silences and
+  the `/api/v2/alerts` view; a real receiver is added to
+  `alertmanager.config.receivers` and the route when one exists. Prometheus
+  finds it with no extra setting (the chart renders `alerting.alertmanagers`
+  while `alertmanager.enabled` is true). Reach it with
+  `kubectl -n observability port-forward svc/prometheus-alertmanager 9093:9093`;
+  Grafana has an `Alertmanager` datasource for the same instance. Alerts also
+  show on Prometheus `/alerts` and in the `ALERTS` series.
+
+Gates: `make observability-check` (committed JSON equals the generator
+output, valid JSON, no backslash escapes in PromQL, every `kind: service`
+entry of `apps.yaml` has a dashboard, every rule names its runbook, every context
+has the four SLO rules on a bucket Kong exports) and
+`make alert-rules-check` (promtool `check rules` plus the unit tests in
+`terraform/alerting/tests/`, including the burn-rate cases in
+`warehouse-slo-burn-rules.test.yml`; uses docker when `promtool` is not
+installed).
+Both run in the CI job `observability-as-code`.
 
 ---
 
@@ -579,26 +1155,24 @@ cd warehouse-infra
 ./scripts/down.sh
 ```
 
-That runs `terraform destroy`, which removes the Helm releases and then deletes
-the kind cluster (which is what actually reclaims the Docker containers and
-their disk). If `destroy` fails part-way — typically a Helm release that can't
-be reached because the API server is already gone — the script falls back to
-deleting the cluster directly.
+That deletes the kind cluster, which removes everything inside it and is what
+actually reclaims the Docker containers and their disk, and then drops the three
+layers' Terraform state (with the cluster gone none of them describes anything).
+`terraform destroy` layer by layer is not used: it leaves about 60 phantom
+resources and takes far longer than the cluster delete it ends with.
 
 By hand:
 
 ```bash
-cd warehouse-infra/terraform
-terraform destroy -auto-approve
-kind delete cluster --name warehouse   # only if destroy left it behind
+kind delete cluster --name warehouse
+rm -f terraform/{00-cluster,10-platform}/terraform.tfstate* && rm -rf terraform/20-apps/terraform.tfstate.d
 ```
 
-The locally built `warehouse/*:local` images stay in your Docker daemon. Remove
-them with:
+The locally built `warehouse/*:local-<hash12>` images stay in your Docker
+daemon. Remove them with:
 
 ```bash
-docker rmi warehouse/inventory-storage:local warehouse/wes-work-planning:local \
-           warehouse/workforce-management:local warehouse/fulfillment-execution:local
+docker images --format '{{.Repository}}:{{.Tag}}' 'warehouse/*' | xargs docker rmi
 ```
 
 ---
@@ -608,30 +1182,49 @@ docker rmi warehouse/inventory-storage:local warehouse/wes-work-planning:local \
 ```
 warehouse-infra/
 ├── README.md
-├── helm-values/                 # static per-service environment config
+├── docs/
+│   └── adr/                     # architecture decision records; index in docs/adr/README.md
+├── helm-values/                 # every application's Helm values, read by ArgoCD from develop (ADR 0002 D2; excerpt)
 │   ├── _README.md
+│   ├── _platform.yaml           # platform facts every chart reads (Gateway, Kafka, Kong traces/CORS)
 │   ├── inventory-storage.yaml
+│   ├── inbound-receiving.yaml
+│   ├── slotting-optimization.yaml
+│   ├── pick-face-replenishment.yaml
+│   ├── task-interleaving.yaml
+│   ├── returns-processing.yaml
+│   ├── exception-management.yaml
+│   ├── product-master.yaml
 │   ├── wes-work-planning.yaml
 │   ├── workforce-management.yaml
+│   ├── argocd.yaml              # ArgoCD release values (probe budgets, render parallelism limit)
+│   ├── kind-resources/          # generated per-Application CPU-request overlays (kind only)
 │   └── fulfillment-execution.yaml
 ├── scripts/
-│   ├── up.sh                    # single entrypoint: init + apply + next steps
-│   ├── down.sh                  # destroy + fallback cluster delete
+│   ├── up.sh                    # single entrypoint: the three layers in order + next steps
+│   ├── tf.sh                    # terraform in one layer or one application's workspace
+│   ├── migrate-state-to-layers.sh  # the recorded state mv of ADR 0007 step 2/3
+│   ├── down.sh                  # delete the cluster, drop the layers' state
 │   ├── build-and-load.sh        # docker build + kind load, called by Terraform
-│   └── smoke-test.sh            # curls all four /healthz through Kong
+│   ├── smoke-test.sh            # curls all four /healthz through Kong
+│   └── seed-transfer-capability.py  # post-deploy: site transfer capability from role defaults
 └── terraform/
-    ├── versions.tf              # Terraform + provider pins
-    ├── providers.tf             # kind / kubernetes / helm wiring
-    ├── variables.tf             # every knob, with the reasoning for each pin
-    ├── locals.tf                # the four bounded contexts in one map
-    ├── main.tf                  # kind cluster + namespaces
-    ├── postgres.tf              # PostgreSQL release + 4 databases
-    ├── istio.tf                 # istio-base -> istiod
-    ├── kong.tf                  # Kong Gateway + Ingress Controller
-    ├── services.tf              # build/load + the four service releases
-    ├── outputs.tf
-    └── templates/
-        └── init-databases.sql.tftpl
+    ├── apps.yaml                # the application registry (ADR 0007), read by every layer
+    ├── terraform.tfvars         # gitignored; one file, read by every layer
+    ├── 00-cluster/              # the kind cluster; publishes its connection (own state)
+    ├── 10-platform/             # Postgres, PgBouncer, Kafka, Istio, Kong, ArgoCD, observability, Gateway API (own state)
+    │   ├── locals.tf            # local.platform (_platform.yaml), the registry (apps.yaml) and what derives from it
+    │   ├── postgres.tf, pgbouncer.tf, kafka.tf, istio.tf, kong.tf, argocd.tf, ...
+    │   └── outputs.tf           # incl. `platform`, the contract 20-apps reads (ADR 0007)
+    ├── 20-apps/                 # one configuration, one workspace and state per application (ADR 0003)
+    │   ├── main.tf              # the selected workspace's modules/application instance (ADR 0003)
+    │   └── terraform.tfstate.d/<name>/   # gitignored
+    ├── modules/
+    │   ├── application/         # one application's platform contract: Secrets, images, Application (ADR 0004)
+    │   └── database/            # one role and database, created by a Job (ADR 0005)
+    ├── templates/               # pgbouncer.ini, userlist, pgbouncer-auth.sql, web-gateway.conf
+    ├── dashboards/, alerting/   # generated Grafana dashboards and Prometheus rules
+    └── gateway-api/             # the vendored Gateway API CRD bundle (ADR 0006)
 ```
 
 ---
@@ -662,6 +1255,17 @@ provider node to the cluster resource, so they are configured only after the
 cluster exists — and a single `terraform apply` works from clean state.
 Nothing here is machine-specific.
 
+**Since ADR 0007 the cluster is its own layer, so the providers read
+`terraform_remote_state` instead.** `00-cluster` publishes the same four
+attributes as a sensitive `connection` output; `10-platform` and `20-apps`
+configure `kubernetes`, `helm` and `kubectl` from it. A provider no longer
+depends on a resource of its own configuration, which is what the Kubernetes
+provider's documentation asks for, and a missing cluster state is a plan error
+that names the layer to apply first. The kubeconfig file is written to
+`terraform/00-cluster/kubeconfig`; its path is the relative `./kubeconfig` on
+purpose (it forces a new cluster when it changes, and every existing state holds
+that value).
+
 `null_resource.kubeconfig` still exports credentials, but purely for the
 human's benefit: setting `kubeconfig_path` on `kind_cluster` makes the provider
 write to that file *instead of* your default kubeconfig, which would leave
@@ -671,9 +1275,14 @@ plain `kubectl` with no `kind-warehouse` context. It exports to both.
 the gateway and the ingress controller as two containers in one pod, DB-less,
 with KIC on by default. `kong/ingress` is an umbrella that splits them into two
 subchart releases wired together by `gatewayDiscovery` — more moving parts and
-more to go wrong, for no benefit at this scale. Routing is therefore plain
-`Ingress` objects, which the existing service charts already emit; **no Gateway
-API CRDs are needed.**
+more to go wrong, for no benefit at this scale. Routing started as plain
+`Ingress` objects; it now uses Gateway API `HTTPRoute`s that each chart
+renders against the shared `warehouse-gateway` Gateway
+(`terraform/10-platform/gateway-api.tf`, `deploy_gateway_api`, on by default). The Gateway API
+CRDs, the `GatewayClass` and the `Gateway` are declarative `kubectl_manifest`
+resources, so Terraform detects and repairs drift
+([ADR 0006](docs/adr/0006-declarative-gateway-api.md)); the CRD bundle is
+vendored under `terraform/gateway-api/`.
 
 **Why sidecar Istio and not ambient.** Sidecar mode needs no CNI DaemonSet and
 no ztunnel, which is markedly less fragile inside kind, and namespace-label
@@ -683,6 +1292,8 @@ injection requires zero application changes.
 `null_resource` per service, triggered by a hash over that service's `**/*.go`,
 `migrations/**`, `Dockerfile`, `go.mod` and `go.sum`, keeps the whole thing a
 single `terraform apply` while still rebuilding only what changed. Images are
-tagged `warehouse/<service>:local` with `pullPolicy: IfNotPresent`, because
-they exist only in the kind nodes' containerd store and must never be pulled
-from Docker Hub.
+tagged `warehouse/<service>:local-<hash12>` (the first 12 characters of that
+same source hash, computed in `terraform/modules/application`), so a
+rebuilt image always carries a new tag and ArgoCD rolls the pods. They use
+`pullPolicy: IfNotPresent`, because they exist only in the kind nodes'
+containerd store and must never be pulled from Docker Hub.

@@ -6,11 +6,9 @@
 
 TF_DIR := terraform
 
-# The ten Helm charts this repo deploys, taken directly from
-# terraform/locals.tf's local.services chart_path values plus
-# ops-agent.tf's local.ops_agent_chart_path and warehouse-console's own
-# chart (frontends.tf). Keep this list in sync with those files — it is
-# not auto-discovered.
+# The Helm charts this repo deploys: the application registry in
+# terraform/apps.yaml (one chart per application). Keep this list in
+# sync with it — it is not auto-discovered.
 CHARTS := \
 	../inventory-storage/charts/inventory-storage \
 	../wes-work-planning/charts/wes-work-planning \
@@ -20,25 +18,63 @@ CHARTS := \
 	../facility-layout/charts/facility-layout \
 	../labor-performance/charts/labor-performance \
 	../process-path-management/charts/process-path-management \
+	../warehouse-planning/charts/warehouse-planning \
+	../product-master/charts/product-master \
+	../inbound-receiving/charts/inbound-receiving \
+	../slotting-optimization/charts/slotting-optimization \
+	../pick-face-replenishment/charts/pick-face-replenishment \
+	../task-interleaving/charts/task-interleaving \
+	../returns-processing/charts/returns-processing \
+	../exception-management/charts/exception-management \
+	../network-inventory-planning/charts/network-inventory-planning \
 	../warehouse-ops-agent/charts/warehouse-ops-agent \
-	../warehouse-console/charts/warehouse-console
+	../warehouse-console/charts/warehouse-console \
+	../ecosystem/charts/ecosystem \
+	../customer-ordering/charts/customer-ordering \
+	../delivery-promise/charts/delivery-promise \
+	../last-mile-delivery/charts/last-mile-delivery \
+	../linehaul-transportation/charts/linehaul-transportation \
+	../node-performance/charts/node-performance \
+	../node-topology/charts/node-topology \
+	../offer-availability/charts/offer-availability \
+	../order-sourcing/charts/order-sourcing \
+	../shipping-and-tracking/charts/shipping-and-tracking \
+	../vendor-connectivity/charts/vendor-connectivity \
+	../seller-inbound/charts/seller-inbound
 
-.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check check check-all
+.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test seed-network seed-network-dry-run seed-network-verify seed-network-translation seed-network-translation-check check check-all
 
 help:
 	@echo "warehouse-infra — local quality gate (no CI workflow yet; this IS the gate)"
 	@echo ""
 	@echo "  help            Print this list of targets (default target)"
 	@echo "  tf-fmt-check    terraform fmt -check -recursive -diff (from $(TF_DIR)/)"
-	@echo "  tf-validate     terraform init -backend=false + terraform validate"
+	@echo "  tf-validate     terraform init -backend=false + terraform validate, in each of the three layers"
+	@echo "  cluster-plan|apply, platform-plan|apply   one layer (ARGS=... goes to terraform)"
+	@echo "  app-plan|apply APP=<name>   one application's own state (terraform/20-apps, workspace <name>)"
+	@echo "  apps-plan|apply  every application of terraform/apps.yaml, one after the other"
 	@echo "  helm-lint       helm lint on every chart in \$$(CHARTS) — workforce-management"
-	@echo "                  needs a dummy database.url, wired in below"
+	@echo "                  and warehouse-planning need a dummy database.url, wired in below"
 	@echo "  shellcheck      shellcheck --severity=warning on scripts/*.sh"
 	@echo "  chart-selector-check  render every chart with all components enabled,"
 	@echo "                  assert every Service selects exactly one Deployment"
 	@echo "                  (scripts/check-chart-selectors.py; needs PyYAML)"
+	@echo "  observability-check  generated Grafana dashboards are current, valid"
+	@echo "                  and parse as PromQL-safe (scripts/test_gen_context_dashboards.py)"
+	@echo "  alert-rules-check  promtool check + unit tests of the generated alert rules"
+	@echo "                  (promtool if installed, else docker $(PROMETHEUS_IMAGE))"
+	@echo "  seed-scripts-test  unit tests of the post-deploy seed scripts against fakes of the"
+	@echo "                  services they call (scripts/test_seed_*.py; no cluster needed)"
+	@echo "  seed-network    WRITES to the cluster: seed the retail network (vendor V-WS, node site-1,"
+	@echo "                  topology, waves, catalogue, stock) through Kong; idempotent. Owner-run,"
+	@echo "                  NOT part of check (scripts/README-retail-network-seed.md)"
+	@echo "  seed-network-dry-run   the same plan, GETs only, nothing written"
+	@echo "  seed-network-verify    read-only PASS/FAIL table of the seeded network"
+	@echo "  seed-network-translation        READ-ONLY: print the productTranslation block (listing id -> sku) for"
+	@echo "                  helm-values/network-fulfillment.yaml; needs the seeded network, NOT part of check"
+	@echo "  seed-network-translation-check  READ-ONLY: exit 1 unless that values file's dictionary matches the network"
 	@echo ""
-	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check"
+	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test"
 	@echo "  check-all       alias for check — no deeper local gate exists yet"
 	@echo "                  (see scripts/test-exposure-policy.sh and smoke-test.sh for"
 	@echo "                  cluster-dependent checks that need a live kind cluster —"
@@ -47,8 +83,26 @@ help:
 tf-fmt-check:
 	cd $(TF_DIR) && terraform fmt -check -recursive -diff
 
+# The three layers of ADR 0007. Validation needs no state: terraform_remote_state
+# is only read by plan.
+TF_LAYERS := 00-cluster 10-platform 20-apps
+
 tf-validate:
-	cd $(TF_DIR) && terraform init -backend=false -input=false >/dev/null && terraform validate
+	@for l in $(TF_LAYERS); do \
+		echo "==> $$l"; \
+		(cd $(TF_DIR)/$$l && terraform init -backend=false -input=false >/dev/null && terraform validate) || exit 1; \
+	done
+
+# ---- Running Terraform: one layer, or one application's state (ADR 0003, 0007).
+# ARGS is passed to terraform, e.g. `make app-plan APP=product-master ARGS=-refresh=false`.
+cluster-plan cluster-apply platform-plan platform-apply: ; @scripts/tf.sh $(word 1,$(subst -, ,$@)) $(word 2,$(subst -, ,$@)) $(ARGS)
+
+app-plan app-apply:
+	@test -n "$(APP)" || { echo "usage: make $@ APP=<application of terraform/apps.yaml>"; exit 2; }
+	@scripts/tf.sh app $(APP) $(subst app-,,$@) $(ARGS)
+
+apps-plan apps-apply:
+	@scripts/tf.sh apps $(subst apps-,,$@) $(ARGS)
 
 helm-lint:
 	@if ! command -v helm >/dev/null 2>&1; then \
@@ -59,6 +113,12 @@ helm-lint:
 		echo "==> $$c"; \
 		if [ "$$(basename $$c)" = "workforce-management" ]; then \
 			helm lint "$$c" --set database.url=postgres://u:p@example.invalid:5432/db || exit 1; \
+		elif [ "$$(basename $$c)" = "warehouse-planning" ] || [ "$$(basename $$c)" = "network-inventory-planning" ] || [ "$$(basename $$c)" = "product-master" ] || [ "$$(basename $$c)" = "inbound-receiving" ] || [ "$$(basename $$c)" = "slotting-optimization" ]; then \
+			helm lint "$$c" --set database.url=postgres://u@example.invalid:5432/db || exit 1; \
+		elif [ "$$(basename $$c)" = "pick-face-replenishment" ] || [ "$$(basename $$c)" = "task-interleaving" ] || [ "$$(basename $$c)" = "returns-processing" ] || [ "$$(basename $$c)" = "exception-management" ]; then \
+			helm lint "$$c" --set database.url=postgres://u@example.invalid:5432/db --set kafka.brokers=kafka.example.invalid:9092 || exit 1; \
+		elif [ -f "$$c/ci/default-values.yaml" ]; then \
+			helm lint "$$c" -f "$$c/ci/default-values.yaml" || exit 1; \
 		else \
 			helm lint "$$c" || exit 1; \
 		fi; \
@@ -84,9 +144,73 @@ chart-selector-check:
 	}
 	cd $(TF_DIR) && python3 ../scripts/check-chart-selectors.py
 
+# Generated dashboards: committed JSON == generator output, valid JSON, no
+# backslash escapes in PromQL, 5xx panels on Kong metrics (gap fix D20).
+observability-check:
+	python3 scripts/test_gen_context_dashboards.py
+
+# Generated alert rules (gap fix D30): promtool syntax check plus the unit
+# tests in terraform/alerting/tests/. The image tag matches the server the
+# pinned prometheus chart (var.prometheus_chart_version) deploys.
+PROMETHEUS_IMAGE := quay.io/prometheus/prometheus:v3.14.0
+ALERTING_DIR := terraform/alerting
+alert-rules-check:
+	@if command -v promtool >/dev/null 2>&1; then \
+		promtool check rules $(ALERTING_DIR)/warehouse-alert-rules.json && \
+		promtool test rules $(ALERTING_DIR)/tests/warehouse-alert-rules.test.yml $(ALERTING_DIR)/tests/warehouse-slo-burn-rules.test.yml; \
+	else \
+		docker run --rm -v "$(CURDIR)/$(ALERTING_DIR):/w:ro" --entrypoint promtool $(PROMETHEUS_IMAGE) check rules /w/warehouse-alert-rules.json && \
+		docker run --rm -v "$(CURDIR)/$(ALERTING_DIR):/w:ro" --entrypoint promtool $(PROMETHEUS_IMAGE) test rules /w/tests/warehouse-alert-rules.test.yml /w/tests/warehouse-slo-burn-rules.test.yml; \
+	fi
+
+# Post-deploy seed scripts (final-gaps E2): stdlib unit tests against real
+# HTTP fakes of the services they call, so no cluster is needed.
+seed-scripts-test:
+	python3 scripts/test_seed_transfer_capability.py
+	python3 scripts/test_seed_transfer_lanes.py
+	python3 scripts/test_seed_retail_network.py
+
+# The retail-network seed (scripts/seed-retail-network.py). seed-network WRITES to the
+# live cluster through Kong (override the base with RETAIL_NETWORK_BASE_URL); it is
+# idempotent and NOT part of `check`. Run the dry run first.
+seed-network:
+	python3 scripts/seed-retail-network.py
+
+seed-network-dry-run:
+	python3 scripts/seed-retail-network.py --dry-run
+
+seed-network-verify:
+	python3 scripts/seed-retail-network.py --verify
+
+# network-fulfillment's product dictionary (listing id -> sku) lives ONLY in
+# helm-values/network-fulfillment.yaml. Both targets are READ-ONLY (GET requests
+# only) and need the seeded network, so they are NOT part of `check`. The emit
+# recipe is silent (@) so that `make seed-network-translation > block.yaml`
+# captures the YAML alone: make would otherwise echo the command line to stdout.
+seed-network-translation:
+	@python3 scripts/seed-retail-network.py --emit-translation
+
+seed-network-translation-check:
+	python3 scripts/seed-retail-network.py --check-translation helm-values/network-fulfillment.yaml
+
 # The fast self-correction loop: run this after every change, before committing.
-check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check
+check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test
 
 # No deeper local gate exists yet — see the help text above for the
 # cluster-dependent scripts that are NOT part of this target.
 check-all: check
+
+# --- agent harness (harness-template v3) -----------------------------------
+.PHONY: cluster-plan cluster-apply platform-plan platform-apply app-plan app-apply apps-plan apps-apply check-fast secret-files-check guide-lint harness-test
+# Fast local gate used by the agent Stop hook (this repo's own quick checks).
+check-fast: tf-fmt-check shellcheck chart-selector-check observability-check secret-files-check
+
+secret-files-check: ## no tracked plan, state, tfvars, kubeconfig or API key (the repo is public)
+	./scripts/check-no-secret-files.sh
+
+guide-lint: ## lint agent guides: skills load, references resolve, context budget
+	python3 scripts/harness/guide_lint.py
+
+harness-test: ## unit-test the agent hooks (pre/post/stop)
+	python3 scripts/harness/test_hook.py
+	python3 scripts/harness/test_red_issue.py

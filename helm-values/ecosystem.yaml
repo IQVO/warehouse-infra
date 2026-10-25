@@ -1,0 +1,16 @@
+# ecosystem: the EventCatalog static site, served by the Nginx web gateway
+# (terraform/frontends.tf). Complete Helm values (ADR 0002 D2). The image tag comes
+# from Terraform (content hash of the catalog sources).
+
+image:
+  repository: warehouse/ecosystem-frontend
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+# Served by the web gateway, never through Kong.
+ingress:
+  enabled: false

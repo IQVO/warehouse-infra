@@ -4,18 +4,12 @@
 # real bounded context (Generic Subdomain, same classification as
 # facility-layout), replacing the static config/process-paths/sortable-fc.yaml
 # file this repo's three consumers (fulfillment-execution, wes-work-planning,
-# workforce-management) previously boot-loaded directly. See
-# terraform/locals.tf's path_catalogue_* comment and
-# terraform/variables.tf's deploy_process_path_kafka_source for the full
-# rollout-order rationale.
+# workforce-management) previously boot-loaded directly (cutover 2026-09-06:
+# they now read PATH_CATALOGUE_SOURCE=kafka; the rollback is in
+# docs/rollback-switches.md).
 #
-# Kafka: brokers pointed at the real in-cluster broker (kafka.tf) so the
-# value is correct the moment var.deploy_process_path_kafka_source flips
-# config.eventPublisher/kafka.enabled to "kafka"/true via Terraform's
-# computed values (see services.tf) -- kept here, not there, purely
-# because every other service in this fleet keeps its static kafka.brokers
-# address in its own helm-values file, and Terraform only ever computes
-# the parts that differ per-environment (database URL, image tag, route).
+# Kafka: publishes the catalogue events (config.eventPublisher "kafka"); the
+# broker address comes from _platform.yaml.
 #
 # This service has NO inbound Kafka consumer of its own (see its own
 # README/docs) -- it is the SOURCE of the process-path published
@@ -27,9 +21,9 @@ replicaCount: 1
 config:
   httpAddr: ":8080"
 
+  eventPublisher: kafka
 kafka:
-  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
-
+  enabled: 'true'
 livenessProbe:
   httpGet:
     path: /healthz
@@ -38,10 +32,76 @@ livenessProbe:
   periodSeconds: 10
   failureThreshold: 6
 
+# Readiness on /readyz, not /healthz (gap fix D24): process-path-management's
+# readiness flips to not-ready as the FIRST step of a graceful SIGTERM drain
+# (its ADR-0012, cmd/pathmgmt/main.go), so the pod stops receiving new
+# traffic while it finishes in-flight requests. /healthz never flips, so the
+# old probe here overrode the chart's own /readyz default and hid the drain.
+# failureThreshold 3 (was 6): at periodSeconds 5 that is ~15 s to observe the
+# flip, inside the chart's 30 s terminationGracePeriodSeconds -- 6 x 5 s = 30 s
+# meant the flip could never be observed before the kill.
 readinessProbe:
   httpGet:
-    path: /healthz
+    path: /readyz
     port: http
   initialDelaySeconds: 3
   periodSeconds: 5
-  failureThreshold: 6
+  failureThreshold: 3
+
+# Formerly computed by terraform/services.tf (ADR 0002 phase 3, docs/adr/0002-application-delivery-boundary.md).
+# Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
+# _platform.yaml; image tags from Terraform (the Application's valuesObject).
+analytics:
+  database:
+    existingSecret: process-path-management-analytics-db
+  enabled: true
+  reports:
+    route:
+      enabled: true
+      path: /api/process-path-management/reports
+database:
+  existingSecret: process-path-management-db
+extraEnv: []
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/process-path-management-frontend
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/process-path-management
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/process-path-management
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/process-path-management
+          pathType: Prefix
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/process-path-management
+pathCatalogue:
+  content: ''
+  enabled: false
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

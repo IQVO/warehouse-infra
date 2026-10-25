@@ -1,5 +1,14 @@
 # Seeding process-path-management from the retired YAML catalogue
 
+> **Superseded.** The catalogue every environment must define is declared in
+> process-path-management's `catalogue/paths.json` (`PICK`, `PACK`, `REBIN`,
+> `SLAM`, `RELOCATE`, each with its `intake`) and converged by its
+> `scripts/seed_catalogue.py` — step 1 of the warehouse-infra README's
+> "Post-deploy seeds". This page and `seed-process-paths.py` record the one-time
+> YAML → process-path-management migration; the script knows only the four
+> pre-`RELOCATE` paths and never looks at `intake`, so do not use it to converge a
+> cluster.
+
 `scripts/seed-process-paths.py` performs the one-way migration of
 `config/process-paths/sortable-fc.yaml` into **process-path-management**
 via that service's public REST API.
@@ -13,8 +22,8 @@ in the YAML itself for the full "published language" rationale).
 
 Those three services now source the catalogue from
 process-path-management's Kafka topic
-(`warehouse.process-path-management.events`) whenever
-`var.deploy_process_path_kafka_source` is `true` — each one replays the
+(`warehouse.process-path-management.events`): `PATH_CATALOGUE_SOURCE=kafka`
+in their `helm-values/` files — each one replays the
 topic from its earliest offset into an in-memory cache and gates its own
 readiness on that replay completing.
 
@@ -135,9 +144,11 @@ fleet-shaped id rather than the bare canonical `PICK`.
 
 ## Rollback
 
-Set `var.deploy_process_path_kafka_source = false` and re-apply. Each
-consumer's `pathCatalogue` ConfigMap volume returns and
-`PATH_CATALOGUE_SOURCE` goes back to `file`, reading this YAML exactly as
-before. Nothing this script did needs undoing — the YAML remains the
+In each consumer's `helm-values/<context>.yaml`, set
+`pathCatalogue.enabled: true` with this YAML as `pathCatalogue.content`, and
+drop the `PATH_CATALOGUE_SOURCE=kafka` `extraEnv` entry; merge to `develop`
+and ArgoCD rolls the pods (see `docs/rollback-switches.md`). The
+`pathCatalogue` ConfigMap volume returns and each consumer reads this YAML
+exactly as before. Nothing this script did needs undoing — the YAML remains the
 rollback source of truth, which is why it is kept frozen rather than
 deleted.

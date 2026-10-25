@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """Seed process-path-management from the (superseded) static YAML catalogue.
 
+SUPERSEDED: the declared catalogue is process-path-management's own
+catalogue/paths.json, applied by its scripts/seed_catalogue.py (see the
+warehouse-infra README, "Post-deploy seeds"). This script only knows the four
+pre-RELOCATE paths and compares matchPrefix/requiredCapabilities only; it is
+kept as the record of the one-time YAML migration and for a rollback to the
+file catalogue. Do not use it to converge a cluster seeded from paths.json.
+
 WHY THIS EXISTS
 ---------------
 config/process-paths/sortable-fc.yaml was, before process-path-management
@@ -8,8 +15,8 @@ existed, the boot-time source of truth read identically by
 fulfillment-execution, wes-work-planning and workforce-management. That
 file is now SUPERSEDED: those three services source their catalogue from
 process-path-management's Kafka topic
-(warehouse.process-path-management.events) when
-var.deploy_process_path_kafka_source is true.
+(warehouse.process-path-management.events): PATH_CATALOGUE_SOURCE=kafka in
+their helm-values files.
 
 This script performs the one-way migration of that file's content INTO
 process-path-management via its public REST API, so the paths a running

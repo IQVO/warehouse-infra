@@ -19,8 +19,9 @@ warehouse, lake, or ETL team.
 3. **Self-serve.** Reuse the platform each service already runs — Kafka, Postgres,
    chi, the MCP SDK, the Helm chart. The analytical store is just a second Postgres.
    No new central infrastructure.
-4. **Federated governance.** This charter + the Envelope v1 contract + a per-service
-   ADR are the whole governance surface. Rules below are global; everything else is
+4. **Federated governance.** This charter + the event envelope contract (originally
+   Envelope v1; since 2026-09-30 the fleet-mandatory CloudEvents 1.0 standard, see
+   `envelope-v1.md`'s superseded note) + a per-service ADR are the whole governance surface. Rules below are global; everything else is
    the owning team's choice.
 
 ---
@@ -38,7 +39,7 @@ warehouse, lake, or ETL team.
   the projector is the only writer, the reports binary connects read-only, and the
   OLTP service never opens the analytics DB at all.
   - **Today (baseline):** a dedicated `*_analytics` database in the existing Postgres
-    release (fits `warehouse-infra/terraform/postgres.tf` + `init-databases.sql.tftpl`),
+    release (fits `warehouse-infra/terraform/10-platform/postgres.tf`; the role and database are created by `modules/database`, ADR 0005),
     with a separate role. This is the required minimum — logical isolation + least
     privilege, zero new infra.
   - **Promotion path:** because the only coupling is the `ANALYTICS_DATABASE_URL`

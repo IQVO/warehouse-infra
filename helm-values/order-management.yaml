@@ -4,8 +4,10 @@
 #
 # Startup: runs migrations before serving (MIGRATIONS_PATH default "migrations").
 #
-# Kafka: outbound-publish-only (no inbound consumer). Live now that
-# warehouse-infra runs a real Kafka release (kafka.tf).
+# Kafka: publishes integration/analytics events (kafka.tf) and runs inbound
+# consumers: the repromise consumer (fixed in code), the PATH_CATALOGUE_SOURCE
+# caches (extraEnv below) and, via `plannedCapacity` below, the
+# warehouse-planning capacity-plan consumer.
 #
 # HTTP outbound dependencies (inventory-storage, wes-work-planning) default
 # to the chart's own "permissive" no-op client unless explicitly pointed at
@@ -20,17 +22,70 @@ replicaCount: 1
 config:
   httpAddr: ":8080"
   eventPublisher: "kafka"
+  # The release-confirmation timeout sweep rides this loop (default 1h would
+  # flag an unconfirmed line up to 1h15m late); ~5m keeps the 15m timeout
+  # meaningful. Also prunes idempotency keys / outbox rows, which is cheap.
+  housekeepingInterval: "5m"
 
 inventoryStorage:
   mode: "http"
   baseUrl: "http://inventory-storage.warehouse-systems.svc.cluster.local:80"
 
-kafka:
-  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
+plannedCapacity:
+  consumerGroup: "order-management-planned-capacity"
+  siteId: "SIM1"
+
+# Site/SKU demand projection (order-management ADR 0035). With siteId set, every order line that
+# allocates, re-allocates or is re-promised emits a PII-free SiteSkuDemandChanged event on
+# warehouse.order-management.events (static-site-v1: ALL demand projects to this ONE site), which
+# network-inventory-planning consumes as the destination's need for the scheduled rebalance pass
+# (its ADR 0015). AUS3 is a stocked Sub-Same-Day FC that is both a transfer origin and a destination,
+# with lanes to and from its Texas neighbours (scripts/seed-transfer-lanes.py). Unset = projection off.
+demandProjection:
+  siteId: "AUS3"
+
+# Product classification from a local copy of product-master's events
+# (order-management ADR 0036; product-master ADR 0003 stage D). Consumes
+# ProductClassified from warehouse.product-master.events into a Postgres copy
+# instead of the default "permissive" (every SKU unclassified). "http" was
+# REMOVED from the binary and fails boot. Both keys are DEDICATED chart values
+# (rendered to PRODUCT_CLASSIFICATION_MODE / PRODUCT_CLASSIFICATION_CONSUMER_GROUP),
+# so they live here and NOT in extraEnv (setting both would
+# double-render). consumerGroup is fixed and stable: a restarted pod resumes
+# from its committed offsets and N replicas share partitions; the binary has
+# no default on purpose. KAFKA_BROKERS is already rendered. The `inventoryStorage`
+# block above stays: reservations (allocation) still call inventory-storage.
+productClassification:
+  mode: "kafka"
+  consumerGroup: "order-management-product-classification"
+
+# Release confirmation (K48, order-management ADR 0043): consumes
+# wes-work-planning's WorkUnitCreated (warehouse.work-planning.events, which
+# carries `reference` + `line_no` since wes-work-planning ADR 0041), confirms
+# each released order line, and flags a line still unconfirmed after `timeout`
+# with one analytics-only OrderReleaseUnconfirmed fact (nothing is cancelled
+# or retried). Dedicated chart values, so NOT in extraEnv. consumerGroup is
+# fixed and stable (a restarted pod resumes; N replicas share partitions).
+# ORDER: only meaningful once the deployed wes-work-planning carries ADR 0041
+# AND this service carries ADR 0043 -- the images are built from the local
+# develop checkouts in the same apply, so apply both together. With an OLD
+# wes-work-planning every WorkUnitCreated lacks `reference` and is ignored, so
+# every line would be flagged after the timeout.
+releaseConfirmation:
+  mode: "kafka"
+  consumerGroup: "order-management-release-confirmation"
+  timeout: "15m"
+  retention: "168h"
 
 analytics:
   enabled: true
 
+  database:
+    existingSecret: order-management-analytics-db
+  reports:
+    route:
+      enabled: true
+      path: /api/order-management/reports
 livenessProbe:
   httpGet:
     path: /healthz
@@ -46,3 +101,55 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 5
   failureThreshold: 6
+
+# Formerly computed by terraform/services.tf (ADR 0002 phase 3, docs/adr/0002-application-delivery-boundary.md).
+# Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
+# _platform.yaml; image tags from Terraform (the Application's valuesObject).
+database:
+  existingSecret: order-management-db
+extraEnv:
+  - name: PATH_CATALOGUE_SOURCE
+    value: kafka
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/order-management-frontend
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/order-management
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/order-management
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/order-management
+          pathType: Prefix
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/order-management
+pathCatalogue:
+  content: ''
+  enabled: false
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

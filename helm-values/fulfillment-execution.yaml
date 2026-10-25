@@ -24,11 +24,15 @@ config:
 
 kafka:
   enabled: true
-  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
-
 analytics:
   enabled: true
 
+  database:
+    existingSecret: fulfillment-execution-analytics-db
+  reports:
+    route:
+      enabled: true
+      path: /api/fulfillment-execution/reports
 livenessProbe:
   httpGet:
     path: /healthz
@@ -44,3 +48,101 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 5
   failureThreshold: 6
+
+# Formerly computed by terraform/services.tf (ADR 0002 phase 3, docs/adr/0002-application-delivery-boundary.md).
+# Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
+# _platform.yaml; image tags from Terraform (the Application's valuesObject).
+database:
+  existingSecret: fulfillment-execution-db
+# Env with no dedicated chart value (the chart renders extraEnv into the api
+# container). Every consumer binary defaults its *_MODE to "permissive" (never
+# reaches the network); in THIS cluster every supplier is deployed, so leaving the
+# default silently degrades behaviour. Suppliers are addressed by their in-cluster
+# Service (port 80). Never set here an env var the chart already renders from a
+# dedicated value: a duplicate env entry breaks ArgoCD's diff (ComparisonError
+# "doesn't match $setElementOrder list", found live 2026-10-05).
+extraEnv:
+  # Process paths come from process-path-management's events (cutover
+  # 2026-09-06), not from a mounted file: pathCatalogue.enabled stays false.
+  # Rollback: pathCatalogue.enabled true with the catalogue as
+  # pathCatalogue.content, and drop this entry (docs/rollback-switches.md).
+  - name: PATH_CATALOGUE_SOURCE
+    value: kafka
+  # Product classification from a local copy of product-master's
+  # ProductClassified (fulfillment-execution ADR-0039): stable consumer group;
+  # "http" was removed from the binary and fails at boot.
+  - name: PRODUCT_CLASSIFICATION_MODE
+    value: kafka
+  - name: PRODUCT_CLASSIFICATION_CONSUMER_GROUP
+    value: fulfillment-execution-product-classification
+  # Case/each pick scans (fulfillment-execution ADR 0054): a local PackView of
+  # product-master's pack levels under its OWN group (a second consumer of
+  # warehouse.product-master.events), and the inventory-storage base URL the
+  # BREAK_CASE completion calls (POST /containers/{lpn}:break).
+  - name: PACK_VIEW_CONSUMER_GROUP
+    value: fulfillment-execution-pack-view
+  - name: INVENTORY_STORAGE_BASE_URL
+    value: http://inventory-storage.warehouse-systems.svc.cluster.local:80
+  # Station-location role check (ADR-0024, gap R8), ON since 2026-10-17:
+  # RegisterStation rejects a supplied locationCode facility-layout knows as a
+  # non-WorkCenter role (an unknown location still passes, fail-open by
+  # design). Registration-time only, never on the task hot path.
+  - name: LOCATION_ROLE_MODE
+    value: http
+  - name: FACILITY_LAYOUT_BASE_URL
+    value: http://facility-layout.warehouse-systems.svc.cluster.local:80
+  # InterleavingHintIssued from task-interleaving (warehouse.task-interleaving.events)
+  # into a local per-station hint copy that claimNext uses only as a tie-break
+  # inside one priority band (fulfillment-execution ADR 0051). Advisory and
+  # fail-open: unset, the mode defaults to permissive and claimNext runs the
+  # pre-0051 path unchanged. The chart has no dedicated value, so it lives
+  # here. Stable group; a brand-new group starts at the LATEST offset.
+  # Rollback: drop both entries. TaskAvailable / TaskClaimed (ADR 0049) need
+  # nothing here: they leave through the outbox under EVENT_PUBLISHER=kafka.
+  - name: TASK_INTERLEAVING_MODE
+    value: kafka
+  - name: TASK_INTERLEAVING_CONSUMER_GROUP
+    value: fulfillment-execution-interleaving
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/fulfillment-execution-frontend
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/fulfillment-execution
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/fulfillment-execution
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/fulfillment-execution
+          pathType: Prefix
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/fulfillment-execution
+pathCatalogue:
+  content: ''
+  enabled: false
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

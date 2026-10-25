@@ -19,20 +19,20 @@ defaults:
     shell: bash
 
 jobs:
-  acceptance-unit:
+
+  # Agent-guide sensor (harness-template v3): skills load, references resolve, context budget.
+  # BLOCKING: guides are clean, so a stale path or broken skill fails the PR.
+  guide-lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: "1.24.x"
-          cache-dependency-path: scripts/mcp-probe/go.sum
-      - name: Python acceptance units
-        run: python3 -m unittest discover -s scripts/tests -v
-      - name: Official MCP SDK probe units
-        working-directory: scripts/mcp-probe
-        run: go test ./...
+      - run: python3 scripts/harness/guide_lint.py
+      - run: python3 scripts/harness/repo_lint.py
+      - run: ./scripts/check-no-secret-files.sh
+      - run: python3 scripts/harness/test_hook.py
+      - run: python3 scripts/harness/test_red_issue.py
+      - run: python3 scripts/harness/test_repo_lint.py
 
   # ============================================================
   # CLASSIFICATION: STATIC VALIDATION (Terraform)
@@ -46,62 +46,167 @@ jobs:
           path: warehouse-infra
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/order-management
+          repository: IQVO/order-management
           ref: develop
           path: order-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/inventory-storage
+          repository: IQVO/inventory-storage
           ref: develop
           path: inventory-storage
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/wes-work-planning
+          repository: IQVO/wes-work-planning
           ref: develop
           path: wes-work-planning
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/fulfillment-execution
+          repository: IQVO/fulfillment-execution
           ref: develop
           path: fulfillment-execution
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/workforce-management
+          repository: IQVO/workforce-management
           ref: develop
           path: workforce-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/facility-layout
+          repository: IQVO/facility-layout
           ref: develop
           path: facility-layout
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/labor-performance
+          repository: IQVO/labor-performance
           ref: develop
           path: labor-performance
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/process-path-management
+          repository: IQVO/process-path-management
           ref: develop
           path: process-path-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-ops-agent
+          repository: IQVO/warehouse-planning
+          ref: develop
+          path: warehouse-planning
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/product-master
+          ref: develop
+          path: product-master
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/returns-processing
+          ref: develop
+          path: returns-processing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/inbound-receiving
+          ref: develop
+          path: inbound-receiving
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/slotting-optimization
+          ref: develop
+          path: slotting-optimization
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/pick-face-replenishment
+          ref: develop
+          path: pick-face-replenishment
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/task-interleaving
+          ref: develop
+          path: task-interleaving
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/network-inventory-planning
+          ref: develop
+          path: network-inventory-planning
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/warehouse-ops-agent
           ref: develop
           path: warehouse-ops-agent
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/network-fulfillment
+          repository: IQVO/network-fulfillment
           ref: develop
           path: network-fulfillment
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-console
+          repository: IQVO/warehouse-console
           ref: develop
           path: warehouse-console
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-ui-kit
+          repository: IQVO/ecosystem
+          ref: develop
+          path: ecosystem
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/exception-management
+          ref: develop
+          path: exception-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/customer-ordering
+          ref: develop
+          path: customer-ordering
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/delivery-promise
+          ref: develop
+          path: delivery-promise
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/last-mile-delivery
+          ref: develop
+          path: last-mile-delivery
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/linehaul-transportation
+          ref: develop
+          path: linehaul-transportation
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/node-performance
+          ref: develop
+          path: node-performance
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/node-topology
+          ref: develop
+          path: node-topology
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/offer-availability
+          ref: develop
+          path: offer-availability
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/order-sourcing
+          ref: develop
+          path: order-sourcing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/shipping-and-tracking
+          ref: develop
+          path: shipping-and-tracking
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/vendor-connectivity
+          ref: develop
+          path: vendor-connectivity
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/seller-inbound
+          ref: develop
+          path: seller-inbound
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/warehouse-ui-kit
           ref: develop
           path: warehouse-ui-kit
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
@@ -113,6 +218,27 @@ jobs:
       - name: terraform validate
         working-directory: warehouse-infra
         run: make tf-validate
+
+  # ============================================================
+  # CLASSIFICATION: STATIC VALIDATION (observability as code)
+  # The Grafana dashboards and Prometheus alert rules are generated
+  # (scripts/gen-context-dashboards.py); this asserts the committed JSON is
+  # the generator's output, every file is
+  # valid JSON, no PromQL expression carries a backslash escape (PromQL
+  # rejects `\.`, which silently broke every Kong panel before gap fix D20)
+  # and every 5xx panel reads Kong's request metrics.
+  # ============================================================
+  observability-as-code:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: generated dashboards and alert rules are current and PromQL-safe
+        run: make observability-check
+      # promtool from the same Prometheus image the cluster runs (docker is
+      # preinstalled on ubuntu runners): rule syntax + firing unit tests.
+      - name: alert rules (promtool check + unit tests)
+        run: make alert-rules-check
 
   # ============================================================
   # CLASSIFICATION: STATIC VALIDATION (shell scripts)
@@ -128,11 +254,28 @@ jobs:
         run: make shellcheck
 
   # ============================================================
+  # CLASSIFICATION: UNIT TESTS (post-deploy seed scripts)
+  # scripts/seed-transfer-capability.py against a stdlib fake of
+  # facility-layout's REST contract (idempotency, dry run, UNSPECIFIED
+  # never written, 409 concurrent-modification retry, non-zero exit);
+  # scripts/seed-transfer-lanes.py against fakes of facility-layout + NIP
+  # (nearest-neighbour lanes, idempotency, drift update, unmanaged lanes).
+  # Stdlib only: the runner's preinstalled python3 is enough.
+  # ============================================================
+  seed-scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: seed script unit tests
+        run: make seed-scripts-test
+
+  # ============================================================
   # CLASSIFICATION: PACKAGING VALIDATION (Helm charts)
   # Every chart this repo deploys lives in a SIBLING repo, so this job
-  # checks out all ten (nine service repos + warehouse-console) next to
+  # checks out all eleven (ten service repos + warehouse-console) next to
   # this one, exactly matching the local dev layout the Makefile's CHARTS
-  # variable and terraform/locals.tf's chart_path values already assume.
+  # variable already assumes.
   # develop is checked out for each sibling (not main) to match what a
   # contributor testing against their own in-progress fleet changes would
   # see; this job re-runs on push to develop/main too so a sibling's own
@@ -147,60 +290,165 @@ jobs:
           path: warehouse-infra
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/order-management
+          repository: IQVO/order-management
           ref: develop
           path: order-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/inventory-storage
+          repository: IQVO/inventory-storage
           ref: develop
           path: inventory-storage
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/wes-work-planning
+          repository: IQVO/wes-work-planning
           ref: develop
           path: wes-work-planning
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/fulfillment-execution
+          repository: IQVO/fulfillment-execution
           ref: develop
           path: fulfillment-execution
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/workforce-management
+          repository: IQVO/workforce-management
           ref: develop
           path: workforce-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/facility-layout
+          repository: IQVO/facility-layout
           ref: develop
           path: facility-layout
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/labor-performance
+          repository: IQVO/labor-performance
           ref: develop
           path: labor-performance
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/process-path-management
+          repository: IQVO/process-path-management
           ref: develop
           path: process-path-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-ops-agent
+          repository: IQVO/warehouse-planning
+          ref: develop
+          path: warehouse-planning
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/product-master
+          ref: develop
+          path: product-master
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/returns-processing
+          ref: develop
+          path: returns-processing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/inbound-receiving
+          ref: develop
+          path: inbound-receiving
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/slotting-optimization
+          ref: develop
+          path: slotting-optimization
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/pick-face-replenishment
+          ref: develop
+          path: pick-face-replenishment
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/task-interleaving
+          ref: develop
+          path: task-interleaving
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/network-inventory-planning
+          ref: develop
+          path: network-inventory-planning
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/warehouse-ops-agent
           ref: develop
           path: warehouse-ops-agent
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/network-fulfillment
+          repository: IQVO/network-fulfillment
           ref: develop
           path: network-fulfillment
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-console
+          repository: IQVO/warehouse-console
           ref: develop
           path: warehouse-console
-      - uses: azure/setup-helm@59b1c81c6280f5abebb1fb1bc585696daa7dfb42 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/ecosystem
+          ref: develop
+          path: ecosystem
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/exception-management
+          ref: develop
+          path: exception-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/customer-ordering
+          ref: develop
+          path: customer-ordering
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/delivery-promise
+          ref: develop
+          path: delivery-promise
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/last-mile-delivery
+          ref: develop
+          path: last-mile-delivery
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/linehaul-transportation
+          ref: develop
+          path: linehaul-transportation
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/node-performance
+          ref: develop
+          path: node-performance
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/node-topology
+          ref: develop
+          path: node-topology
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/offer-availability
+          ref: develop
+          path: offer-availability
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/order-sourcing
+          ref: develop
+          path: order-sourcing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/shipping-and-tracking
+          ref: develop
+          path: shipping-and-tracking
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/vendor-connectivity
+          ref: develop
+          path: vendor-connectivity
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/seller-inbound
+          ref: develop
+          path: seller-inbound
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: v3.16.4
       - name: helm lint every chart
@@ -224,60 +472,165 @@ jobs:
           path: warehouse-infra
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/order-management
+          repository: IQVO/order-management
           ref: develop
           path: order-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/inventory-storage
+          repository: IQVO/inventory-storage
           ref: develop
           path: inventory-storage
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/wes-work-planning
+          repository: IQVO/wes-work-planning
           ref: develop
           path: wes-work-planning
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/fulfillment-execution
+          repository: IQVO/fulfillment-execution
           ref: develop
           path: fulfillment-execution
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/workforce-management
+          repository: IQVO/workforce-management
           ref: develop
           path: workforce-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/facility-layout
+          repository: IQVO/facility-layout
           ref: develop
           path: facility-layout
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/labor-performance
+          repository: IQVO/labor-performance
           ref: develop
           path: labor-performance
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/process-path-management
+          repository: IQVO/process-path-management
           ref: develop
           path: process-path-management
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-ops-agent
+          repository: IQVO/warehouse-planning
+          ref: develop
+          path: warehouse-planning
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/product-master
+          ref: develop
+          path: product-master
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/returns-processing
+          ref: develop
+          path: returns-processing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/inbound-receiving
+          ref: develop
+          path: inbound-receiving
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/slotting-optimization
+          ref: develop
+          path: slotting-optimization
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/pick-face-replenishment
+          ref: develop
+          path: pick-face-replenishment
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/task-interleaving
+          ref: develop
+          path: task-interleaving
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/network-inventory-planning
+          ref: develop
+          path: network-inventory-planning
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/warehouse-ops-agent
           ref: develop
           path: warehouse-ops-agent
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/network-fulfillment
+          repository: IQVO/network-fulfillment
           ref: develop
           path: network-fulfillment
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: claudioed/warehouse-console
+          repository: IQVO/warehouse-console
           ref: develop
           path: warehouse-console
-      - uses: azure/setup-helm@59b1c81c6280f5abebb1fb1bc585696daa7dfb42 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/ecosystem
+          ref: develop
+          path: ecosystem
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/exception-management
+          ref: develop
+          path: exception-management
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/customer-ordering
+          ref: develop
+          path: customer-ordering
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/delivery-promise
+          ref: develop
+          path: delivery-promise
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/last-mile-delivery
+          ref: develop
+          path: last-mile-delivery
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/linehaul-transportation
+          ref: develop
+          path: linehaul-transportation
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/node-performance
+          ref: develop
+          path: node-performance
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/node-topology
+          ref: develop
+          path: node-topology
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/offer-availability
+          ref: develop
+          path: offer-availability
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/order-sourcing
+          ref: develop
+          path: order-sourcing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/shipping-and-tracking
+          ref: develop
+          path: shipping-and-tracking
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/vendor-connectivity
+          ref: develop
+          path: vendor-connectivity
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/seller-inbound
+          ref: develop
+          path: seller-inbound
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: v3.16.4
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7

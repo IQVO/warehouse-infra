@@ -1,0 +1,151 @@
+# ---------------------------------------------------------------------------
+# The kind cluster: one control-plane + var.worker_count workers.
+#
+# extraPortMappings on the control-plane publish the two PRODUCT edges -- the
+# Nginx web gateway (UI) and Kong (APIs) -- plus the observability UIs'
+# (Grafana/Jaeger/Prometheus) and Kiali's NodePorts, on host ports. NodePorts
+# answer on every node, so mapping them on the control-plane alone is enough no
+# matter where each pod actually lands.
+#
+# The two product edges bind to 127.0.0.1 only: this fleet's REST/MCP endpoints
+# are unauthenticated, so they must not be reachable from the local network.
+#
+# These mappings are IMMUTABLE in kind. Changing a host port here requires
+# destroying and recreating the cluster -- it is not a rolling change.
+# ---------------------------------------------------------------------------
+
+resource "kind_cluster" "warehouse" {
+  name            = var.cluster_name
+  node_image      = var.kind_node_image
+  kubeconfig_path = local.kubeconfig_path
+  wait_for_ready  = true
+
+  kind_config {
+    kind        = "Cluster"
+    api_version = "kind.x-k8s.io/v1alpha4"
+
+    node {
+      role = "control-plane"
+
+      # Widen the apiserver's service-node-port-range so Kafka's EXTERNAL
+      # listener can take NodePort 9092 (see variables.tf kafka_node_port).
+      # The default range starts at 30000, and a Service asking for 9092
+      # under that default is rejected outright ("provided port is not in
+      # the valid range"). Everything else here (Kong, Grafana, Jaeger,
+      # Prometheus, Kiali) sits in the 30000s and is unaffected by widening
+      # the lower bound.
+      kubeadm_config_patches = [
+        <<-EOT
+        kind: ClusterConfiguration
+        apiServer:
+          extraArgs:
+            service-node-port-range: "${var.service_node_port_range}"
+        EOT
+      ]
+
+      # The Nginx web gateway: the product UI on http://localhost/.
+      #
+      # listen_address is 127.0.0.1, NOT 0.0.0.0, for both product edges. Every
+      # REST and MCP endpoint in this fleet is currently unauthenticated, so
+      # binding them to all interfaces would publish the whole warehouse to any
+      # other device on the network. The platform UIs below keep their historical
+      # 0.0.0.0 binding.
+      extra_port_mappings {
+        container_port = var.web_gateway_node_port
+        host_port      = var.web_gateway_host_port
+        listen_address = "127.0.0.1"
+        protocol       = "TCP"
+      }
+
+      # Kong: the product API origin on http://localhost:8000. Note this used to
+      # be host port 80 -- it moved to make room for the web gateway above, and
+      # kind port mappings are immutable, so that move required recreating the
+      # cluster.
+      extra_port_mappings {
+        container_port = var.kong_proxy_http_node_port
+        host_port      = var.kong_proxy_http_host_port
+        listen_address = "127.0.0.1"
+        protocol       = "TCP"
+      }
+
+      extra_port_mappings {
+        container_port = var.kong_proxy_https_node_port
+        host_port      = var.kong_proxy_https_host_port
+        listen_address = "0.0.0.0"
+        protocol       = "TCP"
+      }
+
+      extra_port_mappings {
+        container_port = var.grafana_node_port
+        host_port      = var.grafana_host_port
+        listen_address = "0.0.0.0"
+        protocol       = "TCP"
+      }
+
+      extra_port_mappings {
+        container_port = var.jaeger_node_port
+        host_port      = var.jaeger_host_port
+        listen_address = "0.0.0.0"
+        protocol       = "TCP"
+      }
+
+      extra_port_mappings {
+        container_port = var.prometheus_node_port
+        host_port      = var.prometheus_host_port
+        listen_address = "0.0.0.0"
+        protocol       = "TCP"
+      }
+
+      extra_port_mappings {
+        container_port = var.kiali_node_port
+        host_port      = var.kiali_host_port
+        listen_address = "0.0.0.0"
+        protocol       = "TCP"
+      }
+
+      # Kafka's EXTERNAL listener. Unlike the UI mappings above this one is
+      # not a browser convenience: it is what lets the single in-cluster
+      # broker serve host-side clients (e2e-tests, `go run` development) so
+      # the platform does not need a second, unmanaged docker-compose broker.
+      # See variables.tf's "Kafka host exposure" block for why the broker
+      # advertises two different addresses.
+      extra_port_mappings {
+        container_port = var.kafka_node_port
+        host_port      = var.kafka_host_port
+        listen_address = "0.0.0.0"
+        protocol       = "TCP"
+      }
+    }
+
+    dynamic "node" {
+      for_each = range(var.worker_count)
+      content {
+        role = "worker"
+      }
+    }
+  }
+}
+
+# Convenience only — the providers above do NOT read this (see providers.tf).
+# Setting kubeconfig_path on kind_cluster makes the provider write credentials
+# to that file *instead of* your default kubeconfig, which would leave plain
+# `kubectl` with no kind-<name> context. This exports to both: the module-local
+# file, and your default kubeconfig so kubectl/helm just work.
+#
+# The kind CLI is used here purely to export credentials; the cluster lifecycle
+# stays owned by the kind_cluster resource above, so `terraform destroy` still
+# tears it down properly.
+resource "null_resource" "kubeconfig" {
+  depends_on = [kind_cluster.warehouse]
+
+  triggers = {
+    cluster_id = kind_cluster.warehouse.id
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      kind export kubeconfig --name ${var.cluster_name} --kubeconfig ${local.kubeconfig_path}
+      kind export kubeconfig --name ${var.cluster_name}
+    EOT
+  }
+}

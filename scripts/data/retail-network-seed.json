@@ -1,0 +1,104 @@
+{
+  "_comment": "Input of scripts/seed-retail-network.py: the minimum retail-network topology, vendor and catalogue needed to quote and source an order from ONE fulfillment node (the simulation site). Stand-in for network-fulfillment ADR 0027 (the fleet's own profile and inventory declarations will bump the profile revision and the quantities later). Every id here is a natural key: the network generates its own ids. SKUs are real SKUs of e2e-tests fixtures/products/fulfilment-products.json (dimensions copied from it); titles are generic on purpose.",
+  "vendor": {
+    "vendorId": "V-WS",
+    "name": "Warehouse Systems simulation fleet",
+    "ackWindowMinutes": 240
+  },
+  "region": {
+    "code": "SIM-SC",
+    "name": "Simulation South Central"
+  },
+  "deliveryStations": [
+    {
+      "code": "DS-SIM-1",
+      "postalCode": "78744",
+      "countryCode": "US",
+      "lat": 30.19,
+      "lon": -97.75,
+      "timezone": "America/Chicago",
+      "serviceAreaPrefixes": ["787", "786"]
+    }
+  ],
+  "fulfillmentNodes": [
+    {
+      "vendorNodeCode": "site-1",
+      "nodeType": "FULFILLMENT_CENTER",
+      "subtype": "SORTABLE",
+      "postalCode": "78701",
+      "countryCode": "US",
+      "lat": 30.27,
+      "lon": -97.74,
+      "timezone": "America/Chicago",
+      "profile": {
+        "profileRevision": 1,
+        "timezone": "America/Chicago",
+        "operatingHoursByDay": {
+          "monday": {"start": "06:00", "end": "22:00"},
+          "tuesday": {"start": "06:00", "end": "22:00"},
+          "wednesday": {"start": "06:00", "end": "22:00"},
+          "thursday": {"start": "06:00", "end": "22:00"},
+          "friday": {"start": "06:00", "end": "22:00"},
+          "saturday": {"start": "06:00", "end": "22:00"},
+          "sunday": {"start": "06:00", "end": "22:00"}
+        },
+        "holidays": [],
+        "handlingTimeMinutes": 60,
+        "cutoffs": [
+          {"localTime": "11:00"},
+          {"localTime": "17:00"}
+        ],
+        "throughputCap": {"value": 400, "timeUnit": "HOUR", "unit": "ORDER"}
+      },
+      "lane": {
+        "toStation": "DS-SIM-1",
+        "mode": "GROUND",
+        "nominalTransitMinutes": 120
+      }
+    }
+  ],
+  "waves": {
+    "days": 14,
+    "inductCutoffLocal": "05:00",
+    "windowStartLocal": "09:00",
+    "windowEndLocal": "21:00",
+    "stopCapacity": 500
+  },
+  "catalog": [
+    {
+      "sku": "ABO-B000B5KPG8",
+      "title": "ABO-B000B5KPG8 riding mower seat cover, medium",
+      "lengthMm": 419, "widthMm": 483, "heightMm": 381, "weightG": 453,
+      "hazmat": false, "fragile": false,
+      "availableQty": 200
+    },
+    {
+      "sku": "ABO-B000G0F3CY",
+      "title": "ABO-B000G0F3CY square salad plates, set of 4",
+      "lengthMm": 204, "widthMm": 203, "heightMm": 21, "weightG": 2440,
+      "hazmat": false, "fragile": true,
+      "availableQty": 200
+    },
+    {
+      "sku": "ABO-B000IK09WG",
+      "title": "ABO-B000IK09WG yellow gold stud earrings",
+      "lengthMm": 89, "widthMm": 58, "heightMm": 5, "weightG": 18,
+      "hazmat": false, "fragile": false,
+      "availableQty": 200
+    },
+    {
+      "sku": "ABO-B000SLW522",
+      "title": "ABO-B000SLW522 five-socket power strip, 2 m",
+      "lengthMm": 470, "widthMm": 160, "heightMm": 80, "weightG": 855,
+      "hazmat": false, "fragile": false,
+      "availableQty": 200
+    },
+    {
+      "sku": "ABO-B000UGZD9M",
+      "title": "ABO-B000UGZD9M face powder compact",
+      "lengthMm": 68, "widthMm": 68, "heightMm": 20, "weightG": 50,
+      "hazmat": false, "fragile": false,
+      "availableQty": 200
+    }
+  ]
+}

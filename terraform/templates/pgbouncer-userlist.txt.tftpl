@@ -1,0 +1,20 @@
+; ---------------------------------------------------------------------------
+; Rendered by Terraform (pgbouncer.tf) and mounted into the PgBouncer pod at
+; /bitnami/pgbouncer/conf/userlist.txt, alongside pgbouncer.ini.tftpl.
+;
+; Plaintext-password entries ("user" "password") rather than pre-hashed
+; SCRAM/MD5 secrets -- PgBouncer hashes them on the fly for both the
+; client<->pgbouncer and pgbouncer<->postgres legs. The plaintext value lives
+; only in Terraform state (gitignored, same posture as every other generated
+; password in this repo) and in this rendered file inside a Kubernetes Secret,
+; never in a tracked file.
+;
+; Two entries, and no application (ADR 0005): the Postgres superuser, which
+; doubles as PgBouncer's admin_users entry for the `pgbouncer` pseudo-database
+; admin console (SHOW POOLS etc., used by the readiness probe and by manual
+; operator inspection), and the lookup role PgBouncer connects as to run
+; auth_query. Every application role is authenticated from Postgres itself.
+; ---------------------------------------------------------------------------
+
+"${admin_user}" "${admin_password}"
+"${auth_user}" "${auth_password}"

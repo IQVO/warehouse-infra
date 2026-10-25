@@ -1,0 +1,121 @@
+# pick-face-replenishment -- the pick-face replenishment bounded context
+# (WMS: keeps forward pick faces stocked from reserve bins). OLTP REST on
+# :8080 plus, in the SAME process, a transactional-outbox relay and three
+# Kafka consumers (pick-face-replenishment ADR 0003 and ADR 0006):
+#   - consumes warehouse.inventory.events (BinStockLevelChanged,
+#     StockRelocated), group pick-face-replenishment-inventory
+#   - consumes warehouse.slotting-optimization.events (SlotPlanApproved),
+#     group pick-face-replenishment-slotting
+#   - consumes warehouse.facility.events (layout copy), group
+#     pick-face-replenishment-layout
+#   - produces warehouse.pick-face-replenishment.events and
+#     warehouse.pick-face-replenishment.analytics (CloudEvents) through the
+#     outbox. wes-work-planning consumes the integration topic and plans
+#     REPLENISH work (helm-values/wes-work-planning.yaml).
+# Topics are auto-created by the first writer with the broker's
+# num.partitions / replication-factor-1 overrides (ADR 0006 Amendment 1 in
+# the service repo; kafka.tf has no topic resources -- the fleet norm), so the
+# two topics above and the .dlq topics need no declaration here. A consumed
+# topic whose producer has not written yet shows as consumer retry logs, not
+# as unreadiness.
+#
+# Real Postgres and real Kafka only (ADR 0006): the *_MODE variables are
+# intentionally NOT set. The binary defaults them to kafka and rejects
+# "permissive" at boot, so there is nothing to wire and nothing to roll back.
+# Every key below is a DEDICATED chart value (charts/pick-face-replenishment/
+# values.yaml renders each one to its env var), so none of this belongs in
+# extraEnv (a duplicate env entry breaks ArgoCD's diff). The Kafka brokers
+# (KAFKA_BROKERS) come from _platform.yaml, as for every chart.
+#
+# Startup: runs golang-migrate before serving, over MIGRATIONS_DATABASE_URL
+# (the direct, non-pooled DSN Terraform puts in the <svc>-db Secret);
+# DATABASE_URL itself goes through PgBouncer. The role/database are created
+# by modules/application's provisioning Job (ADR 0005), before the first sync.
+#
+# Optional components (all switched on below):
+#   - MCP server (cmd/mcp, pick-face-replenishment ADR 0007): mcp.enabled plus
+#     the Kong route /api/mcp/pick-face-replenishment (mcp.route).
+#   - Analytics read side (ADR 0008): pfr-projector (the only writer of the
+#     SEPARATE pick_face_replenishment_analytics database, fed by
+#     warehouse.pick-face-replenishment.analytics) and pfr-reports (read-only,
+#     Service pick-face-replenishment-reports:80 -- the chart has no
+#     Kong route for reports). The DSN never appears here: modules/application
+#     writes it into the pick-face-replenishment-analytics-db Secret (the chart
+#     reads only ANALYTICS_DATABASE_URL, apps.yaml analytics.secret_keys), which
+#     analytics.existingSecret names.
+#   - The console remote (replenishment_mfe, web/): frontend below; its
+#     content-addressed image tag comes from Terraform (local.frontend_remotes),
+#     the web gateway serves it at /mfes/pick-face-replenishment/.
+
+replicaCount: 1
+
+config:
+  httpAddr: ":8080"
+  logLevel: "info"
+  # Fixed, stable group ids (the chart's own defaults, stated here so the
+  # deployed names are visible in this repo): a rescheduled pod resumes from
+  # its committed offsets; a brand-new group re-reads the topic from the
+  # start. All three are required (the binary exits at boot without them).
+  inventoryConsumerGroup: "pick-face-replenishment-inventory"
+  slottingConsumerGroup: "pick-face-replenishment-slotting"
+  layoutConsumerGroup: "pick-face-replenishment-layout"
+  # PACK_LEVEL_CONSUMER_GROUP (ADR 0009): local copy of product-master's pack
+  # levels, from which a PACK_DERIVED policy takes its multiple.
+  packLevelConsumerGroup: "pick-face-replenishment-pack-levels"
+
+# Analytics read side (ADR 0008). The projector's consumer group is a FIXED,
+# stable id (fleet charter naming `<ctx>-analytics`): a restarted pod resumes
+# from its committed offsets, and a brand-new group rebuilds the model from the
+# topic's history. Equal to the chart's default, pinned here so a rename in code
+# cannot silently orphan the committed offsets. MANDATORY when enabled (the
+# chart refuses an empty one).
+analytics:
+  enabled: true
+  consumerGroup: "pick-face-replenishment-analytics"
+  existingSecret: pick-face-replenishment-analytics-db
+
+# Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
+# _platform.yaml; image tags from Terraform (the Application's valuesObject).
+database:
+  existingSecret: pick-face-replenishment-db
+extraEnv: []
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/pick-face-replenishment-frontend
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/pick-face-replenishment
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/pick-face-replenishment
+ingress:
+  annotations:
+    konghq.com/strip-path: 'true'
+  className: kong
+  enabled: false
+  hosts:
+    - host: ''
+      paths:
+        - path: /api/pick-face-replenishment
+          pathType: Prefix
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/pick-face-replenishment
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

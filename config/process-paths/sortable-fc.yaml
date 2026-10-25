@@ -6,20 +6,31 @@
 # └───────────────────────────────────────────────────────────────────┘
 #
 # process-path-management is now the source of truth for the process-path
-# catalogue. When var.deploy_process_path_kafka_source is true (it is, in
-# the `warehouse` kind cluster), fulfillment-execution, wes-work-planning
-# and workforce-management no longer read this file at all: their
+# catalogue. fulfillment-execution, wes-work-planning and
+# workforce-management no longer read this file at all: their
 # pathCatalogue ConfigMap volume is not rendered, PATH_CATALOGUE_SOURCE is
 # "kafka", and each replays warehouse.process-path-management.events into
 # an in-memory cache, gating its own readiness on that replay completing.
 # Changes propagate to the RUNNING pods live — no restart, no redeploy.
 #
 # To add/change/retire a path, use process-path-management's REST API.
-# Editing this file changes nothing while the flag is true.
+# Editing this file changes nothing.
+#
+# The DECLARED catalogue every environment must define now lives in
+# process-path-management itself: catalogue/paths.json (PICK, PACK, REBIN,
+# SLAM and RELOCATE, each with its `intake` — the demand sources allowed to
+# route work onto it, process-path-management ADR 0033/0034), applied after
+# every deploy by its scripts/seed_catalogue.py (warehouse-infra README,
+# "Post-deploy seeds", step 1). This file deliberately does NOT mirror it: the
+# file schema below has no `intake` (the services' filecatalog loaders read
+# only id/matchPrefix/direct/requiredCapabilities) and no RELOCATE, so a
+# rollback to it is a rollback to the pre-RELOCATE, pre-intake catalogue
+# (slot-plan relocation work cannot be planned while it is in force).
 #
 # This file is retained for exactly one reason: it is the rollback target.
-# Setting var.deploy_process_path_kafka_source = false restores the file
-# mount and the boot-time loader, so the content below must stay a valid,
+# The rollback (docs/rollback-switches.md) pastes it into each consumer's
+# helm-values file as pathCatalogue.content with pathCatalogue.enabled true
+# and drops PATH_CATALOGUE_SOURCE=kafka, so the content below must stay a valid,
 # accurate description of the building. It was migrated into
 # process-path-management by scripts/seed-process-paths.py (see
 # scripts/README-process-path-seed.md) — if you ever legitimately change
