@@ -65,6 +65,9 @@ jobs:
           for repo in repos:
               if repo == "warehouse-infra":
                   continue  # checked out by the action above, at the PR head
+              if Path(f"../{repo}").exists():
+                  print("already present:", repo)
+                  continue
               url = f"https://x-access-token:{os.environ['GITHUB_TOKEN']}@github.com/IQVO/{repo}.git"
               ref = shas.get(repo)
               if not ref:
