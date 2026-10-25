@@ -1,11 +1,11 @@
 # ---------------------------------------------------------------------------
-# network-fulfillment — the fleet's Anti-Corruption Layer to an external
-# retail network (Amazon Vendor Direct Fulfillment). The chart lives in its
-# own repo, its configuration in helm-values/network-fulfillment.yaml (ADR
-# 0002 D2, including why config.networkMode stays "stub" on this cluster),
-# and its platform contract (image builds, generated passwords, Secrets,
-# ArgoCD Application) in modules/application (applications.tf). This file
-# keeps the database names the platform reads and the outputs.
+# network-fulfillment — the fleet's Anti-Corruption Layer to a retail
+# network. The chart lives in its own repo, its configuration in
+# helm-values/network-fulfillment.yaml (ADR 0002 D2; the network mode and why
+# it is live on this cluster: ADR 0009), and its platform contract (image
+# builds, generated passwords, Secrets, ArgoCD Application) in
+# modules/application (applications.tf). This file keeps the database names
+# the platform reads and the outputs.
 # ---------------------------------------------------------------------------
 
 
