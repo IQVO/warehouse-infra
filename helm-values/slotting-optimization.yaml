@@ -73,6 +73,11 @@ config:
   # case-pick (no case-pick faces, previous behaviour).
   packLevelMode: "kafka"
   packLevelConsumerGroup: "slotting-optimization-pack-level"
+  # Zones whose behavioural class is CPK hold CASE-pick faces (slotting ADR 0012):
+  # a SKU picked in whole cases is planned onto them with a capacity in cases.
+  # facility-layout declares such a zone with class CPK (a free-form class, like
+  # FWD or RSV); until a site declares one this changes nothing.
+  casePickZoneCodes: "CPK"
 
 kafka:
   enabled: true
