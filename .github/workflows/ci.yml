@@ -19,6 +19,21 @@ defaults:
     shell: bash
 
 jobs:
+  acceptance-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.24.x"
+          cache-dependency-path: scripts/mcp-probe/go.sum
+      - name: Python acceptance units
+        run: python3 -m unittest discover -s scripts/tests -v
+      - name: Official MCP SDK probe units
+        working-directory: scripts/mcp-probe
+        run: go test ./...
+
   # ============================================================
   # CLASSIFICATION: STATIC VALIDATION (Terraform)
   # ============================================================

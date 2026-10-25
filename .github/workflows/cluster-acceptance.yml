@@ -1,0 +1,193 @@
+name: Cluster acceptance
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - ".github/workflows/cluster-acceptance.yml"
+      - "helm-values/**"
+      - "scripts/**"
+      - "terraform/**"
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      fleet_shas:
+        description: >-
+          Exact JSON map of every fleet repository to a 40-character commit SHA.
+          Leave {} for a develop-head snapshot; release gates must pass the full map.
+        required: false
+        default: "{}"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cluster-acceptance-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  clean-cluster:
+    name: clean-cluster platform and exposure
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      EXPECTED_FLEET_SHAS: ${{ inputs.fleet_shas || '{}' }}
+      CLUSTER_ACCEPTANCE_ARTIFACT_DIR: ${{ github.workspace }}/warehouse-infra/artifacts/cluster-acceptance
+    steps:
+      - name: Checkout warehouse-infra
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['warehouse-infra'] || github.event.pull_request.head.sha || github.sha }}
+          path: warehouse-infra
+      - name: Checkout order-management
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/order-management
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['order-management'] || 'develop' }}
+          path: order-management
+      - name: Checkout inventory-storage
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/inventory-storage
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['inventory-storage'] || 'develop' }}
+          path: inventory-storage
+      - name: Checkout wes-work-planning
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/wes-work-planning
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['wes-work-planning'] || 'develop' }}
+          path: wes-work-planning
+      - name: Checkout fulfillment-execution
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/fulfillment-execution
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['fulfillment-execution'] || 'develop' }}
+          path: fulfillment-execution
+      - name: Checkout workforce-management
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/workforce-management
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['workforce-management'] || 'develop' }}
+          path: workforce-management
+      - name: Checkout facility-layout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/facility-layout
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['facility-layout'] || 'develop' }}
+          path: facility-layout
+      - name: Checkout labor-performance
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/labor-performance
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['labor-performance'] || 'develop' }}
+          path: labor-performance
+      - name: Checkout process-path-management
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/process-path-management
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['process-path-management'] || 'develop' }}
+          path: process-path-management
+      - name: Checkout warehouse-ops-agent
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/warehouse-ops-agent
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['warehouse-ops-agent'] || 'develop' }}
+          path: warehouse-ops-agent
+      - name: Checkout network-fulfillment
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/network-fulfillment
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['network-fulfillment'] || 'develop' }}
+          path: network-fulfillment
+      - name: Checkout warehouse-console
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/warehouse-console
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['warehouse-console'] || 'develop' }}
+          path: warehouse-console
+      - name: Checkout warehouse-ui-kit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/warehouse-ui-kit
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['warehouse-ui-kit'] || 'develop' }}
+          path: warehouse-ui-kit
+      - name: Checkout warehouse-docs
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/warehouse-docs
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['warehouse-docs'] || 'main' }}
+          path: warehouse-docs
+      - name: Checkout e2e-tests
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: claudioed/e2e-tests
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['e2e-tests'] || 'develop' }}
+          path: e2e-tests
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_wrapper: false
+      - uses: azure/setup-helm@59b1c81c6280f5abebb1fb1bc585696daa7dfb42 # v5
+        with:
+          version: v3.16.4
+      - uses: azure/setup-kubectl@c0c8b32d33a5244f1e5947304550403b63930415 # v4
+        with:
+          version: v1.31.4
+      - name: Install kind only
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+        with:
+          version: v0.26.0
+          install_only: true
+      - name: Set up Go for the official MCP SDK probe
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.24.x"
+          cache-dependency-path: warehouse-infra/scripts/mcp-probe/go.sum
+
+      - name: Unit and static acceptance checks
+        working-directory: warehouse-infra
+        run: |
+          python3 -m unittest discover -s scripts/tests -v
+          bash -n scripts/*.sh
+          (cd scripts/mcp-probe && go test ./...)
+        env:
+          GOWORK: "off"
+      - name: Verify exact clean fleet snapshot before provisioning
+        working-directory: warehouse-infra
+        run: |
+          mkdir -p artifacts/cluster-acceptance
+          python3 scripts/write_fleet_shas.py \
+            --infra-root "$PWD" \
+            --workspace "${{ github.workspace }}" \
+            --output artifacts/cluster-acceptance/fleet-shas-preflight.json \
+            --require-clean \
+            --expected-json "$EXPECTED_FLEET_SHAS"
+      - name: Provision an owned clean cluster and run acceptance
+        working-directory: warehouse-infra
+        run: scripts/run-cluster-acceptance.sh --provision
+      - name: Publish exact tested fleet SHAs in job summary
+        if: ${{ always() }}
+        working-directory: warehouse-infra
+        run: |
+          if [[ -f artifacts/cluster-acceptance/fleet-shas.json ]]; then
+            {
+              echo '## Exact fleet snapshot'
+              echo '```json'
+              python3 -m json.tool artifacts/cluster-acceptance/fleet-shas.json
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload cluster acceptance diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cluster-acceptance-${{ github.run_id }}
+          path: warehouse-infra/artifacts/cluster-acceptance
+          if-no-files-found: warn
+          retention-days: 14

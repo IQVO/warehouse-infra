@@ -1,108 +1,82 @@
 #!/usr/bin/env bash
-# Prove the whole path works: host -> kind port mapping -> Kong NodePort ->
-# Kong route -> Istio sidecar -> Go service -> GET /healthz.
+# Behavioral smoke: every deployed API and production MFE asset path.
 set -uo pipefail
 
 INFRA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "${INFRA_DIR}/terraform" || exit 1
+cd "${INFRA_DIR}" || exit 1
 
-BASE="$(terraform output -raw kong_proxy_url)"
-NAMESPACE="$(terraform output -raw apps_namespace 2>/dev/null || echo warehouse-systems)"
+API_URL="${API_URL:-$(terraform -chdir=terraform output -raw kong_proxy_url 2>/dev/null || echo http://localhost:8000)}"
+WEB_URL="${WEB_URL:-$(terraform -chdir=terraform output -raw web_url 2>/dev/null || echo http://localhost)}"
+NAMESPACE="${NAMESPACE:-$(terraform -chdir=terraform output -raw apps_namespace 2>/dev/null || echo warehouse-systems)}"
+CONTEXT="${KUBE_CONTEXT:-$(terraform -chdir=terraform output -raw kube_context 2>/dev/null || echo kind-warehouse)}"
+PROPERTIES="${INFRA_DIR}/scripts/exposure_properties.py"
 
-# Use the kubeconfig Terraform owns rather than whatever context happens to be
-# current in the caller's default kubeconfig. Self-contained and always right.
-export KUBECONFIG="${INFRA_DIR}/terraform/kubeconfig"
+APIS=()
+while IFS= read -r context; do APIS+=("${context}"); done < <(python3 scripts/exposure_inventory.py --kind apis)
+REMOTES=()
+while IFS= read -r context; do REMOTES+=("${context}"); done < <(python3 scripts/exposure_inventory.py --kind remotes)
 
-fail=0
+failures=0
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/warehouse-smoke.XXXXXX")"
+cleanup() { rm -rf "${scratch}"; }
+trap cleanup EXIT
 
-echo "=== pods (expect 2/2 — app + istio-proxy) ==="
-kubectl -n "${NAMESPACE}" get pods -o wide
+pass() { printf '  OK   %s\n' "$1"; }
+fail() { printf '  FAIL %s\n' "$1"; failures=$((failures + 1)); }
+
+fetch() {
+  local url="$1" body_file="$2" headers_file="$3" result
+  result="$(curl -sS -D "${headers_file}" -o "${body_file}" \
+    -w '%{http_code} %{content_type}' --max-time 15 "${url}" 2>/dev/null)" || result="000 none"
+  printf '%s\n' "${result}"
+}
+
+echo "=== deployed workloads ==="
+kubectl --context "${CONTEXT}" -n "${NAMESPACE}" get pods -o wide || failures=$((failures + 1))
 echo
 
-echo "=== ingress routes ==="
-kubectl -n "${NAMESPACE}" get ingress
-echo
-
-echo "=== GET /healthz through Kong ==="
-for svc in inventory-storage wes-work-planning workforce-management fulfillment-execution; do
-  url="${BASE}/${svc}/healthz"
-  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${url}")"
-  body="$(curl -s --max-time 10 "${url}")"
+echo "=== all source-derived APIs through Kong ==="
+for ctx in "${APIS[@]}"; do
+  url="${API_URL}/api/${ctx}/healthz"
+  body="${scratch}/${ctx}-api.body"
+  headers="${scratch}/${ctx}-api.headers"
+  read -r code ctype <<<"$(fetch "${url}" "${body}" "${headers}")"
   if [[ "${code}" == "200" ]]; then
-    printf '  OK   %-24s %s -> %s %s\n' "${svc}" "${url}" "${code}" "${body}"
+    pass "${ctx} ${url} -> ${code} ${ctype}"
   else
-    printf '  FAIL %-24s %s -> %s %s\n' "${svc}" "${url}" "${code}" "${body}"
-    fail=1
+    fail "${ctx} ${url} -> ${code} ${ctype}: $(tr '\n' ' ' <"${body}" 2>/dev/null)"
   fi
 done
 
-# ---------------------------------------------------------------------------
-# Observability. Skipped entirely when the stack was not deployed
-# (terraform apply -var deploy_observability=false), which is not a failure.
-#
-# These UIs are ClusterIP only, so each check needs a port-forward. High local
-# ports are used on purpose so this never collides with a port-forward the
-# developer already has open on 16686/9090/3000.
-# ---------------------------------------------------------------------------
-OBS_NS="$(terraform output -raw observability_namespace 2>/dev/null || true)"
-
-if [[ -z "${OBS_NS}" ]]; then
-  echo "=== observability: not deployed (deploy_observability=false), skipping ==="
-else
-  echo
-  echo "=== observability pods ==="
-  kubectl -n "${OBS_NS}" get pods -o wide
-  echo
-
-  pf_pids=()
-  cleanup() { for pid in "${pf_pids[@]:-}"; do kill "${pid}" 2>/dev/null || true; done; }
-  trap cleanup EXIT
-
-  port_forward() {  # svc, local port, remote port
-    kubectl -n "${OBS_NS}" port-forward "svc/$1" "$2:$3" >/dev/null 2>&1 &
-    pf_pids+=("$!")
+echo
+echo "=== all source-derived remotes and one resolved chunk each ==="
+for ctx in "${REMOTES[@]}"; do
+  entry_url="${WEB_URL}/mfes/${ctx}/remoteEntry.js"
+  body="${scratch}/${ctx}-entry.body"
+  headers="${scratch}/${ctx}-entry.headers"
+  read -r code ctype <<<"$(fetch "${entry_url}" "${body}" "${headers}")"
+  if ! python3 "${PROPERTIES}" javascript --code "${code}" --content-type "${ctype}" --body-file "${body}" >/dev/null; then
+    fail "${ctx} remoteEntry.js -> ${code} ${ctype}"
+    continue
+  fi
+  chunk_url="$(python3 "${PROPERTIES}" chunk --entry-url "${entry_url}" --body-file "${body}" 2>/dev/null)" || {
+    fail "${ctx} remoteEntry.js has no resolvable chunk"
+    continue
   }
-
-  port_forward jaeger            46686 16686
-  port_forward prometheus-server 49090 9090
-  port_forward grafana           43000 3000
-  sleep 5
-
-  echo "=== observability UIs (through a temporary port-forward) ==="
-  check() {  # label, url, expected code
-    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$2")"
-    if [[ "${code}" == "$3" ]]; then
-      printf '  OK   %-24s %s -> %s\n' "$1" "$2" "${code}"
-    else
-      printf '  FAIL %-24s %s -> %s (want %s)\n' "$1" "$2" "${code}" "$3"
-      fail=1
-    fi
-  }
-
-  check "jaeger /api/services" "http://localhost:46686/api/services" 200
-  check "prometheus /-/healthy" "http://localhost:49090/-/healthy"   200
-  check "grafana /api/health"   "http://localhost:43000/api/health"  200
-
-  # The pipeline itself, not just the pods: Prometheus scraping the collector.
-  echo
-  echo "=== collector is being scraped by Prometheus ==="
-  for job in otel-collector otel-collector-internal; do
-    val="$(curl -s --max-time 10 --get "http://localhost:49090/api/v1/query" \
-             --data-urlencode "query=up{job=\"${job}\"}" \
-           | python3 -c 'import json,sys; r=json.load(sys.stdin)["data"]["result"]; print(r[0]["value"][1] if r else "no-data")')"
-    if [[ "${val}" == "1" ]]; then
-      printf '  OK   up{job="%s"} = 1\n' "${job}"
-    else
-      printf '  FAIL up{job="%s"} = %s\n' "${job}" "${val}"
-      fail=1
-    fi
-  done
-fi
+  chunk_body="${scratch}/${ctx}-chunk.body"
+  chunk_headers="${scratch}/${ctx}-chunk.headers"
+  read -r chunk_code chunk_ctype <<<"$(fetch "${chunk_url}" "${chunk_body}" "${chunk_headers}")"
+  if python3 "${PROPERTIES}" javascript --code "${chunk_code}" --content-type "${chunk_ctype}" --body-file "${chunk_body}" >/dev/null; then
+    pass "${ctx} remoteEntry.js + $(basename "${chunk_url}")"
+  else
+    fail "${ctx} resolved chunk -> ${chunk_code} ${chunk_ctype}: ${chunk_url}"
+  fi
+done
 
 echo
-if [[ "${fail}" -eq 0 ]]; then
-  echo "smoke test PASSED"
-else
-  echo "smoke test FAILED"
+if [[ "${failures}" -eq 0 ]]; then
+  echo "smoke test PASSED (${#APIS[@]} APIs, ${#REMOTES[@]} remotes with chunks)"
+  exit 0
 fi
-exit "${fail}"
+echo "smoke test FAILED (${failures} failures)"
+exit 1

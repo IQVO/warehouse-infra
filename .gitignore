@@ -5,3 +5,11 @@ terraform/terraform.tfstate
 terraform/terraform.tfstate.*
 terraform/kubeconfig
 terraform/*.tfvars
+
+# Generated acceptance diagnostics and language caches.
+artifacts/
+__pycache__/
+*.pyc
+
+# macOS metadata.
+.DS_Store

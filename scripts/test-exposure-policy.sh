@@ -1,222 +1,205 @@
 #!/usr/bin/env bash
-# Assert the localhost exposure policy (ADR-0005) against the LIVE cluster.
-#
-# The design's whole point is that the two host-facing edges are independent:
-#
-#   http://localhost      -> Nginx web gateway -> frontend bytes only
-#   http://localhost:8000 -> Kong              -> APIs only
-#
-# Neither proxies to the other. That is easy to state and easy to erode -- the
-# single most tempting "fix" for a CORS complaint is to add a `location /api`
-# to the web gateway, which silently collapses the separation while everything
-# still appears to work. This script fails loudly if that happens.
-#
-# Usage:  ./scripts/test-exposure-policy.sh [web_url] [api_url]
+# Assert the split Nginx/Kong localhost policy against a deployed cluster.
 set -uo pipefail
 
-WEB_URL="${1:-http://localhost}"
-API_URL="${2:-http://localhost:8000}"
+INFRA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${INFRA_DIR}" || exit 1
+
+WEB_URL="${1:-${WEB_URL:-http://localhost}}"
+API_URL="${2:-${API_URL:-http://localhost:8000}}"
 NAMESPACE="${NAMESPACE:-warehouse-systems}"
 CONTEXT="${KUBE_CONTEXT:-kind-warehouse}"
-
 KUBECTL=(kubectl --context "${CONTEXT}")
+PROPERTIES="${INFRA_DIR}/scripts/exposure_properties.py"
+
+APIS=()
+while IFS= read -r context; do APIS+=("${context}"); done < <(python3 scripts/exposure_inventory.py --kind apis)
+REMOTES=()
+while IFS= read -r context; do REMOTES+=("${context}"); done < <(python3 scripts/exposure_inventory.py --kind remotes)
 
 FAILURES=0
 CHECKS=0
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/warehouse-exposure.XXXXXX")"
+cleanup() { rm -rf "${scratch}"; }
+trap cleanup EXIT
 
 pass() { CHECKS=$((CHECKS + 1)); printf '  ok    %s\n' "$1"; }
 fail() { CHECKS=$((CHECKS + 1)); FAILURES=$((FAILURES + 1)); printf '  FAIL  %s\n' "$1"; }
 
-echo "==> 1. The web gateway must not know how to reach an API"
-# The rendered nginx config is the artifact that would betray a collapse of the
-# separation, so assert on the config itself rather than only on behaviour.
-GW_CONF="$("${KUBECTL[@]}" -n "${NAMESPACE}" get configmap web-gateway-config \
-  -o jsonpath='{.data.nginx\.conf}' 2>/dev/null || true)"
+fetch() {
+  local url="$1" body_file="$2" headers_file="$3" result
+  result="$(curl -sS -D "${headers_file}" -o "${body_file}" \
+    -w '%{http_code} %{content_type}' --max-time 15 "${url}" 2>/dev/null)" || result="000 none"
+  printf '%s\n' "${result}"
+}
 
-if [[ -z "${GW_CONF}" ]]; then
+header_value() {
+  local file="$1" name="$2"
+  awk -v wanted="${name}" 'BEGIN { IGNORECASE=1 } $1 == wanted":" { gsub("\\r", "", $2); print $2 }' "${file}" | tail -n 1
+}
+
+echo "==> 1. Web gateway config contains frontend routing only"
+GW_CONF="${scratch}/nginx.conf"
+"${KUBECTL[@]}" -n "${NAMESPACE}" get configmap web-gateway-config \
+  -o jsonpath='{.data.nginx\.conf}' >"${GW_CONF}" 2>/dev/null || true
+if [[ ! -s "${GW_CONF}" ]]; then
   fail "web-gateway-config ConfigMap not found in ${NAMESPACE}"
+elif errors="$(python3 "${PROPERTIES}" nginx --file "${GW_CONF}" 2>&1)"; then
+  pass "comments stripped: no /api location, Kong proxy, or API upstream"
 else
-  # Strip comments BEFORE asserting. The config documents its own policy in
-  # prose ("there is deliberately NO location /api ... no Kong upstream"), so
-  # grepping the raw text matches the documentation and reports a false
-  # failure -- observed exactly that on the first run of this script.
-  GW_BODY="$(grep -v '^[[:space:]]*#' <<<"${GW_CONF}")"
+  fail "invalid web gateway config: ${errors//$'\n'/; }"
+fi
 
-  if grep -qE 'location[[:space:]]+[^}]*/api' <<<"${GW_BODY}"; then
-    fail "web gateway declares an /api location -- APIs must go to Kong directly"
+echo "==> 2. Kong route, selector isolation, and exposure allowlist"
+RESOURCES="${scratch}/resources.json"
+APIS_FILE="${scratch}/apis.txt"
+printf '%s\n' "${APIS[@]}" >"${APIS_FILE}"
+"${KUBECTL[@]}" get service,deployment,httproute -A -o json >"${RESOURCES}" 2>/dev/null || true
+if [[ ! -s "${RESOURCES}" ]]; then
+  fail "could not read Services, Deployments, and HTTPRoutes"
+else
+  cluster_args=(
+    cluster --resources-file "${RESOURCES}" --apis-file "${APIS_FILE}"
+    --allow-exposed warehouse-systems/web-gateway
+    --allow-exposed warehouse-systems/kafka-controller-0-external
+    --allow-exposed kong/kong-kong-proxy
+    --allow-exposed kong/kong-kong-manager
+    --allow-exposed observability/grafana-nodeport
+    --allow-exposed observability/jaeger-nodeport
+    --allow-exposed observability/prometheus-nodeport
+    --allow-exposed istio-system/kiali-nodeport
+  )
+  if errors="$(python3 "${PROPERTIES}" "${cluster_args[@]}" 2>&1)"; then
+    pass "all API routes target APIs; selector isolation and NodePort/LoadBalancer allowlist hold"
   else
-    pass "web gateway has no /api location"
-  fi
-
-  if grep -qiE 'proxy_pass[^;]*kong' <<<"${GW_BODY}"; then
-    fail "web gateway proxies to Kong -- the two edges must stay independent"
-  else
-    pass "web gateway has no Kong upstream"
-  fi
-
-  # A backend API Service would be <context>.<ns>.svc, with no -frontend suffix.
-  if grep -oE 'proxy_pass http://\$upstream_[a-z_]+' <<<"${GW_BODY}" >/dev/null; then
-    if grep -E '^\s*set \$upstream_' <<<"${GW_BODY}" | grep -vE 'frontend|warehouse-console' >/dev/null; then
-      fail "web gateway has a non-frontend upstream"
-    else
-      pass "every web gateway upstream is a frontend Service"
-    fi
+    fail "cluster exposure property failed: ${errors//$'\n'/; }"
   fi
 fi
 
-echo "==> 2. Kong must route to APIs only, never to a frontend"
-ROUTE_BACKENDS="$("${KUBECTL[@]}" -n "${NAMESPACE}" get httproute -o jsonpath='{range .items[*]}{.metadata.name}{"="}{.spec.rules[*].backendRefs[*].name}{"\n"}{end}' 2>/dev/null || true)"
-if [[ -z "${ROUTE_BACKENDS}" ]]; then
-  fail "no HTTPRoutes found in ${NAMESPACE}"
-else
-  if grep -E '=.*-frontend' <<<"${ROUTE_BACKENDS}" >/dev/null; then
-    fail "a Kong HTTPRoute targets a -frontend Service:"
-    grep -E '=.*-frontend' <<<"${ROUTE_BACKENDS}" | sed 's/^/          /'
-  else
-    pass "no Kong HTTPRoute targets a frontend Service ($(wc -l <<<"${ROUTE_BACKENDS}" | tr -d ' ') routes)"
-  fi
-fi
-
-echo "==> 3. Exactly two host-facing product Services"
-NODEPORTS="$("${KUBECTL[@]}" get svc -A -o jsonpath='{range .items[?(@.spec.type=="NodePort")]}{.metadata.namespace}{"/"}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)"
-# Kafka's broker listener (kafka-controller-*-external) shares this namespace but
-# is PLATFORM infra, not a product edge: it exists so host-side clients
-# (e2e-tests, `go run`) can reach the one in-cluster broker. The policy is about
-# the product's HTTP surface, so exclude it rather than let it mask a real
-# regression. Anything else appearing here IS a finding.
-PRODUCT_NODEPORTS="$(grep "^${NAMESPACE}/" <<<"${NODEPORTS}" | grep -v 'kafka-controller' || true)"
-PRODUCT_COUNT="$(grep -c . <<<"${PRODUCT_NODEPORTS}" || true)"
-if [[ "${PRODUCT_COUNT}" == "1" ]] && grep -q "web-gateway" <<<"${PRODUCT_NODEPORTS}"; then
-  pass "web-gateway is the only product NodePort in ${NAMESPACE}"
-else
-  fail "expected exactly one product NodePort (web-gateway) in ${NAMESPACE}, found: ${PRODUCT_NODEPORTS//$'\n'/ }"
-fi
-
-echo "==> 4. The UI answers on the web origin"
+echo "==> 3. Web shell answers"
 for probe in "/healthz" "/"; do
-  CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${WEB_URL}${probe}" || echo 000)"
-  if [[ "${CODE}" == "200" ]]; then
-    pass "GET ${WEB_URL}${probe} -> 200"
+  body="${scratch}/web-$(printf '%s' "${probe}" | tr '/' '_').body"
+  headers="${body}.headers"
+  read -r code ctype <<<"$(fetch "${WEB_URL}${probe}" "${body}" "${headers}")"
+  if [[ "${code}" == "200" ]]; then
+    pass "GET ${WEB_URL}${probe} -> 200 ${ctype}"
   else
-    fail "GET ${WEB_URL}${probe} -> ${CODE}"
+    fail "GET ${WEB_URL}${probe} -> ${code} ${ctype}"
   fi
 done
 
-echo "==> 5. Every remote is served through the gateway, as JavaScript"
-for ctx in order-management inventory-storage wes-work-planning fulfillment-execution \
-           workforce-management facility-layout labor-performance process-path-management; do
-  URL="${WEB_URL}/mfes/${ctx}/remoteEntry.js"
-  read -r CODE CTYPE < <(curl -s -o /dev/null -w '%{http_code} %{content_type}' --max-time 10 "${URL}" || echo "000 none")
-  if [[ "${CODE}" == "200" && "${CTYPE}" == *javascript* ]]; then
-    pass "${ctx} remoteEntry.js -> 200 ${CTYPE}"
+echo "==> 4. Every source-derived remote serves remoteEntry.js and a resolved chunk"
+for ctx in "${REMOTES[@]}"; do
+  entry_url="${WEB_URL}/mfes/${ctx}/remoteEntry.js"
+  body="${scratch}/${ctx}-entry.body"
+  headers="${body}.headers"
+  read -r code ctype <<<"$(fetch "${entry_url}" "${body}" "${headers}")"
+  if ! errors="$(python3 "${PROPERTIES}" javascript --code "${code}" --content-type "${ctype}" --body-file "${body}" 2>&1)"; then
+    fail "${ctx} remoteEntry.js is not JavaScript: ${errors//$'\n'/; }"
+    continue
+  fi
+  chunk_url="$(python3 "${INFRA_DIR}/scripts/exposure_properties.py" chunk --entry-url "${entry_url}" --body-file "${body}" 2>/dev/null)" || {
+    fail "${ctx} remoteEntry.js has no relative JavaScript chunk"
+    continue
+  }
+  chunk_body="${scratch}/${ctx}-chunk.body"
+  chunk_headers="${chunk_body}.headers"
+  read -r chunk_code chunk_ctype <<<"$(fetch "${chunk_url}" "${chunk_body}" "${chunk_headers}")"
+  if python3 "${PROPERTIES}" javascript --code "${chunk_code}" --content-type "${chunk_ctype}" --body-file "${chunk_body}" >/dev/null 2>&1; then
+    pass "${ctx}: remoteEntry.js + resolved chunk $(basename "${chunk_url}")"
   else
-    # An SPA fallback returning HTML with a 200 is the sneaky failure here:
-    # the request "succeeded" but the remote does not actually exist.
-    fail "${ctx} remoteEntry.js -> ${CODE} ${CTYPE} (expected 200 javascript)"
+    fail "${ctx}: resolved chunk ${chunk_url} -> ${chunk_code} ${chunk_ctype}"
   fi
 done
 
-echo "==> 6. Every API answers on the API origin"
-for ctx in order-management inventory-storage wes-work-planning fulfillment-execution \
-           workforce-management facility-layout labor-performance process-path-management; do
-  CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${API_URL}/api/${ctx}/healthz" || echo 000)"
-  if [[ "${CODE}" == "200" ]]; then
-    pass "${ctx} /healthz -> 200"
+echo "==> 5. Every source-derived API answers through Kong"
+for ctx in "${APIS[@]}"; do
+  body="${scratch}/${ctx}-api.body"
+  headers="${body}.headers"
+  read -r code ctype <<<"$(fetch "${API_URL}/api/${ctx}/healthz" "${body}" "${headers}")"
+  if [[ "${code}" == "200" ]]; then
+    pass "${ctx} /healthz -> 200 ${ctype}"
   else
-    fail "${ctx} /healthz -> ${CODE}"
+    fail "${ctx} /healthz -> ${code} ${ctype}"
   fi
 done
 
-echo "==> 7. APIs are NOT reachable on the web origin"
-# If this passes, the gateway is quietly proxying APIs after all.
-# The status code alone does not answer this. The gateway's catch-all sends any
-# unknown path to the console, whose nginx applies the SPA fallback -- so
-# /api/... legitimately returns 200 text/html (the shell). That is NOT a policy
-# violation; the violation would be an actual API RESPONSE. Assert on the
-# content type and body instead.
-read -r CODE CTYPE < <(curl -s -o /tmp/.exposure-api-probe -w '%{http_code} %{content_type}' --max-time 10 "${WEB_URL}/api/order-management/healthz" || echo "000 none")
-if [[ "${CTYPE}" == *html* ]]; then
-  pass "web origin returns the SPA shell for /api/**, not an API (${CODE} ${CTYPE})"
-elif grep -qi '"status"' /tmp/.exposure-api-probe 2>/dev/null; then
-  fail "web origin served a real API response for /api/order-management/healthz -- the gateway is proxying APIs"
+echo "==> 6. Web origin never serves an API response"
+for ctx in "${APIS[@]}"; do
+  body="${scratch}/${ctx}-web-api.body"
+  headers="${body}.headers"
+  read -r code ctype <<<"$(fetch "${WEB_URL}/api/${ctx}/healthz" "${body}" "${headers}")"
+  if [[ "${ctype}" == *html* ]] && ! grep -qi '"status"[[:space:]]*:' "${body}"; then
+    pass "web origin returns SPA HTML, not ${ctx} API (${code} ${ctype})"
+  else
+    fail "web origin may have served ${ctx} API (${code} ${ctype})"
+  fi
+done
+
+echo "==> 7. Kong never serves frontend assets"
+for ctx in "${REMOTES[@]}"; do
+  probe="/mfes/${ctx}/remoteEntry.js"
+  body="${scratch}/${ctx}-kong-asset.body"
+  headers="${body}.headers"
+  read -r code ctype <<<"$(fetch "${API_URL}${probe}" "${body}" "${headers}")"
+  if [[ "${code}" =~ ^[23] ]] && [[ "${ctype}" == *javascript* || "${ctype}" == *html* ]]; then
+    fail "Kong served frontend content at ${probe} (${code} ${ctype})"
+  else
+    pass "Kong refused ${probe} (${code} ${ctype})"
+  fi
+done
+
+echo "==> 8. CORS grants exactly ${WEB_URL}"
+approved_headers="${scratch}/cors-approved.headers"
+evil_headers="${scratch}/cors-evil.headers"
+curl -sS -D "${approved_headers}" -o /dev/null --max-time 15 -X OPTIONS \
+  -H "Origin: ${WEB_URL}" -H 'Access-Control-Request-Method: GET' \
+  "${API_URL}/api/${APIS[0]}/healthz" 2>/dev/null || true
+curl -sS -D "${evil_headers}" -o /dev/null --max-time 15 -X OPTIONS \
+  -H 'Origin: http://evil.example' -H 'Access-Control-Request-Method: GET' \
+  "${API_URL}/api/${APIS[0]}/healthz" 2>/dev/null || true
+allow="$(header_value "${approved_headers}" access-control-allow-origin)"
+evil_allow="$(header_value "${evil_headers}" access-control-allow-origin)"
+if errors="$(python3 "${PROPERTIES}" cors --web-origin "${WEB_URL}" \
+  --allowed-origin "${allow}" --evil-allowed-origin "${evil_allow}" 2>&1)"; then
+  pass "exact origin allowed and unrelated origin rejected"
 else
-  pass "web origin does not serve APIs (${CODE} ${CTYPE})"
-fi
-rm -f /tmp/.exposure-api-probe
-
-echo "==> 8. Frontend assets are NOT reachable through Kong"
-for probe in "/" "/mfes/order-management/remoteEntry.js"; do
-  read -r CODE CTYPE < <(curl -s -o /dev/null -w '%{http_code} %{content_type}' --max-time 10 "${API_URL}${probe}" || echo "000 none")
-  if [[ "${CODE}" == "200" && ("${CTYPE}" == *html* || "${CTYPE}" == *javascript*) ]]; then
-    fail "Kong served frontend content at ${probe} (${CTYPE})"
-  else
-    pass "Kong does not serve ${probe} (${CODE})"
-  fi
-done
-
-echo "==> 9. CORS grants exactly the web origin"
-PREFLIGHT="$(curl -s -D - -o /dev/null --max-time 10 -X OPTIONS \
-  -H "Origin: ${WEB_URL}" \
-  -H 'Access-Control-Request-Method: GET' \
-  -H 'Access-Control-Request-Headers: content-type' \
-  "${API_URL}/api/order-management/healthz" || true)"
-ALLOW="$(grep -i '^access-control-allow-origin:' <<<"${PREFLIGHT}" | tr -d '\r' | awk '{print $2}')"
-if [[ "${ALLOW}" == "${WEB_URL}" ]]; then
-  pass "preflight from ${WEB_URL} -> allow-origin ${ALLOW}"
-elif [[ "${ALLOW}" == "*" ]]; then
-  fail "CORS allow-origin is '*' -- these endpoints are unauthenticated, never use a wildcard"
-else
-  fail "preflight from ${WEB_URL} -> allow-origin '${ALLOW:-<none>}'"
+  fail "CORS policy failed: ${errors//$'\n'/; }"
 fi
 
-EVIL="$(curl -s -D - -o /dev/null --max-time 10 -X OPTIONS \
-  -H 'Origin: http://evil.example' \
-  -H 'Access-Control-Request-Method: GET' \
-  "${API_URL}/api/order-management/healthz" || true)"
-EVIL_ALLOW="$(grep -i '^access-control-allow-origin:' <<<"${EVIL}" | tr -d '\r' | awk '{print $2}')"
-if [[ -z "${EVIL_ALLOW}" || "${EVIL_ALLOW}" == "${WEB_URL}" ]]; then
-  pass "unapproved origin is not granted access"
-else
-  fail "unapproved origin was granted '${EVIL_ALLOW}'"
-fi
-
-echo "==> 10. Access logs confirm the separation held"
+echo "==> 9. Probe side effects did not cross the split edges"
 GW_POD="$("${KUBECTL[@]}" -n "${NAMESPACE}" get pods -l app.kubernetes.io/name=web-gateway -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-if [[ -n "${GW_POD}" ]]; then
-  # A logged /api line is expected (the probe above deliberately makes one) and
-  # is only a violation if the gateway PROXIED it to a backend. The log format
-  # records the chosen upstream, so compare that against the console's ClusterIP:
-  # anything else means an API upstream was reached from here.
-  CONSOLE_IP="$("${KUBECTL[@]}" -n "${NAMESPACE}" get svc warehouse-console -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)"
-  API_UPSTREAMS="$("${KUBECTL[@]}" -n "${NAMESPACE}" logs "${GW_POD}" --tail=2000 2>/dev/null \
+CONSOLE_IP="$("${KUBECTL[@]}" -n "${NAMESPACE}" get svc warehouse-console -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)"
+if [[ -z "${GW_POD}" || -z "${CONSOLE_IP}" ]]; then
+  fail "cannot inspect web-gateway upstream logs"
+else
+  API_UPSTREAMS="$("${KUBECTL[@]}" -n "${NAMESPACE}" logs "${GW_POD}" --tail=4000 2>/dev/null \
     | grep -E '"[A-Z]+ /api/' | grep -oE 'upstream=[0-9.]+:[0-9]+' | sort -u \
     | grep -v "upstream=${CONSOLE_IP}:" || true)"
   if [[ -n "${API_UPSTREAMS}" ]]; then
-    fail "web gateway proxied an /api request to a non-console upstream: ${API_UPSTREAMS//$'\n'/ }"
+    fail "web gateway proxied /api to non-console upstreams: ${API_UPSTREAMS//$'\n'/ }"
   else
-    pass "web gateway never proxied /api to a backend (only the SPA shell)"
+    pass "web /api probes reached only the console SPA upstream"
   fi
 fi
 
 KONG_POD="$("${KUBECTL[@]}" -n kong get pods -l app.kubernetes.io/name=kong -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-if [[ -n "${KONG_POD}" ]]; then
-  # An asset request appearing in Kong's log is expected (check 8 deliberately
-  # makes one). The violation would be Kong SERVING it, so require that every
-  # such request was refused -- a 2xx/3xx here means a frontend route exists on
-  # Kong, which the design forbids.
-  SERVED_ASSETS="$("${KUBECTL[@]}" -n kong logs "${KONG_POD}" -c proxy --tail=2000 2>/dev/null \
+if [[ -z "${KONG_POD}" ]]; then
+  fail "cannot inspect Kong asset-request logs"
+else
+  SERVED_ASSETS="$("${KUBECTL[@]}" -n kong logs "${KONG_POD}" -c proxy --tail=4000 2>/dev/null \
     | grep -E '"[A-Z]+ [^"]*(\.(html|css|js|woff2?|png|svg)|/mfes/)' \
     | grep -oE '" [23][0-9][0-9] ' || true)"
   if [[ -n "${SERVED_ASSETS}" ]]; then
-    fail "Kong SERVED a frontend asset (expected every such request to be refused)"
+    fail "Kong served a frontend asset"
   else
-    pass "Kong refused every frontend asset request it saw"
+    pass "Kong refused every frontend asset probe"
   fi
 fi
 
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
-  echo "PASS: ${CHECKS} exposure-policy checks"
+  echo "PASS: ${CHECKS} exposure-policy checks (${#APIS[@]} APIs, ${#REMOTES[@]} remotes)"
   exit 0
 fi
 echo "FAIL: ${FAILURES} of ${CHECKS} exposure-policy checks failed"
