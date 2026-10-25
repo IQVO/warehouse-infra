@@ -129,6 +129,54 @@ jobs:
           repository: IQVO/e2e-tests
           ref: ${{ fromJSON(inputs.fleet_shas || '{}')['e2e-tests'] || 'develop' }}
           path: e2e-tests
+      - name: Checkout exception-management
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/exception-management
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['exception-management'] || 'main' }}
+          path: exception-management
+      - name: Checkout returns-processing
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/returns-processing
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['returns-processing'] || 'main' }}
+          path: returns-processing
+      - name: Checkout product-master
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/product-master
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['product-master'] || 'main' }}
+          path: product-master
+      - name: Checkout inbound-receiving
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/inbound-receiving
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['inbound-receiving'] || 'main' }}
+          path: inbound-receiving
+      - name: Checkout slotting-optimization
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/slotting-optimization
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['slotting-optimization'] || 'main' }}
+          path: slotting-optimization
+      - name: Checkout pick-face-replenishment
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/pick-face-replenishment
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['pick-face-replenishment'] || 'main' }}
+          path: pick-face-replenishment
+      - name: Checkout task-interleaving
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/task-interleaving
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['task-interleaving'] || 'main' }}
+          path: task-interleaving
+      - name: Checkout network-inventory-planning
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/network-inventory-planning
+          ref: ${{ fromJSON(inputs.fleet_shas || '{}')['network-inventory-planning'] || 'main' }}
+          path: network-inventory-planning
       - name: Checkout customer-ordering
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
