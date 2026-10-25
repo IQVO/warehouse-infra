@@ -22,7 +22,7 @@
   ],
   "fulfillmentNodes": [
     {
-      "vendorNodeCode": "SIM1",
+      "vendorNodeCode": "site-1",
       "nodeType": "FULFILLMENT_CENTER",
       "subtype": "SORTABLE",
       "postalCode": "78701",
