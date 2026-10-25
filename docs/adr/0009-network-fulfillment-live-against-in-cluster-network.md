@@ -66,10 +66,12 @@ ever reaches the fleet, and nothing the fleet does reaches the network.
       second, empty node `site-1` and leave the seeded one, with the listings, service area and waves,
       unused, and nothing would fail loudly. The seed data is corrected before the seed is run;
    3. `make seed-network-translation-check` passes against the values the PR carries;
-   4. the PR sets `networkMode`, `networkBaseUrl`, `networkVendorId`, `inboundReceivingUrl`, `productMasterUrl`,
-      `inboundReceiptConsumerGroup` and `networkNodes.nodes` for the one site (`siteCode` = `SITE_ID`),
-      **removes `stubDemand.demands`** (the chart refuses to render live with seeded demand) and replaces the
-      stub `productTranslation` fixtures with the generated block;
+   4. the PR sets `networkMode`, `networkBaseUrl`, `networkVendorId`, `inboundReceivingUrl`, `productMasterUrl`
+      and `inboundReceiptConsumerGroup`, **removes `stubDemand.demands`** (the chart refuses to render live
+      with seeded demand) and replaces the stub `productTranslation` fixtures with the generated block.
+      `networkNodes.nodes` is not set: a site whose `vendorNodeCode` already exists on the network is adopted
+      without a definition (network-fulfillment ADR 0026), and the seeded node does exist; a definition would
+      only add a network-generated region id to the values;
    5. its header comment is rewritten to say what this ADR says, and the header of
       `terraform/10-platform/network-fulfillment.tf` stops pointing at "why networkMode stays stub".
 6. **The inventory feed does not gate the flip.** The seed declares stock once, as the stand-in its data file

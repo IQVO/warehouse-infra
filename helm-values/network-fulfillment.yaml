@@ -1,13 +1,18 @@
-# network-fulfillment: the fleet's Anti-Corruption Layer to an external retail network
-# (Amazon Vendor Direct Fulfillment). Complete Helm values (ADR 0002 D2), formerly computed
-# in terraform/10-platform/network-fulfillment.tf (see its git history for each block's reasoning).
+# network-fulfillment: the fleet's Anti-Corruption Layer to a retail network. Complete Helm
+# values (ADR 0002 D2), formerly computed in terraform/10-platform/network-fulfillment.tf (see
+# its git history for each block's reasoning).
 
-# THE IMPORTANT PART OF THIS FILE IS WHAT IT DOES NOT SET: config.networkMode stays "stub",
-# deliberately and permanently for the local kind cluster. In stub mode the service makes
-# no external calls and needs no credentials, so this cluster cannot acknowledge a real
-# retailer's order. A real-network environment sets networkMode plus
-# credentials.existingSecret in ITS values, never here; the chart refuses a non-stub mode
-# without credentials.
+# THE MODE: config.networkMode is "live" on this cluster (ADR 0009). The service talks to the
+# retail network that runs in this same cluster, through the vendor-connectivity Service (not
+# Kong), as vendor V-WS; nothing leaves the cluster and the Vendor API takes no credential.
+# "stub" stays the chart default and the mode of tests and of any environment without a
+# network. Going back is a revert of this block (ADR 0009, decision 7). Live mode needs:
+#   - the network seeded (make seed-network; the seeded node's vendorNodeCode is SITE_ID below,
+#     which is how the service ADOPTS it instead of registering a second one);
+#   - productTranslation below GENERATED from that network (make seed-network-translation) and
+#     checked (make seed-network-translation-check): the keys are the network's listing ids and
+#     change on a reseed;
+#   - no stubDemand (the chart refuses it live).
 
 # Platform facts come from _platform.yaml, the kind CPU overlay from kind-resources/, the
 # image tags from Terraform. The chart reads network-fulfillment-db and
@@ -22,10 +27,15 @@ analytics:
       path: /api/network-fulfillment/reports
 config:
   eventPublisher: kafka
-  networkMode: stub
+  inboundReceiptConsumerGroup: network-fulfillment-inbound-receiving
+  inboundReceivingUrl: http://inbound-receiving.warehouse-systems.svc.cluster.local:80
+  networkBaseUrl: http://vendor-connectivity.warehouse-systems.svc.cluster.local:80
+  networkMode: live
+  networkVendorId: V-WS
   orderManagementUrl: http://order-management.warehouse-systems.svc.cluster.local:80
   pollInterval: 1m
   port: '8080'
+  productMasterUrl: http://product-master.warehouse-systems.svc.cluster.local:80
   sweepInterval: 5m
 database:
   existingSecret: network-fulfillment-db
@@ -77,20 +87,17 @@ mcp:
     path: /api/mcp/network-fulfillment
 productTranslation:
   mappings:
-    - networkProductId: ASIN-LOCAL-1
-      sku: sku-1
-    - networkProductId: ASIN-LOCAL-2
-      sku: sku-2
+    - networkProductId: lst-344aebc6-8145-453b-9992-5ea7f850b389
+      sku: ABO-B000B5KPG8
+    - networkProductId: lst-6dea7b22-69e1-471e-ba48-3cc2915635a7
+      sku: ABO-B000G0F3CY
+    - networkProductId: lst-27cf5ba5-801a-4325-bf01-a04d2ab417eb
+      sku: ABO-B000IK09WG
+    - networkProductId: lst-c0441ad7-3975-4aa5-ab9e-fbc1d03a42da
+      sku: ABO-B000SLW522
+    - networkProductId: lst-8596de1c-9c86-4795-8746-f2f382fcb270
+      sku: ABO-B000UGZD9M
 service:
   port: 80
   targetPort: 8080
   type: ClusterIP
-stubDemand:
-  demands:
-    - lines:
-        - networkLineRef: '1'
-          networkProductId: ASIN-LOCAL-1
-          quantity: 1
-      networkRef: po-local-1
-      requiredShipBy: +36h
-      siteId: site-1
