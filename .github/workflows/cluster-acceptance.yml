@@ -51,6 +51,7 @@ jobs:
       # again. Refs: the fleet_shas input when given, else the repo's
       # default branch (main once released, develop until then).
       - name: Check out the whole fleet (derived from terraform/apps.yaml)
+        working-directory: warehouse-infra
         env:
           FLEET_SHAS: ${{ inputs.fleet_shas || '{}' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -69,7 +70,7 @@ jobs:
               if not ref:
                   heads = subprocess.run(["git", "ls-remote", "--heads", url, "main"], capture_output=True, text=True)
                   ref = "main" if heads.stdout.strip() else "develop"
-              subprocess.run(["git", "clone", "--depth=1", "--branch", ref, url, repo], check=True)
+              subprocess.run(["git", "clone", "--depth=1", "--branch", ref, url, f"../{repo}"], check=True)
           print("checked out:", " ".join(repos))
           PY
 
