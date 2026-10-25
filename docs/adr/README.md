@@ -16,6 +16,7 @@ amends or supersedes an earlier one with its own ADR
 | [0006](0006-declarative-gateway-api.md) | The Gateway API objects are `kubectl_manifest` resources, and the CRD bundle is vendored | Accepted (2026-10-18). Implements ADR 0002 D5 (phase 5) |
 | [0007](0007-state-split-in-four-steps.md) | The state split lands in four steps, and the registry is a data file | Accepted (2026-10-18). Implements ADR 0002 D6 and ADR 0003; all four steps done; live state moved 2026-10-18 (ADR 0008) |
 | [0008](0008-one-migration-for-the-layers.md) | One migration moves the live state into all three layers | Accepted (2026-10-18). Amends ADR 0007 decisions 2 and 4; run on the live state 2026-10-18 |
+| [0009](0009-network-fulfillment-live-against-in-cluster-network.md) | network-fulfillment runs live against the in-cluster retail network | Proposed (2026-10-24). Replaces the "stub permanently" comment in `helm-values/network-fulfillment.yaml` |
 
 ## Adding an ADR
 
