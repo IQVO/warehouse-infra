@@ -1,6 +1,6 @@
 name: Cluster acceptance
 
-# NOT on pull_request: a clean-cluster provision (ArgoCD, Kong, Istio,
+# Never triggered from a pull request: a clean-cluster provision (ArgoCD, Kong, Istio,
 # Kafka, Postgres, observability, the whole fleet) does not fit a shared
 # 2-core runner's time budget -- the ArgoCD chart alone outran a 20-minute
 # helm timeout twice. The PR gate is the fast acceptance-units job in
