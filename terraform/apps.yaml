@@ -260,6 +260,7 @@ applications:
     kind: service
     repo_owner: IQVO
     database: true
+    frontend_remote: seller_inbound_mfe
 
   warehouse-console:
     kind: other
