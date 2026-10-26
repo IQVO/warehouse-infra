@@ -51,6 +51,15 @@ database:
 # Kong exposure of the OLTP API (the chart's httproute.yaml):
 # /api/seller-inbound, prefix stripped. The parentRefs come from
 # helm-values/_platform.yaml (the shared warehouse-gateway), never per-app.
+# The console remote (seller_inbound_mfe, web/): its content-addressed image tag
+# comes from Terraform (local.frontend_remotes); the web gateway
+# serves it at /mfes/seller-inbound/.
+frontend:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: warehouse/seller-inbound-frontend
+
 gatewayApi:
   enabled: true
   hosts:
@@ -61,6 +70,15 @@ gatewayApi:
 image:
   pullPolicy: IfNotPresent
   repository: warehouse/seller-inbound
+
+# Read-only MCP server (cmd/mcp, ADR 0006): one tool per REST GET, no auth
+# (the in-cluster ClusterIP boundary is the access control). Exposed through
+# the shared gateway at /api/mcp/seller-inbound for the ops agent.
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/seller-inbound
 
 service:
   port: 80
