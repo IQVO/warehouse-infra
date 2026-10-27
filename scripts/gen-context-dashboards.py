@@ -345,220 +345,221 @@ CONTEXTS = [
         "key": "customer-ordering",
         "title": "Customer Ordering",
         "uid": "warehouse-customer-ordering",
-        # Retail-network reference service (registered with the first local
-        # deployment of the network components, 2026-10-24). Same
-        # observability state as pick-face-replenishment when it was
-        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
-        # so business_metrics stays empty (never invent a metric) and the
-        # HTTP RED and Go-runtime rows stay empty until it instruments
-        # itself. The Kong route /api/customer-ordering is live (the chart's
-        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
-        # so the Kong rows stay empty until it does; the pod-restart alerts
-        # are live. No docs site and no runbook page exist yet, so the rules
-        # link the repository itself.
+        # Retail-network service on the fleet observability standard: Go-runtime and otelchi RED
+        # metrics plus the business counter ordering.orders.placed (Prometheus: ordering_orders_placed_total).
+        # The Kong route /api/customer-ordering is live but the chart attaches no Kong prometheus plugin, so the
+        # Kong rows (including the 5xx panels and alert) stay empty until it does; the pod-restart
+        # alerts are live.
         "service_regex": "customer-ordering.*",
         "loki_app": "customer-ordering",
         "runbook_url": "https://github.com/IQVO/customer-ordering/blob/develop/docs/operations/runbook.md",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "ordering_orders_placed_total",
+                "outcome",
+                "Checkout attempts by outcome (placed or rejected; reason says why a rejection happened, as a problem slug such as offer-not-quotable or promise-capacity-exhausted). A falling placed share with a rising offer-not-quotable or promise-capacity-exhausted means shoppers are refused at checkout by delivery promising, not by their own input; a rising internal-error means the service itself is failing.",
+            ),
+        ],
     },
     {
         "key": "delivery-promise",
         "title": "Delivery Promise",
         "uid": "warehouse-delivery-promise",
-        # Retail-network reference service (registered with the first local
-        # deployment of the network components, 2026-10-24). Same
-        # observability state as pick-face-replenishment when it was
-        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
-        # so business_metrics stays empty (never invent a metric) and the
-        # HTTP RED and Go-runtime rows stay empty until it instruments
-        # itself. The Kong route /api/delivery-promise is live (the chart's
-        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
-        # so the Kong rows stay empty until it does; the pod-restart alerts
-        # are live. No docs site and no runbook page exist yet, so the rules
-        # link the repository itself.
+        # Retail-network service on the fleet observability standard: Go-runtime and otelchi RED
+        # metrics plus the business counter promising.promises.made (Prometheus: promising_promises_made_total).
+        # The Kong route /api/delivery-promise is live but the chart attaches no Kong prometheus plugin, so the
+        # Kong rows (including the 5xx panels and alert) stay empty until it does; the pod-restart
+        # alerts are live.
         "service_regex": "delivery-promise.*",
         "loki_app": "delivery-promise",
         "runbook_url": "https://github.com/IQVO/delivery-promise/blob/develop/docs/operations/runbook.md",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "promising_promises_made_total",
+                "outcome",
+                "Attempts to make a delivery promise by outcome (made or refused; reason says why a refusal happened, as a problem slug such as offer-not-quotable or promise-capacity-exhausted). A falling made share with a rising offer-not-quotable or promise-capacity-exhausted means shoppers are offered dates the network can no longer keep (expired offers, full nodes); a rising internal-error means the service itself is failing.",
+            ),
+        ],
     },
     {
         "key": "last-mile-delivery",
         "title": "Last-Mile Delivery",
         "uid": "warehouse-last-mile-delivery",
-        # Retail-network reference service (registered with the first local
-        # deployment of the network components, 2026-10-24). Same
-        # observability state as pick-face-replenishment when it was
-        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
-        # so business_metrics stays empty (never invent a metric) and the
-        # HTTP RED and Go-runtime rows stay empty until it instruments
-        # itself. The Kong route /api/last-mile-delivery is live (the chart's
-        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
-        # so the Kong rows stay empty until it does; the pod-restart alerts
-        # are live. No docs site and no runbook page exist yet, so the rules
-        # link the repository itself.
+        # Retail-network service on the fleet observability standard: Go-runtime and otelchi RED
+        # metrics plus the business counter last_mile_delivery.package.attempted (Prometheus: last_mile_delivery_package_attempted_total).
+        # The Kong route /api/last-mile-delivery is live but the chart attaches no Kong prometheus plugin, so the
+        # Kong rows (including the 5xx panels and alert) stay empty until it does; the pod-restart
+        # alerts are live.
         "service_regex": "last-mile-delivery.*",
         "loki_app": "last-mile-delivery",
         "runbook_url": "https://github.com/IQVO/last-mile-delivery/blob/develop/docs/operations/runbook.md",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "last_mile_delivery_package_attempted_total",
+                "outcome",
+                "Delivery attempts reported on routes, by outcome (delivered, failed or rejected; reason says why a report was rejected, as a problem slug such as route-not-started or already-delivered). A falling delivered share with a rising failed share means packages are not reaching recipients on the first van run (each package gets at most three failed attempts before it returns to its sender); a rising rejected share means driver or dispatch clients report attempts the route cannot take, and a rising internal-error reason means the service itself is failing.",
+            ),
+        ],
     },
     {
         "key": "linehaul-transportation",
         "title": "Linehaul Transportation",
         "uid": "warehouse-linehaul-transportation",
-        # Retail-network reference service (registered with the first local
-        # deployment of the network components, 2026-10-24). Same
-        # observability state as pick-face-replenishment when it was
-        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
-        # so business_metrics stays empty (never invent a metric) and the
-        # HTTP RED and Go-runtime rows stay empty until it instruments
-        # itself. The Kong route /api/linehaul-transportation is live (the chart's
-        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
-        # so the Kong rows stay empty until it does; the pod-restart alerts
-        # are live. No docs site and no runbook page exist yet, so the rules
-        # link the repository itself.
+        # Retail-network service on the fleet observability standard: Go-runtime and otelchi RED
+        # metrics plus the business counter linehaul.loads.dispatched (Prometheus: linehaul_loads_dispatched_total).
+        # The Kong route /api/linehaul-transportation is live but the chart attaches no Kong prometheus plugin, so the
+        # Kong rows (including the 5xx panels and alert) stay empty until it does; the pod-restart
+        # alerts are live.
         "service_regex": "linehaul-transportation.*",
         "loki_app": "linehaul-transportation",
         "runbook_url": "https://github.com/IQVO/linehaul-transportation/blob/develop/docs/operations/runbook.md",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "linehaul_loads_dispatched_total",
+                "outcome",
+                "Load dispatch attempts by outcome (dispatched or rejected; reason says why a rejection happened, as a problem slug such as illegal-transition or not-found). A falling dispatched share with a rising illegal-transition means operators try to dispatch loads that were never closed, so freight is not leaving its origin node on schedule; a rising internal-error means the service itself is failing.",
+            ),
+        ],
     },
     {
         "key": "node-performance",
         "title": "Node Performance",
         "uid": "warehouse-node-performance",
-        # Retail-network reference service (registered with the first local
-        # deployment of the network components, 2026-10-24). Same
-        # observability state as pick-face-replenishment when it was
-        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
-        # so business_metrics stays empty (never invent a metric) and the
-        # HTTP RED and Go-runtime rows stay empty until it instruments
-        # itself. The Kong route /api/node-performance is live (the chart's
-        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
-        # so the Kong rows stay empty until it does; the pod-restart alerts
-        # are live. No docs site and no runbook page exist yet, so the rules
-        # link the repository itself.
+        # Retail-network service on the fleet observability standard: Go-runtime and otelchi RED
+        # metrics plus the business counter nodeperformance.scorecards.recomputed (Prometheus: nodeperformance_scorecards_recomputed_total).
+        # The Kong route /api/node-performance is live but the chart attaches no Kong prometheus plugin, so the
+        # Kong rows (including the 5xx panels and alert) stay empty until it does; the pod-restart
+        # alerts are live.
         "service_regex": "node-performance.*",
         "loki_app": "node-performance",
         "runbook_url": "https://github.com/IQVO/node-performance/blob/develop/docs/operations/runbook.md",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "nodeperformance_scorecards_recomputed_total",
+                "outcome",
+                "Scorecards handled by the recompute scheduler, by outcome (recomputed or failed; reason says why a failure happened: concurrent-update or internal-error). A recomputed count that stays flat while nodes keep reporting means grading has stalled and published grades are going stale; a rising concurrent-update means writers contend for the same scorecards but the next run retries them; a rising internal-error means the service itself (usually its database) is failing.",
+            ),
+        ],
     },
     {
         "key": "node-topology",
         "title": "Node Topology",
         "uid": "warehouse-node-topology",
-        # Retail-network reference service (registered with the first local
-        # deployment of the network components, 2026-10-24). Same
-        # observability state as pick-face-replenishment when it was
-        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
-        # so business_metrics stays empty (never invent a metric) and the
-        # HTTP RED and Go-runtime rows stay empty until it instruments
-        # itself. The Kong route /api/node-topology is live (the chart's
-        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
-        # so the Kong rows stay empty until it does; the pod-restart alerts
-        # are live. No docs site and no runbook page exist yet, so the rules
-        # link the repository itself.
+        # Retail-network service on the fleet observability standard: Go-runtime and otelchi RED
+        # metrics plus the business counter topology.nodes.registered (Prometheus: topology_nodes_registered_total).
+        # The Kong route /api/node-topology is live but the chart attaches no Kong prometheus plugin, so the
+        # Kong rows (including the 5xx panels and alert) stay empty until it does; the pod-restart
+        # alerts are live.
         "service_regex": "node-topology.*",
         "loki_app": "node-topology",
         "runbook_url": "https://github.com/IQVO/node-topology/blob/develop/docs/operations/runbook.md",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "topology_nodes_registered_total",
+                "outcome",
+                "Node registrations by outcome (registered or rejected; reason says why a rejection happened, as a problem slug such as vendor-node-code-taken or validation-failed). A rising vendor-node-code-taken or operator-not-allowed-for-node-type means onboarding clients send registrations the network rules refuse, not that the service is failing; a rising internal-error or concurrent-update means the service itself is.",
+            ),
+        ],
     },
     {
         "key": "offer-availability",
         "title": "Offer & Availability",
         "uid": "warehouse-offer-availability",
-        # Retail-network reference service (registered with the first local
-        # deployment of the network components, 2026-10-24). Same
-        # observability state as pick-face-replenishment when it was
-        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
-        # so business_metrics stays empty (never invent a metric) and the
-        # HTTP RED and Go-runtime rows stay empty until it instruments
-        # itself. The Kong route /api/offer-availability is live (the chart's
-        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
-        # so the Kong rows stay empty until it does; the pod-restart alerts
-        # are live. No docs site and no runbook page exist yet, so the rules
-        # link the repository itself.
+        # Retail-network service on the fleet observability standard: Go-runtime and otelchi RED
+        # metrics plus the business counter availability.inventory_feeds.applied (Prometheus: availability_inventory_feeds_applied_total).
+        # The Kong route /api/offer-availability is live but the chart attaches no Kong prometheus plugin, so the
+        # Kong rows (including the 5xx panels and alert) stay empty until it does; the pod-restart
+        # alerts are live.
         "service_regex": "offer-availability.*",
         "loki_app": "offer-availability",
         "runbook_url": "https://github.com/IQVO/offer-availability/blob/develop/docs/operations/runbook.md",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "availability_inventory_feeds_applied_total",
+                "outcome",
+                "Inventory feed attempts by outcome (applied, superseded, failed or rejected; reason says why a failed or rejected feed did not apply, as a problem slug such as listing-not-on-node, negative-availability or feed-already-applied). A falling applied share means shoppers see stale availability: a rising superseded means vendors send feeds out of order, a rising failed means vendor data does not match our listings, a rising internal-error means the service itself is failing.",
+            ),
+        ],
     },
     {
         "key": "order-sourcing",
         "title": "Order Sourcing",
         "uid": "warehouse-order-sourcing",
-        # Retail-network reference service (registered with the first local
-        # deployment of the network components, 2026-10-24). Same
-        # observability state as pick-face-replenishment when it was
-        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
-        # so business_metrics stays empty (never invent a metric) and the
-        # HTTP RED and Go-runtime rows stay empty until it instruments
-        # itself. The Kong route /api/order-sourcing is live (the chart's
-        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
-        # so the Kong rows stay empty until it does; the pod-restart alerts
-        # are live. No docs site and no runbook page exist yet, so the rules
-        # link the repository itself.
+        # Retail-network service on the fleet observability standard: Go-runtime and otelchi RED
+        # metrics plus the business counter sourcing.groups.sourced (Prometheus: sourcing_groups_sourced_total).
+        # The Kong route /api/order-sourcing is live but the chart attaches no Kong prometheus plugin, so the
+        # Kong rows (including the 5xx panels and alert) stay empty until it does; the pod-restart
+        # alerts are live.
         "service_regex": "order-sourcing.*",
         "loki_app": "order-sourcing",
         "runbook_url": "https://github.com/IQVO/order-sourcing/blob/develop/docs/operations/runbook.md",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "sourcing_groups_sourced_total",
+                "outcome",
+                "Shipment groups of placed orders that order sourcing decided on, by outcome: queued (waiting for its release time), released (sent to a node at once, same-day), unsourceable (no node can ship it) or failed (nothing stored; reason says why, for example concurrent-update or internal-error). A rising unsourceable share means the network cannot fulfil what is being promised (stock, lanes or service areas are missing); a rising failed with internal-error means the service itself is failing and orders are not being sourced.",
+            ),
+        ],
     },
     {
         "key": "shipping-and-tracking",
         "title": "Shipping & Tracking",
         "uid": "warehouse-shipping-and-tracking",
-        # Retail-network reference service (registered with the first local
-        # deployment of the network components, 2026-10-24). Same
-        # observability state as pick-face-replenishment when it was
-        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
-        # so business_metrics stays empty (never invent a metric) and the
-        # HTTP RED and Go-runtime rows stay empty until it instruments
-        # itself. The Kong route /api/shipping-and-tracking is live (the chart's
-        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
-        # so the Kong rows stay empty until it does; the pod-restart alerts
-        # are live. No docs site and no runbook page exist yet, so the rules
-        # link the repository itself.
+        # Retail-network service on the fleet observability standard: Go-runtime and otelchi RED
+        # metrics plus the business counter shipping.labels.issued (Prometheus: shipping_labels_issued_total).
+        # The Kong route /api/shipping-and-tracking is live but the chart attaches no Kong prometheus plugin, so the
+        # Kong rows (including the 5xx panels and alert) stay empty until it does; the pod-restart
+        # alerts are live.
         "service_regex": "shipping-and-tracking.*",
         "loki_app": "shipping-and-tracking",
         "runbook_url": "https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/operations/runbook.md",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "shipping_labels_issued_total",
+                "outcome",
+                "Label-issue attempts by outcome (issued or rejected; reason says why a rejection happened, as a problem slug such as ship-to-unavailable or label-already-issued). A falling issued share with a rising ship-to-unavailable means labels are blocked because customer-ordering cannot be reached, so packages are not entering the network; a rising label-already-issued means the caller is retrying without an Idempotency-Key; a rising internal-error means the service itself is failing.",
+            ),
+        ],
     },
     {
         "key": "vendor-connectivity",
         "title": "Vendor Connectivity",
         "uid": "warehouse-vendor-connectivity",
-        # Retail-network reference service (registered with the first local
-        # deployment of the network components, 2026-10-24). Same
-        # observability state as pick-face-replenishment when it was
-        # registered: 0 OTel instruments, no otelchi, no outbox-lag gauge,
-        # so business_metrics stays empty (never invent a metric) and the
-        # HTTP RED and Go-runtime rows stay empty until it instruments
-        # itself. The Kong route /api/vendor-connectivity is live (the chart's
-        # httproute.yaml) but the chart attaches no Kong prometheus plugin,
-        # so the Kong rows stay empty until it does; the pod-restart alerts
-        # are live. No docs site and no runbook page exist yet, so the rules
-        # link the repository itself.
+        # Retail-network service on the fleet observability standard: Go-runtime and otelchi RED
+        # metrics plus the business counter vendor.submissions.processed (Prometheus: vendor_submissions_processed_total).
+        # The Kong route /api/vendor-connectivity is live but the chart attaches no Kong prometheus plugin, so the
+        # Kong rows (including the 5xx panels and alert) stay empty until it does; the pod-restart
+        # alerts are live.
         "service_regex": "vendor-connectivity.*",
         "loki_app": "vendor-connectivity",
         "runbook_url": "https://github.com/IQVO/vendor-connectivity/blob/develop/docs/operations/runbook.md",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "vendor_submissions_processed_total",
+                "outcome",
+                "Vendor transactions (acknowledgements, shipment confirmations, inventory feeds, node registrations and profiles, inbound receipts) that reached an outcome, by outcome (succeeded or failed; reason is the Err code the vendor reads, such as ErrUpstreamUnavailable or ErrSimulatedFailure). A rising failed share means vendors are being told their writes did not apply: ErrUpstreamUnavailable means a neighbour context stopped answering, not that the vendors sent bad data.",
+            ),
+        ],
     },
     {
         "key": "seller-inbound",
         "title": "Seller Inbound",
         "uid": "warehouse-seller-inbound",
-        # Retail-network service (registered 2026-10-24, before its first
-        # local deployment). Observability state: 0 OTel instruments (the
-        # OTel packages in go.mod are indirect), no otelchi, no outbox-lag
-        # gauge, so business_metrics stays empty (never invent a metric) and
-        # the HTTP RED and Go-runtime rows stay dark until it instruments
-        # itself. The Kong route /api/seller-inbound is live once deployed
-        # (the chart's httproute.yaml) but the chart attaches no Kong
-        # prometheus plugin, so the Kong rows stay dark until it does; the
-        # pod-restart alerts are live. No docs site exists, so the rules link
-        # the repository's runbook directly.
+        # Retail-network service on the fleet observability standard: Go-runtime and otelchi RED
+        # metrics plus the business counter seller_inbound.shipment.shipped (Prometheus: seller_inbound_shipment_shipped_total).
+        # The Kong route /api/seller-inbound is live but the chart attaches no Kong prometheus plugin, so the
+        # Kong rows (including the 5xx panels and alert) stay empty until it does; the pod-restart
+        # alerts are live.
         "service_regex": "seller-inbound.*",
         "loki_app": "seller-inbound",
         "runbook_url": "https://github.com/IQVO/seller-inbound/blob/develop/docs/operations/runbook.md",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "seller_inbound_shipment_shipped_total",
+                "outcome",
+                "Attempts to ship an inbound shipment by outcome (shipped or rejected; reason says why a rejection happened, as a problem slug such as shipment-not-labelled, seller-suspended or node-cannot-receive). A falling shipped share with a rising shipment-not-labelled means sellers reach the ship step before labelling every carton; a rising node-cannot-receive means destination nodes are refusing stock; a rising internal-error means the service itself is failing.",
+            ),
+        ],
     },
 
     {
