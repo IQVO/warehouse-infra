@@ -246,12 +246,56 @@
     },
     {
       "type": "row",
-      "title": "Go runtime (this context's processes)",
+      "title": "Order Sourcing \u2014 business metrics (Tier 2, ADR-0009)",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 18
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "sourcing_groups_sourced_total",
+      "description": "Shipment groups of placed orders that order sourcing decided on, by outcome: queued (waiting for its release time), released (sent to a node at once, same-day), unsourceable (no node can ship it) or failed (nothing stored; reason says why, for example concurrent-update or internal-error). A rising unsourceable share means the network cannot fulfil what is being promised (stock, lanes or service areas are missing); a rising failed with internal-error means the service itself is failing and orders are not being sourced.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (outcome) (rate(sourcing_groups_sourced_total[5m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Go runtime (this context's processes)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 27
       },
       "collapsed": false,
       "panels": []
@@ -268,7 +312,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 19
+        "y": 28
       },
       "fieldConfig": {
         "defaults": {
@@ -300,7 +344,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 19
+        "y": 28
       },
       "fieldConfig": {
         "defaults": {
@@ -327,7 +371,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 36
       },
       "collapsed": false,
       "panels": []
@@ -344,7 +388,7 @@
         "h": 9,
         "w": 16,
         "x": 0,
-        "y": 28
+        "y": 37
       },
       "targets": [
         {
@@ -380,7 +424,7 @@
         "h": 9,
         "w": 8,
         "x": 16,
-        "y": 28
+        "y": 37
       },
       "targets": [
         {
@@ -412,7 +456,7 @@
         "h": 6,
         "w": 8,
         "x": 16,
-        "y": 37
+        "y": 46
       },
       "targets": [
         {

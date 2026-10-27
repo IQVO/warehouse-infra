@@ -246,12 +246,56 @@
     },
     {
       "type": "row",
-      "title": "Go runtime (this context's processes)",
+      "title": "Node Topology \u2014 business metrics (Tier 2, ADR-0009)",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 18
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "topology_nodes_registered_total",
+      "description": "Node registrations by outcome (registered or rejected; reason says why a rejection happened, as a problem slug such as vendor-node-code-taken or validation-failed). A rising vendor-node-code-taken or operator-not-allowed-for-node-type means onboarding clients send registrations the network rules refuse, not that the service is failing; a rising internal-error or concurrent-update means the service itself is.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (outcome) (rate(topology_nodes_registered_total[5m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Go runtime (this context's processes)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 27
       },
       "collapsed": false,
       "panels": []
@@ -268,7 +312,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 19
+        "y": 28
       },
       "fieldConfig": {
         "defaults": {
@@ -300,7 +344,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 19
+        "y": 28
       },
       "fieldConfig": {
         "defaults": {
@@ -327,7 +371,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 36
       },
       "collapsed": false,
       "panels": []
@@ -344,7 +388,7 @@
         "h": 9,
         "w": 16,
         "x": 0,
-        "y": 28
+        "y": 37
       },
       "targets": [
         {
@@ -380,7 +424,7 @@
         "h": 9,
         "w": 8,
         "x": 16,
-        "y": 28
+        "y": 37
       },
       "targets": [
         {
@@ -412,7 +456,7 @@
         "h": 6,
         "w": 8,
         "x": 16,
-        "y": 37
+        "y": 46
       },
       "targets": [
         {
