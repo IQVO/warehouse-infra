@@ -40,7 +40,16 @@ CHARTS := \
 	../order-sourcing/charts/order-sourcing \
 	../shipping-and-tracking/charts/shipping-and-tracking \
 	../vendor-connectivity/charts/vendor-connectivity \
-	../seller-inbound/charts/seller-inbound
+	../seller-inbound/charts/seller-inbound \
+	../checkout/charts/checkout \
+	../customer-payments/charts/customer-payments \
+	../pricing/charts/pricing \
+	../product-content/charts/product-content \
+	../product-discovery/charts/product-discovery \
+	../shopping-cart/charts/shopping-cart \
+	../payment-provider-simulator/charts/payment-provider-simulator \
+	../storefront-bff/charts/storefront-bff \
+	../storefront-web/charts/storefront-web
 
 .PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test seed-network seed-network-dry-run seed-network-verify seed-network-translation seed-network-translation-check check check-all
 
