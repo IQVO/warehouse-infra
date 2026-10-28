@@ -1,0 +1,24 @@
+# storefront-web -- the shopper-facing React 19 SSR app (React Router 7, Node,
+# PORT 3000). NO database, NO Kafka; its only backend is storefront-bff,
+# reached server-side at BFF_URL (the in-server /api/storefront proxy
+# forwards there). The web gateway serves it on the storefront host.
+# image tag from Terraform; CPU from kind-resources/.
+
+config:
+  # server-side origin of the BFF; MANDATORY (the chart refuses to render
+  # without it). Never in the client bundle.
+  bffUrl: "http://storefront-bff.warehouse-systems.svc.cluster.local:80"
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/storefront-web
+
+service:
+  port: 80
+  targetPort: 3000
+  type: ClusterIP
+
+# The exposure policy (scripts/exposure_properties.py) only lets the web
+# gateway proxy to Services whose name says they serve frontend bytes; the
+# fleet convention is <name>-frontend. The SSR server IS the storefront's
+# frontend, so its Service takes the same shape.
+fullnameOverride: storefront-web-frontend

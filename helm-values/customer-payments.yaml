@@ -1,0 +1,35 @@
+# customer-payments -- storefront domain payment methods and orchestration.
+# api Deployment: OLTP REST :8080 + outbox relay + three consumers (checkout,
+# order-sourcing, shipping-and-tracking); charges through the simulated
+# payment provider. A read-only MCP server (cmd/mcp) exists; its components
+# stay default-OFF here (ops-agent wiring is a separate follow-up).
+# Brokers/parentRefs/CORS/OTLP from _platform.yaml; image tag from Terraform;
+# CPU from kind-resources/. Migrations at boot over MIGRATIONS_DATABASE_URL
+# from the customer-payments-db Secret (ADR 0005).
+
+config:
+  # the simulated provider is an in-cluster sibling on this estate.
+  paymentProviderUrl: "http://payment-provider-simulator.warehouse-systems.svc.cluster.local:80"
+  # fixed, stable group ids: rescheduled pods resume from committed offsets.
+  # All MANDATORY (the binary exits at boot without them).
+  checkoutConsumerGroup: "customer-payments-checkout"
+  orderSourcingConsumerGroup: "customer-payments-order-sourcing"
+  shippingAndTrackingConsumerGroup: "customer-payments-shipping-and-tracking"
+
+database:
+  existingSecret: customer-payments-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/customer-payments
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/customer-payments
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

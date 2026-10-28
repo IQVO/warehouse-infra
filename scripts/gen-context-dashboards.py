@@ -362,6 +362,129 @@ CONTEXTS = [
         ],
     },
     {
+        "key": "pricing",
+        "title": "Pricing",
+        "uid": "warehouse-pricing",
+        # Storefront-domain service on the fleet observability standard; Kong
+        # rows stay empty until the chart attaches a Kong prometheus plugin.
+        "service_regex": "pricing.*",
+        "loki_app": "pricing",
+        "runbook_url": "https://github.com/IQVO/pricing/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [
+            (
+                "pricing_quotes_issued_total",
+                "outcome",
+                "Price-quote requests by outcome (issued or rejected; reason says why). A falling issued share means shoppers cannot get binding prices; a rising internal-error means the service itself is failing.",
+            ),
+        ],
+    },
+    {
+        "key": "product-content",
+        "title": "Product Content",
+        "uid": "warehouse-product-content",
+        # Storefront-domain service on the fleet observability standard; Kong
+        # rows stay empty until the chart attaches a Kong prometheus plugin.
+        "service_regex": "product-content.*",
+        "loki_app": "product-content",
+        "runbook_url": "https://github.com/IQVO/product-content/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [
+            (
+                "content_products_published_total",
+                "outcome",
+                "Publish attempts by outcome (published or rejected; reason says why). A falling published share means catalog content is not reaching discovery; a rising internal-error means the service itself is failing.",
+            ),
+        ],
+    },
+    {
+        "key": "product-discovery",
+        "title": "Product Discovery",
+        "uid": "warehouse-product-discovery",
+        # Storefront-domain service on the fleet observability standard; Kong
+        # rows stay empty until the chart attaches a Kong prometheus plugin.
+        "service_regex": "product-discovery.*",
+        "loki_app": "product-discovery",
+        "runbook_url": "https://github.com/IQVO/product-discovery/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [
+            (
+                "discovery_searches_served_total",
+                "outcome",
+                "Search requests by outcome (served or rejected; reason says why). A falling served share means shoppers cannot find products; a rising internal-error means the service itself is failing.",
+            ),
+        ],
+    },
+    {
+        "key": "shopping-cart",
+        "title": "Shopping Cart",
+        "uid": "warehouse-shopping-cart",
+        # Storefront-domain service on the fleet observability standard; Kong
+        # rows stay empty until the chart attaches a Kong prometheus plugin.
+        "service_regex": "shopping-cart.*",
+        "loki_app": "shopping-cart",
+        "runbook_url": "https://github.com/IQVO/shopping-cart/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [
+            (
+                "cart_lines_added_total",
+                "outcome",
+                "Add-to-cart attempts by outcome (added or rejected; reason says why). A falling added share means shoppers cannot build carts; a rising internal-error means the service itself is failing.",
+            ),
+        ],
+    },
+    {
+        "key": "checkout",
+        "title": "Checkout",
+        "uid": "warehouse-checkout",
+        # Storefront-domain service on the fleet observability standard; Kong
+        # rows stay empty until the chart attaches a Kong prometheus plugin.
+        "service_regex": "checkout.*",
+        "loki_app": "checkout",
+        "runbook_url": "https://github.com/IQVO/checkout/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
+        "key": "customer-payments",
+        "title": "Customer Payments",
+        "uid": "warehouse-customer-payments",
+        # Storefront-domain service on the fleet observability standard; Kong
+        # rows stay empty until the chart attaches a Kong prometheus plugin.
+        "service_regex": "customer-payments.*",
+        "loki_app": "customer-payments",
+        "runbook_url": "https://github.com/IQVO/customer-payments/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
+        "key": "payment-provider-simulator",
+        "title": "Payment Provider Simulator",
+        "uid": "warehouse-payment-provider-simulator",
+        # Storefront-domain service on the fleet observability standard; Kong
+        # rows stay empty until the chart attaches a Kong prometheus plugin.
+        "service_regex": "payment-provider-simulator.*",
+        "loki_app": "payment-provider-simulator",
+        "runbook_url": "https://github.com/IQVO/payment-provider-simulator/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
+        "key": "storefront-bff",
+        "title": "Storefront BFF",
+        "uid": "warehouse-storefront-bff",
+        # Storefront-domain service on the fleet observability standard; Kong
+        # rows stay empty until the chart attaches a Kong prometheus plugin.
+        "service_regex": "storefront-bff.*",
+        "loki_app": "storefront-bff",
+        "runbook_url": "https://github.com/IQVO/storefront-bff/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
+        "key": "storefront-web",
+        "title": "Storefront Web",
+        "uid": "warehouse-storefront-web",
+        # Storefront-domain service on the fleet observability standard; Kong
+        # rows stay empty until the chart attaches a Kong prometheus plugin.
+        "service_regex": "storefront-web.*",
+        "loki_app": "storefront-web",
+        "runbook_url": "https://github.com/IQVO/storefront-web/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
         "key": "delivery-promise",
         "title": "Delivery Promise",
         "uid": "warehouse-delivery-promise",

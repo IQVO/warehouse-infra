@@ -39,6 +39,13 @@ applications:
   # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
   # plus a read-only MCP server (cmd/mcp); still no analytics read side).
   # Its web remote is customer_ordering_mfe (web/), served at /mfes/customer-ordering/.
+  # checkout: storefront domain order placement (api + outbox relay +
+  # consumers, Postgres+Kafka) with a read-only MCP server (cmd/mcp).
+  checkout:
+    kind: service
+    repo_owner: IQVO
+    database: true
+
   customer-ordering:
     kind: service
     repo_owner: IQVO
@@ -48,6 +55,14 @@ applications:
   # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
   # plus a read-only MCP server (cmd/mcp); still no analytics read side).
   # Its web remote is delivery_promise_mfe (web/), served at /mfes/delivery-promise/.
+  # customer-payments: storefront domain payment methods and
+  # payment orchestration (api + outbox relay + consumers, Postgres+Kafka)
+  # with a read-only MCP server (cmd/mcp).
+  customer-payments:
+    kind: service
+    repo_owner: IQVO
+    database: true
+
   delivery-promise:
     kind: service
     repo_owner: IQVO
@@ -184,6 +199,13 @@ applications:
   # ANALYTICS_DATABASE_URL (no reader DSN), hence the one-key secret_keys. Its
   # web remote is replenishment_mfe (web/vite.config.ts), served at
   # /mfes/pick-face-replenishment/.
+  # payment-provider-simulator: simulates the external payment
+  # provider for the estate (api only, Postgres, no Kafka).
+  payment-provider-simulator:
+    kind: service
+    repo_owner: IQVO
+    database: true
+
   pick-face-replenishment:
     kind: service
     repo_owner: IQVO
@@ -192,11 +214,33 @@ applications:
       secret_keys: [ANALYTICS_DATABASE_URL]
     frontend_remote: replenishment_mfe
 
+  # pricing: storefront domain pricing and quotes (api + outbox
+  # relay + consumer, Postgres+Kafka).
+  pricing:
+    kind: service
+    repo_owner: IQVO
+    database: true
+
   process-path-management:
     kind: service
     database: true
     analytics: true
     frontend_remote: process_path_mfe
+
+  # product-content: storefront domain product catalog content
+  # (api + outbox relay + consumer, Postgres+Kafka).
+  product-content:
+    kind: service
+    repo_owner: IQVO
+    database: true
+
+  # product-discovery: storefront domain search and discovery
+  # (api + outbox relay + consumers, Postgres+Kafka; the rebuild
+  # binary is an operator-run Helm Job, default off).
+  product-discovery:
+    kind: service
+    repo_owner: IQVO
+    database: true
 
   product-master:
     kind: service
@@ -226,6 +270,13 @@ applications:
     database: true
     frontend_remote: shipping_mfe
 
+  # shopping-cart: storefront domain carts (api + outbox relay +
+  # consumers, Postgres+Kafka; calls delivery-promise over REST).
+  shopping-cart:
+    kind: service
+    repo_owner: IQVO
+    database: true
+
   slotting-optimization:
     kind: service
     repo_owner: IQVO
@@ -237,6 +288,20 @@ applications:
   # ti-reports) read only ANALYTICS_DATABASE_URL, hence the one-key
   # secret_keys. Its web remote is task_interleaving_mfe (web/vite.config.ts),
   # served at /mfes/task-interleaving/.
+  # storefront-bff: backend-for-frontend of the shopper storefront
+  # (api only; no database, no Kafka; REST calls into six sibling
+  # services). Kong route /api/storefront.
+  storefront-bff:
+    kind: service
+    repo_owner: IQVO
+
+  # storefront-web: the shopper-facing React SSR app (Node, no
+  # database, no Kafka; its only backend is storefront-bff). Served
+  # by the web gateway on the storefront host.
+  storefront-web:
+    kind: service
+    repo_owner: IQVO
+
   task-interleaving:
     kind: service
     repo_owner: IQVO

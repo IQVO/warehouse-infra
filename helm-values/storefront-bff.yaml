@@ -1,0 +1,33 @@
+# storefront-bff -- backend-for-frontend of the shopper storefront. Single api
+# Deployment: REST :8080; NO database, NO Kafka -- it composes the six domain
+# services below over REST for the SSR app. parentRefs/CORS from
+# _platform.yaml; image tag from Terraform; CPU from kind-resources/. Kong
+# route /api/storefront, prefix stripped.
+
+config:
+  # the six REST upstreams; all MANDATORY (the binary exits at boot naming
+  # every missing one).
+  productDiscoveryUrl: "http://product-discovery.warehouse-systems.svc.cluster.local:80"
+  deliveryPromiseUrl: "http://delivery-promise.warehouse-systems.svc.cluster.local:80"
+  shoppingCartUrl: "http://shopping-cart.warehouse-systems.svc.cluster.local:80"
+  checkoutUrl: "http://checkout.warehouse-systems.svc.cluster.local:80"
+  customerOrderingUrl: "http://customer-ordering.warehouse-systems.svc.cluster.local:80"
+  pricingUrl: "http://pricing.warehouse-systems.svc.cluster.local:80"
+  # plain http behind the kind web gateway: the cart/session cookie is not
+  # Secure in the local cluster.
+  cookieSecure: "false"
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/storefront
+      pathType: PathPrefix
+  stripPath: true
+
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/storefront-bff
+
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

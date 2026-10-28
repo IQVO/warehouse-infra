@@ -173,6 +173,51 @@ jobs:
           path: customer-ordering
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/pricing
+          ref: develop
+          path: pricing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/product-content
+          ref: develop
+          path: product-content
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/product-discovery
+          ref: develop
+          path: product-discovery
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/shopping-cart
+          ref: develop
+          path: shopping-cart
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/checkout
+          ref: develop
+          path: checkout
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/customer-payments
+          ref: develop
+          path: customer-payments
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/payment-provider-simulator
+          ref: develop
+          path: payment-provider-simulator
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/storefront-bff
+          ref: develop
+          path: storefront-bff
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/storefront-web
+          ref: develop
+          path: storefront-web
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/delivery-promise
           ref: develop
           path: delivery-promise
@@ -417,6 +462,51 @@ jobs:
           path: customer-ordering
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/pricing
+          ref: develop
+          path: pricing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/product-content
+          ref: develop
+          path: product-content
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/product-discovery
+          ref: develop
+          path: product-discovery
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/shopping-cart
+          ref: develop
+          path: shopping-cart
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/checkout
+          ref: develop
+          path: checkout
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/customer-payments
+          ref: develop
+          path: customer-payments
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/payment-provider-simulator
+          ref: develop
+          path: payment-provider-simulator
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/storefront-bff
+          ref: develop
+          path: storefront-bff
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/storefront-web
+          ref: develop
+          path: storefront-web
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/delivery-promise
           ref: develop
           path: delivery-promise
@@ -597,6 +687,51 @@ jobs:
           repository: IQVO/customer-ordering
           ref: develop
           path: customer-ordering
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/pricing
+          ref: develop
+          path: pricing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/product-content
+          ref: develop
+          path: product-content
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/product-discovery
+          ref: develop
+          path: product-discovery
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/shopping-cart
+          ref: develop
+          path: shopping-cart
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/checkout
+          ref: develop
+          path: checkout
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/customer-payments
+          ref: develop
+          path: customer-payments
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/payment-provider-simulator
+          ref: develop
+          path: payment-provider-simulator
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/storefront-bff
+          ref: develop
+          path: storefront-bff
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/storefront-web
+          ref: develop
+          path: storefront-web
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: IQVO/delivery-promise

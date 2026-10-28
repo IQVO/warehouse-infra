@@ -1,0 +1,34 @@
+# product-discovery -- storefront domain search and discovery. Single api
+# Deployment: OLTP REST :8080 + outbox relay + three local-copy consumers
+# (offer-availability, product-content, pricing). The rebuild binary is a
+# one-shot backfill: an optional default-OFF Helm Job (docs/adr 0006), not a
+# long-running component, so it is not enabled here. Real Postgres and real
+# Kafka only; brokers/parentRefs/CORS/OTLP from _platform.yaml; image tag
+# from Terraform; CPU from kind-resources/. Migrations at boot over
+# MIGRATIONS_DATABASE_URL from the product-discovery-db Secret (ADR 0005).
+
+config:
+  # fixed, stable group ids (see pricing): all MANDATORY.
+  offerAvailabilityConsumerGroup: "product-discovery-offer-availability"
+  productContentConsumerGroup: "product-discovery-product-content"
+  pricingConsumerGroup: "product-discovery-pricing"
+database:
+  existingSecret: product-discovery-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/product-discovery
+      pathType: PathPrefix
+  stripPath: true
+
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/product-discovery
+
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

@@ -1,0 +1,27 @@
+# payment-provider-simulator -- simulates the estate's external payment
+# provider. Single api Deployment: REST :8080, Postgres, NO Kafka (no outbox,
+# no consumers). DATABASE_URL through PgBouncer from the
+# payment-provider-simulator-db Secret (role created by the provisioning Job,
+# ADR 0005); parentRefs/CORS/OTLP from _platform.yaml; image tag from
+# Terraform; CPU from kind-resources/.
+
+database:
+  existingSecret: payment-provider-simulator-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/payment-provider-simulator
+      pathType: PathPrefix
+  stripPath: true
+
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/payment-provider-simulator
+
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

@@ -222,6 +222,64 @@ CHARTS: dict[str, dict[str, str]] = {
     # brokers, and each consumer group / sibling-URL / (shipping-and-tracking)
     # crypto key it mandates gets the same dummy its own
     # charts/<ctx>/ci/default-values.yaml uses.
+    "../../checkout/charts/checkout": {
+        "mcp.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.shoppingCartUrl": "http://shopping-cart.example.invalid",
+        "config.deliveryPromiseUrl": "http://delivery-promise.example.invalid",
+        "config.pricingUrl": "http://pricing.example.invalid",
+        "config.customerPaymentsUrl": "http://customer-payments.example.invalid",
+        "config.customerOrderingUrl": "http://customer-ordering.example.invalid",
+    },
+    "../../customer-payments/charts/customer-payments": {
+        "mcp.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.paymentProviderUrl": "http://payment-provider.example.invalid",
+        "config.checkoutConsumerGroup": "customer-payments-checkout",
+        "config.orderSourcingConsumerGroup": "customer-payments-order-sourcing",
+        "config.shippingAndTrackingConsumerGroup": "customer-payments-shipping-and-tracking",
+    },
+    "../../pricing/charts/pricing": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.offerAvailabilityConsumerGroup": "pricing-offer-availability",
+    },
+    "../../product-content/charts/product-content": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.offerAvailabilityConsumerGroup": "product-content-offer-availability",
+    },
+    "../../product-discovery/charts/product-discovery": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.offerAvailabilityConsumerGroup": "product-discovery-offer-availability",
+        "config.productContentConsumerGroup": "product-discovery-product-content",
+        "config.pricingConsumerGroup": "product-discovery-pricing",
+    },
+    "../../shopping-cart/charts/shopping-cart": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "deliveryPromise.url": "http://delivery-promise.example.invalid:8080",
+        "config.offerAvailabilityConsumerGroup": "shopping-cart-offer-availability",
+        "config.pricingConsumerGroup": "shopping-cart-pricing",
+        "config.checkoutConsumerGroup": "shopping-cart-checkout",
+    },
+    "../../payment-provider-simulator/charts/payment-provider-simulator": {
+        "database.url": "postgres://u@example.invalid:5432/db",
+    },
+    "../../storefront-bff/charts/storefront-bff": {
+        "config.productDiscoveryUrl": "http://product-discovery.example.invalid",
+        "config.deliveryPromiseUrl": "http://delivery-promise.example.invalid",
+        "config.shoppingCartUrl": "http://shopping-cart.example.invalid",
+        "config.checkoutUrl": "http://checkout.example.invalid",
+        "config.customerOrderingUrl": "http://customer-ordering.example.invalid",
+        "config.pricingUrl": "http://pricing.example.invalid",
+    },
+    "../../storefront-web/charts/storefront-web": {
+        "config.bffUrl": "http://storefront-bff.example.invalid",
+    },
     "../../customer-ordering/charts/customer-ordering": {
         "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",

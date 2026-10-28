@@ -1,0 +1,37 @@
+# shopping-cart -- storefront domain carts. Single api Deployment: OLTP REST
+# :8080 + outbox relay + three local-copy consumers (offer-availability,
+# pricing, checkout); quotes delivery offers through delivery-promise over
+# REST. Real Postgres and real Kafka only; brokers/parentRefs/CORS/OTLP from
+# _platform.yaml; image tag from Terraform; CPU from kind-resources/.
+# Migrations at boot over MIGRATIONS_DATABASE_URL from the shopping-cart-db
+# Secret (ADR 0005).
+
+config:
+  # fixed, stable group ids (see pricing): all MANDATORY.
+  offerAvailabilityConsumerGroup: "shopping-cart-offer-availability"
+  pricingConsumerGroup: "shopping-cart-pricing"
+  checkoutConsumerGroup: "shopping-cart-checkout"
+
+# synchronous REST call into the sibling; MANDATORY.
+deliveryPromise:
+  url: "http://delivery-promise.warehouse-systems.svc.cluster.local:80"
+database:
+  existingSecret: shopping-cart-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/shopping-cart
+      pathType: PathPrefix
+  stripPath: true
+
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/shopping-cart
+
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

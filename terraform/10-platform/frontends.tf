@@ -118,6 +118,14 @@ locals {
 
   console_service_host = "${local.console_release_name}.${var.apps_namespace}.svc.cluster.local"
 
+  # The shopper storefront (storefront-web's SSR server) is served by the web
+  # gateway on its own HOST (storefront.localhost), never a path prefix: the
+  # console owns /, and an SSR app behind a prefix would need a build-time
+  # basename. Its Service carries "frontend" (helm-values fullnameOverride)
+  # like every other upstream the gateway is allowed to proxy to.
+  storefront_registered   = contains(keys(local.registry), "storefront-web")
+  storefront_service_host = "storefront-web-frontend.${var.apps_namespace}.svc.cluster.local"
+
   ecosystem_release_name = "ecosystem"
   ecosystem_service_host = "${local.ecosystem_release_name}.${var.apps_namespace}.svc.cluster.local"
 
@@ -159,11 +167,15 @@ locals {
     # here fails config parsing and the container never starts. Resolving
     # upstreams at REQUEST time (rather than once at boot) is what stops a
     # redeployed frontend pod 502-ing until the gateway itself restarts.
-    dns_resolver           = var.cluster_dns_ip
-    ecosystem_service_host = local.ecosystem_service_host
-    ecosystem_service_port = 80
-    console_service_host   = local.console_service_host
-    console_service_port   = 80
+    dns_resolver            = var.cluster_dns_ip
+    ecosystem_service_host  = local.ecosystem_service_host
+    ecosystem_service_port  = 80
+    console_service_host    = local.console_service_host
+    console_service_port    = 80
+    storefront_enabled      = local.storefront_registered
+    storefront_host         = "storefront.localhost"
+    storefront_service_host = local.storefront_service_host
+    storefront_service_port = 80
     remotes = [
       for name, fe in local.frontend_remotes : {
         context      = name
