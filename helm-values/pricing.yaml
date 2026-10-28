@@ -1,0 +1,35 @@
+# pricing -- storefront domain pricing and quotes (a domain-driven design
+# study, not associated with any company). Single api Deployment: OLTP REST
+# on :8080 plus, in the SAME process, the transactional-outbox relay and the
+# offer-availability local-copy consumer. Real Postgres and real Kafka only;
+# brokers, Gateway parentRefs, CORS and the OTLP endpoint come from
+# _platform.yaml; the image tag from Terraform; CPU from kind-resources/.
+# Startup runs golang-migrate over MIGRATIONS_DATABASE_URL (the direct DSN
+# Terraform puts in the pricing-db Secret); DATABASE_URL goes through
+# PgBouncer. The role and database are created by modules/application's
+# provisioning Job (ADR 0005) before the first sync.
+
+config:
+  # fixed, stable group id: a rescheduled pod resumes from its committed
+  # offsets. MANDATORY (the binary exits at boot without it).
+  offerAvailabilityConsumerGroup: "pricing-offer-availability"
+database:
+  existingSecret: pricing-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/pricing
+      pathType: PathPrefix
+  stripPath: true
+
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/pricing
+
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

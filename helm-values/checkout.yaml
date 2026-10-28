@@ -1,0 +1,33 @@
+# checkout -- storefront domain order placement. api Deployment: OLTP REST
+# :8080 + transactional-outbox relay (Postgres+Kafka; NO consumers) plus a
+# read-only MCP server (cmd/mcp) whose components stay default-OFF here --
+# the ops-agent wiring that would consume them is a separate follow-up.
+# The five sibling URLs are MANDATORY (the binary exits at boot naming every
+# missing one). Brokers/parentRefs/CORS/OTLP from _platform.yaml; image tag
+# from Terraform; CPU from kind-resources/. Migrations at boot over
+# MIGRATIONS_DATABASE_URL from the checkout-db Secret (ADR 0005).
+
+config:
+  shoppingCartUrl: "http://shopping-cart.warehouse-systems.svc.cluster.local:80"
+  deliveryPromiseUrl: "http://delivery-promise.warehouse-systems.svc.cluster.local:80"
+  pricingUrl: "http://pricing.warehouse-systems.svc.cluster.local:80"
+  customerPaymentsUrl: "http://customer-payments.warehouse-systems.svc.cluster.local:80"
+  customerOrderingUrl: "http://customer-ordering.warehouse-systems.svc.cluster.local:80"
+
+database:
+  existingSecret: checkout-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/checkout
+      pathType: PathPrefix
+  stripPath: true
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/checkout
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

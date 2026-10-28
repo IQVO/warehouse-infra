@@ -1,0 +1,5 @@
+# kind CPU-request overlay for customer-payments (see customer-ordering for the rationale).
+# Only requests.cpu is lowered; limits and memory keep the chart defaults.
+resources:
+  requests:
+    cpu: 25m

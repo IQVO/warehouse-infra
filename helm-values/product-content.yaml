@@ -1,0 +1,31 @@
+# product-content -- storefront domain catalog content. Single api Deployment:
+# OLTP REST :8080 + outbox relay + the offer-availability consumer. Real
+# Postgres and real Kafka only; brokers/parentRefs/CORS/OTLP from
+# _platform.yaml; image tag from Terraform; CPU from kind-resources/.
+# Migrations run at boot over MIGRATIONS_DATABASE_URL from the
+# product-content-db Secret (role created by the provisioning Job, ADR 0005).
+
+config:
+  # fixed, stable group id: a rescheduled pod resumes from its committed
+  # offsets. MANDATORY (the binary exits at boot without it).
+  offerAvailabilityConsumerGroup: "product-content-offer-availability"
+database:
+  existingSecret: product-content-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/product-content
+      pathType: PathPrefix
+  stripPath: true
+
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/product-content
+
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

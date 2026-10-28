@@ -1,0 +1,7 @@
+# kind CPU-request overlay for product-content (see customer-ordering for the rationale:
+# one kind worker, chart defaults request 50-100m per container, real use is a
+# fraction of that). Only requests.cpu is lowered; limits and memory keep the
+# chart defaults. The Application's last value file (ADR 0002 D2).
+resources:
+  requests:
+    cpu: 25m
