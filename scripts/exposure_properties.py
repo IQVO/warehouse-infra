@@ -21,7 +21,15 @@ def nginx_policy_errors(config: str) -> list[str]:
     if re.search(r"proxy_pass[^;\n]*kong", body, re.IGNORECASE):
         errors.append("web gateway proxies to Kong")
     upstreams = re.findall(r"set\s+\$upstream_[^\s]+\s+([^;]+)", body)
-    invalid = [value for value in upstreams if "frontend" not in value and "warehouse-console" not in value]
+    # The named exceptions are the two site frontends whose Service is not
+    # "<name>-frontend": the console shell and the EventCatalog static site.
+    invalid = [
+        value
+        for value in upstreams
+        if "frontend" not in value
+        and "warehouse-console" not in value
+        and "ecosystem." not in value
+    ]
     if invalid:
         errors.append(f"web gateway has non-frontend upstreams: {invalid}")
     return errors
