@@ -31,6 +31,9 @@
 #   frontend_remote  the module-federation remote name of the repo's web/
 #                 remote; its presence builds the frontend image and adds the
 #                 web gateway route.
+#   hash_globs    overrides the application module's image-hash globs
+#                 (default: Go sources + migrations); Node apps list their
+#                 own runtime sources here.
 #   site          true: a static site built from the repo root (console,
 #                 EventCatalog); its image tag goes to image.tag.
 # ---------------------------------------------------------------------------
@@ -301,6 +304,9 @@ applications:
   storefront-web:
     kind: service
     repo_owner: IQVO
+    # Node SSR app (COPY . . in its Dockerfile): hash the sources the image
+    # actually runs, not the module's Go defaults.
+    hash_globs: ["app/**", "server/**", "package.json", "package-lock.json", "react-router.config.ts", "vite.config.ts", "tsconfig.json"]
 
   task-interleaving:
     kind: service

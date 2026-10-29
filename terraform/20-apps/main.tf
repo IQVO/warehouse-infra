@@ -61,7 +61,11 @@ locals {
     path     = "charts/${local.app_name}"
   }
 
-  image = try(local.a.build_image, true) ? {} : null
+  # hash_globs override from the registry (apps.yaml): Node apps like
+  # storefront-web hash their app sources instead of the Go defaults.
+  image = try(local.a.build_image, true) ? (
+    try(local.a.hash_globs, null) != null ? { hash_globs = local.a.hash_globs } : {}
+  ) : null
 
   frontend = try(local.a.site, false) ? (
     var.deploy_frontends ? {
