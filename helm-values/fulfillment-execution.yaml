@@ -91,6 +91,13 @@ extraEnv:
     value: http
   - name: FACILITY_LAYOUT_BASE_URL
     value: http://facility-layout.warehouse-systems.svc.cluster.local:80
+  # Work Planning delegation over A2A (fulfillment-execution ADR-0058):
+  # POST /paths/{pathId}/work-requests asks the wes-work-planning agent
+  # (its own cmd/a2a, chart a2a.*, Kong /api/a2a/wes-work-planning) to admit
+  # the next unit. The card is discovered from this URL on first use; the
+  # authoritative fact returns as WorkReleased on Kafka.
+  - name: WORK_PLANNING_A2A_URL
+    value: http://wes-work-planning-a2a.warehouse-systems.svc.cluster.local:8093/
   # InterleavingHintIssued from task-interleaving (warehouse.task-interleaving.events)
   # into a local per-station hint copy that claimNext uses only as a tie-break
   # inside one priority band (fulfillment-execution ADR 0051). Advisory and
