@@ -1,5 +1,5 @@
 {
-  "_comment": "Input of scripts/seed-retail-network.py: the minimum retail-network topology, vendor and catalogue needed to quote and source an order from ONE fulfillment node (the simulation site). Stand-in for network-fulfillment ADR 0027 (the fleet's own profile and inventory declarations will bump the profile revision and the quantities later). Every id here is a natural key: the network generates its own ids. SKUs are real SKUs of e2e-tests fixtures/products/fulfilment-products.json (dimensions copied from it); titles are generic on purpose.",
+  "_comment": "Input of scripts/seed-retail-network.py: the minimum retail-network topology, vendor and catalogue needed to quote and source storefront orders from ONE fulfillment node (the simulation site). Stand-in for network-fulfillment ADR 0027 (the fleet's own profile and inventory declarations bump the profile revision and replace the quantities). Every id here is a natural key: the network generates its own ids. SKUs are real SKUs of e2e-tests fixtures/products/fulfilment-products.json (dimensions, weight and fragility copied from it). The catalogue TITLE is the natural key and the name a shopper sees in the storefront: the first five items keep their original SKU-prefixed titles (live identities on the network; renaming one would create a second item), every later item carries a neutral shopper-facing title with brand and model names removed. The storefront merchandising of these SKUs (departments, prices, content) lives in e2e-tests fixtures/storefront/catalogue.json.",
   "vendor": {
     "vendorId": "V-WS",
     "name": "Warehouse Systems simulation fleet",
@@ -99,6 +99,573 @@
       "lengthMm": 68, "widthMm": 68, "heightMm": 20, "weightG": 50,
       "hazmat": false, "fragile": false,
       "availableQty": 200
+    },
+    {
+      "sku": "ABO-B07GWVHX45",
+      "title": "Plastic Food Storage Container Set, 6 Pieces",
+      "lengthMm": 283, "widthMm": 205, "heightMm": 165, "weightG": 2260,
+      "hazmat": false, "fragile": false,
+      "availableQty": 13
+    },
+    {
+      "sku": "ABO-B085T18FGM",
+      "title": "18-Piece Stoneware Dinnerware Set, Modern Beams (Renewed)",
+      "lengthMm": 189, "widthMm": 189, "heightMm": 198, "weightG": 8006,
+      "hazmat": false, "fragile": true,
+      "availableQty": 21
+    },
+    {
+      "sku": "ABO-B084ZGRDM5",
+      "title": "5-Cup Coffee Maker with Reusable Filter, Black and Stainless Steel",
+      "lengthMm": 200, "widthMm": 150, "heightMm": 246, "weightG": 848,
+      "hazmat": false, "fragile": false,
+      "availableQty": 17
+    },
+    {
+      "sku": "WANDS-3020",
+      "title": "8-Inch Square Stoneware Baker",
+      "lengthMm": 203, "widthMm": 203, "heightMm": 47, "weightG": 1179,
+      "hazmat": false, "fragile": false,
+      "availableQty": 21
+    },
+    {
+      "sku": "WANDS-36444",
+      "title": "Non-Stick Metal Loaf Pan",
+      "lengthMm": 149, "widthMm": 16, "heightMm": 286, "weightG": 363,
+      "hazmat": false, "fragile": false,
+      "availableQty": 50
+    },
+    {
+      "sku": "WANDS-22323",
+      "title": "Stainless Steel Strainer Set, 3 Pieces",
+      "lengthMm": 381, "widthMm": 102, "heightMm": 76, "weightG": 336,
+      "hazmat": false, "fragile": false,
+      "availableQty": 13
+    },
+    {
+      "sku": "WANDS-35821",
+      "title": "Double Cutter Pasta Maker Attachment for Linguine and Lasagna",
+      "lengthMm": 109, "widthMm": 175, "heightMm": 51, "weightG": 816,
+      "hazmat": false, "fragile": false,
+      "availableQty": 21
+    },
+    {
+      "sku": "ABO-B075HWDSV2",
+      "title": "Medallion Square Stoneware Coaster Set, 4 x 4 Inch, Blue, 4 Pieces",
+      "lengthMm": 102, "widthMm": 13, "heightMm": 102, "weightG": 231,
+      "hazmat": false, "fragile": false,
+      "availableQty": 45
+    },
+    {
+      "sku": "ABO-B07J596C1M",
+      "title": "Glass Coffee Mug Set, 275 ml, Set of 2",
+      "lengthMm": 79, "widthMm": 79, "heightMm": 114, "weightG": 313,
+      "hazmat": false, "fragile": false,
+      "availableQty": 23
+    },
+    {
+      "sku": "ABO-B0744KF1XY",
+      "title": "Unscented Wax Tealight Candles, Set of 50",
+      "lengthMm": 192, "widthMm": 27, "heightMm": 192, "weightG": 500,
+      "hazmat": false, "fragile": false,
+      "availableQty": 23
+    },
+    {
+      "sku": "WANDS-20923",
+      "title": "Honey Bee Unscented Jar Candle",
+      "lengthMm": 76, "widthMm": 76, "heightMm": 102, "weightG": 454,
+      "hazmat": false, "fragile": false,
+      "availableQty": 43
+    },
+    {
+      "sku": "ABO-B08GKXQ7MS",
+      "title": "12-Inch Silent Wall Clock, Teak Tiles, Black Frame",
+      "lengthMm": 305, "widthMm": 305, "heightMm": 50, "weightG": 850,
+      "hazmat": false, "fragile": false,
+      "availableQty": 18
+    },
+    {
+      "sku": "WANDS-29166",
+      "title": "Artificial Orchid Floral Arrangement in Pot",
+      "lengthMm": 279, "widthMm": 279, "heightMm": 508, "weightG": 907,
+      "hazmat": false, "fragile": false,
+      "availableQty": 14
+    },
+    {
+      "sku": "ABO-B07B8VJBCL",
+      "title": "Modern Ombre Stoneware Flower Vase, 6 Inch",
+      "lengthMm": 108, "widthMm": 108, "heightMm": 152, "weightG": 426,
+      "hazmat": false, "fragile": true,
+      "availableQty": 23
+    },
+    {
+      "sku": "WANDS-18200",
+      "title": "Empire Lamp Shade, 8.5 x 10 Inch, Black and Gold",
+      "lengthMm": 254, "widthMm": 254, "heightMm": 216, "weightG": 272,
+      "hazmat": false, "fragile": false,
+      "availableQty": 13
+    },
+    {
+      "sku": "WANDS-12530",
+      "title": "7-Hook Grid Hanging Organizer",
+      "lengthMm": 76, "widthMm": 432, "heightMm": 102, "weightG": 907,
+      "hazmat": false, "fragile": false,
+      "availableQty": 10
+    },
+    {
+      "sku": "WANDS-12528",
+      "title": "Grid Sliding Hanging Organizer",
+      "lengthMm": 356, "widthMm": 38, "heightMm": 51, "weightG": 907,
+      "hazmat": false, "fragile": false,
+      "availableQty": 16
+    },
+    {
+      "sku": "WANDS-19784",
+      "title": "Jewelry Organizer Stand",
+      "lengthMm": 100, "widthMm": 220, "heightMm": 429, "weightG": 419,
+      "hazmat": false, "fragile": false,
+      "availableQty": 21
+    },
+    {
+      "sku": "WANDS-21484",
+      "title": "Metal Wire Pantry Baskets, 4-Pack",
+      "lengthMm": 221, "widthMm": 279, "heightMm": 119, "weightG": 1406,
+      "hazmat": false, "fragile": false,
+      "availableQty": 12
+    },
+    {
+      "sku": "WANDS-31810",
+      "title": "Magnetic Mesh Wire Basket",
+      "lengthMm": 127, "widthMm": 279, "heightMm": 140, "weightG": 454,
+      "hazmat": false, "fragile": false,
+      "availableQty": 16
+    },
+    {
+      "sku": "WANDS-36647",
+      "title": "Industrial Dual Gear Pen Holder",
+      "lengthMm": 127, "widthMm": 127, "heightMm": 114, "weightG": 454,
+      "hazmat": false, "fragile": false,
+      "availableQty": 18
+    },
+    {
+      "sku": "WANDS-33343",
+      "title": "Pineapple Lotion Dispenser",
+      "lengthMm": 105, "widthMm": 105, "heightMm": 220, "weightG": 290,
+      "hazmat": false, "fragile": false,
+      "availableQty": 27
+    },
+    {
+      "sku": "WANDS-39584",
+      "title": "Bathroom Amenity Accessory Tray",
+      "lengthMm": 184, "widthMm": 292, "heightMm": 6, "weightG": 340,
+      "hazmat": false, "fragile": false,
+      "availableQty": 28
+    },
+    {
+      "sku": "WANDS-26728",
+      "title": "Countertop Toothbrush Holder",
+      "lengthMm": 76, "widthMm": 114, "heightMm": 114, "weightG": 454,
+      "hazmat": false, "fragile": false,
+      "availableQty": 37
+    },
+    {
+      "sku": "WANDS-21521",
+      "title": "Vintage Riser-Mount Soap Dish",
+      "lengthMm": 102, "widthMm": 178, "heightMm": 51, "weightG": 503,
+      "hazmat": false, "fragile": false,
+      "availableQty": 37
+    },
+    {
+      "sku": "WANDS-1050",
+      "title": "Stainless Steel Shower Curtain Hooks",
+      "lengthMm": 5, "widthMm": 38, "heightMm": 74, "weightG": 100,
+      "hazmat": false, "fragile": false,
+      "availableQty": 28
+    },
+    {
+      "sku": "WANDS-26614",
+      "title": "Double Wall-Mounted Robe Hook",
+      "lengthMm": 96, "widthMm": 83, "heightMm": 80, "weightG": 272,
+      "hazmat": false, "fragile": false,
+      "availableQty": 24
+    },
+    {
+      "sku": "ABO-B079X87CY1",
+      "title": "Sticky Notes, 1 3/8 x 1 7/8 Inch, Assorted Colors, 18-Pack",
+      "lengthMm": 35, "widthMm": 48, "heightMm": 60, "weightG": 252,
+      "hazmat": false, "fragile": false,
+      "availableQty": 32
+    },
+    {
+      "sku": "ABO-B08823VD1M",
+      "title": "Retractable Gel Pens with Cushion Grip, Medium Point, Blue, 12 Count",
+      "lengthMm": 147, "widthMm": 10, "heightMm": 15, "weightG": 10,
+      "hazmat": false, "fragile": false,
+      "availableQty": 28
+    },
+    {
+      "sku": "ABO-B07X5CQ4GQ",
+      "title": "Two-Tone File Folders, Letter Size, 1/3 Cut, 36-Pack",
+      "lengthMm": 314, "widthMm": 259, "heightMm": 19, "weightG": 953,
+      "hazmat": false, "fragile": false,
+      "availableQty": 39
+    },
+    {
+      "sku": "ABO-B07SQYV4BT",
+      "title": "1/2-Inch Round Ring View Binders, Green, 6-Pack",
+      "lengthMm": 257, "widthMm": 32, "heightMm": 295, "weightG": 345,
+      "hazmat": false, "fragile": false,
+      "availableQty": 16
+    },
+    {
+      "sku": "ABO-B0739X3GPT",
+      "title": "Correction Tape, 10-Pack",
+      "lengthMm": 175, "widthMm": 43, "heightMm": 94, "weightG": 14,
+      "hazmat": false, "fragile": false,
+      "availableQty": 20
+    },
+    {
+      "sku": "ABO-B073P1YLMJ",
+      "title": "Gold Glitter Dry Erase Board, 16 x 24 Inch",
+      "lengthMm": 406, "widthMm": 38, "heightMm": 610, "weightG": 907,
+      "hazmat": false, "fragile": false,
+      "availableQty": 13
+    },
+    {
+      "sku": "ABO-B07QLKL97P",
+      "title": "Narrow Ruled Writing Pads, 5 x 8 Inch, 12-Pack (Renewed)",
+      "lengthMm": 203, "widthMm": 127, "heightMm": 68, "weightG": 1111,
+      "hazmat": false, "fragile": false,
+      "availableQty": 64
+    },
+    {
+      "sku": "ABO-B07G28NF3L",
+      "title": "Wireless Trackball Mouse",
+      "lengthMm": 135, "widthMm": 100, "heightMm": 47, "weightG": 118,
+      "hazmat": false, "fragile": false,
+      "availableQty": 32
+    },
+    {
+      "sku": "ABO-B08D6ZBZTB",
+      "title": "Slim 4-Port USB 3.0 Hub with AC Adapter",
+      "lengthMm": 105, "widthMm": 33, "heightMm": 16, "weightG": 245,
+      "hazmat": false, "fragile": false,
+      "availableQty": 62
+    },
+    {
+      "sku": "ABO-B004HYFOZQ",
+      "title": "Single-Fan Laptop Cooling Stand, up to 17 Inch",
+      "lengthMm": 430, "widthMm": 340, "heightMm": 13, "weightG": 558,
+      "hazmat": false, "fragile": false,
+      "availableQty": 22
+    },
+    {
+      "sku": "ABO-B003M0NT1M",
+      "title": "USB 2.0 Portable External DVD Drive",
+      "lengthMm": 146, "widthMm": 140, "heightMm": 19, "weightG": 308,
+      "hazmat": false, "fragile": false,
+      "availableQty": 65
+    },
+    {
+      "sku": "ABO-B00NH13UFQ",
+      "title": "USB 3.0 Extension Cable, A-Male to A-Female, 1 m",
+      "lengthMm": 1000, "widthMm": 6, "heightMm": 6, "weightG": 61,
+      "hazmat": false, "fragile": false,
+      "availableQty": 31
+    },
+    {
+      "sku": "ABO-B07WMJ276V",
+      "title": "3-in-1 Phone Charging Cable, 3 Feet, Black",
+      "lengthMm": 122, "widthMm": 66, "heightMm": 15, "weightG": 23,
+      "hazmat": false, "fragile": false,
+      "availableQty": 45
+    },
+    {
+      "sku": "ABO-B07KSB1MLX",
+      "title": "Digital Optical and Coax to Analog RCA Audio Converter",
+      "lengthMm": 64, "widthMm": 41, "heightMm": 26, "weightG": 104,
+      "hazmat": false, "fragile": false,
+      "availableQty": 19
+    },
+    {
+      "sku": "ABO-B00DUGZFA6",
+      "title": "11.6-Inch Laptop and Tablet Shoulder Bag, Black",
+      "lengthMm": 320, "widthMm": 48, "heightMm": 244, "weightG": 349,
+      "hazmat": false, "fragile": false,
+      "availableQty": 20
+    },
+    {
+      "sku": "ABO-B081DDZ21V",
+      "title": "9-Inch Magnetic Torpedo Level",
+      "lengthMm": 229, "widthMm": 43, "heightMm": 18, "weightG": 77,
+      "hazmat": false, "fragile": false,
+      "availableQty": 20
+    },
+    {
+      "sku": "ABO-B07TWFDN96",
+      "title": "8-Inch High-Leverage Diagonal Cutters, Angled Head",
+      "lengthMm": 203, "widthMm": 51, "heightMm": 28, "weightG": 308,
+      "hazmat": false, "fragile": false,
+      "availableQty": 21
+    },
+    {
+      "sku": "ABO-B07GDQLQQZ",
+      "title": "Privacy Door Knob with Lock, Matte Black",
+      "lengthMm": 166, "widthMm": 54, "heightMm": 65, "weightG": 435,
+      "hazmat": false, "fragile": false,
+      "availableQty": 30
+    },
+    {
+      "sku": "WANDS-6775",
+      "title": "Mid-Century Modern Privacy Door Lever",
+      "lengthMm": 114, "widthMm": 146, "heightMm": 67, "weightG": 578,
+      "hazmat": false, "fragile": false,
+      "availableQty": 29
+    },
+    {
+      "sku": "ABO-B07T2C3QNZ",
+      "title": "4-Digit Combination Padlock, Black, 2-Pack",
+      "lengthMm": 90, "widthMm": 98, "heightMm": 15, "weightG": 216,
+      "hazmat": false, "fragile": false,
+      "availableQty": 30
+    },
+    {
+      "sku": "WANDS-18537",
+      "title": "Photoelectric Smoke and Fire Alarm",
+      "lengthMm": 30, "widthMm": 133, "heightMm": 133, "weightG": 227,
+      "hazmat": false, "fragile": false,
+      "availableQty": 21
+    },
+    {
+      "sku": "ABO-B07ZL1TDV2",
+      "title": "Adjustable 48-Inch Bungee Cords, Yellow and Black, 2-Pack",
+      "lengthMm": 1219, "widthMm": 25, "heightMm": 22, "weightG": 100,
+      "hazmat": false, "fragile": false,
+      "availableQty": 62
+    },
+    {
+      "sku": "WANDS-36733",
+      "title": "Indoor and Outdoor Thermometer with Remote Sensor",
+      "lengthMm": 38, "widthMm": 58, "heightMm": 92, "weightG": 91,
+      "hazmat": false, "fragile": false,
+      "availableQty": 50
+    },
+    {
+      "sku": "WANDS-36755",
+      "title": "3-Channel Deluxe Weather Forecaster",
+      "lengthMm": 260, "widthMm": 90, "heightMm": 195, "weightG": 440,
+      "hazmat": false, "fragile": false,
+      "availableQty": 22
+    },
+    {
+      "sku": "WANDS-26783",
+      "title": "Tree House Fairy Garden Accent",
+      "lengthMm": 216, "widthMm": 229, "heightMm": 343, "weightG": 1814,
+      "hazmat": false, "fragile": false,
+      "availableQty": 13
+    },
+    {
+      "sku": "WANDS-17961",
+      "title": "Sitting Buddha Garden Statue",
+      "lengthMm": 222, "widthMm": 314, "heightMm": 400, "weightG": 1361,
+      "hazmat": false, "fragile": false,
+      "availableQty": 16
+    },
+    {
+      "sku": "WANDS-28748",
+      "title": "Metal Greenhouse Shelving",
+      "lengthMm": 201, "widthMm": 274, "heightMm": 114, "weightG": 7530,
+      "hazmat": false, "fragile": false,
+      "availableQty": 12
+    },
+    {
+      "sku": "WANDS-15779",
+      "title": "Brass-Finish Door Mail Slot, 11.5 x 2.8 Inch",
+      "lengthMm": 20, "widthMm": 292, "heightMm": 71, "weightG": 454,
+      "hazmat": false, "fragile": false,
+      "availableQty": 27
+    },
+    {
+      "sku": "ABO-B017C8O684",
+      "title": "Yoga and Exercise Mat with Carrying Strap, 1/4 Inch, Purple",
+      "lengthMm": 114, "widthMm": 114, "heightMm": 610, "weightG": 998,
+      "hazmat": false, "fragile": false,
+      "availableQty": 21
+    },
+    {
+      "sku": "ABO-B01FN7XAYW",
+      "title": "Resistance and Pull-Up Band, 1/2 Inch",
+      "lengthMm": 1040, "widthMm": 13, "heightMm": 5, "weightG": 136,
+      "hazmat": false, "fragile": false,
+      "availableQty": 63
+    },
+    {
+      "sku": "ABO-B07PBX6XV3",
+      "title": "Hip Resistance Band, Medium",
+      "lengthMm": 381, "widthMm": 80, "heightMm": 5, "weightG": 145,
+      "hazmat": false, "fragile": false,
+      "availableQty": 16
+    },
+    {
+      "sku": "ABO-B07BH1J713",
+      "title": "High-Density Round Foam Roller, 18 Inch, Red Speckled",
+      "lengthMm": 457, "widthMm": 152, "heightMm": 152, "weightG": 191,
+      "hazmat": false, "fragile": false,
+      "availableQty": 12
+    },
+    {
+      "sku": "ABO-B07L3X92BS",
+      "title": "Adjustable Hand Grip Strengthener, Green, 2-Pack",
+      "lengthMm": 240, "widthMm": 150, "heightMm": 22, "weightG": 281,
+      "hazmat": false, "fragile": false,
+      "availableQty": 12
+    },
+    {
+      "sku": "ABO-B0747KN9FQ",
+      "title": "Cast Iron Hex Dumbbell, 40 lb",
+      "lengthMm": 340, "widthMm": 127, "heightMm": 147, "weightG": 18144,
+      "hazmat": false, "fragile": false,
+      "availableQty": 11
+    },
+    {
+      "sku": "WANDS-27454",
+      "title": "Stainless Steel Elevated Pet Feeder",
+      "lengthMm": 167, "widthMm": 337, "heightMm": 70, "weightG": 145,
+      "hazmat": false, "fragile": false,
+      "availableQty": 18
+    },
+    {
+      "sku": "WANDS-27448",
+      "title": "Non-Slip Leak-Proof Pet Bowl",
+      "lengthMm": 192, "widthMm": 367, "heightMm": 70, "weightG": 408,
+      "hazmat": false, "fragile": false,
+      "availableQty": 23
+    },
+    {
+      "sku": "WANDS-6025",
+      "title": "Gravity Pet Feeder and Water Dispenser, Gray",
+      "lengthMm": 310, "widthMm": 320, "heightMm": 310, "weightG": 318,
+      "hazmat": false, "fragile": false,
+      "availableQty": 10
+    },
+    {
+      "sku": "WANDS-30693",
+      "title": "Round Roof Bird Cage Starter Kit",
+      "lengthMm": 381, "widthMm": 451, "heightMm": 178, "weightG": 2268,
+      "hazmat": false, "fragile": false,
+      "availableQty": 16
+    },
+    {
+      "sku": "WANDS-30322",
+      "title": "Small Wooden Bird Playground Activity Center",
+      "lengthMm": 229, "widthMm": 229, "heightMm": 229, "weightG": 689,
+      "hazmat": false, "fragile": false,
+      "availableQty": 12
+    },
+    {
+      "sku": "ABO-B00UL18HT4",
+      "title": "14k Gold-Filled Heart Locket Necklace, 18 Inch",
+      "lengthMm": 66, "widthMm": 64, "heightMm": 5, "weightG": 9,
+      "hazmat": false, "fragile": false,
+      "availableQty": 101
+    },
+    {
+      "sku": "ABO-B003YDYYFM",
+      "title": "Sterling Silver and 14k Rose Gold Diamond Elephant Pendant Necklace",
+      "lengthMm": 117, "widthMm": 99, "heightMm": 5, "weightG": 9,
+      "hazmat": false, "fragile": false,
+      "availableQty": 45
+    },
+    {
+      "sku": "ABO-B00E1GYAOQ",
+      "title": "Yellow Gold-Plated Stainless Steel Tube Hoop Earrings, 60 mm",
+      "lengthMm": 127, "widthMm": 127, "heightMm": 18, "weightG": 10,
+      "hazmat": false, "fragile": false,
+      "availableQty": 52
+    },
+    {
+      "sku": "ABO-B00D87M8YS",
+      "title": "Tri-Tone Bangle Bracelets, 7.5 Inch, Set of 3",
+      "lengthMm": 114, "widthMm": 76, "heightMm": 5, "weightG": 9,
+      "hazmat": false, "fragile": false,
+      "availableQty": 25
+    },
+    {
+      "sku": "ABO-B0753LWVWH",
+      "title": "Sterling Silver Created Blue Sapphire Three-Stone Halo Ring",
+      "lengthMm": 25, "widthMm": 13, "heightMm": 13, "weightG": 6,
+      "hazmat": false, "fragile": false,
+      "availableQty": 37
+    },
+    {
+      "sku": "ABO-B081HN2KC9",
+      "title": "Women's Shoulder Handbag, Black",
+      "lengthMm": 460, "widthMm": 70, "heightMm": 300, "weightG": 500,
+      "hazmat": false, "fragile": false,
+      "availableQty": 12
+    },
+    {
+      "sku": "ABO-B07X9SSSGJ",
+      "title": "Women's Top-Handle Handbag, Grey",
+      "lengthMm": 310, "widthMm": 100, "heightMm": 240, "weightG": 400,
+      "hazmat": false, "fragile": false,
+      "availableQty": 23
+    },
+    {
+      "sku": "ABO-B07XDZ8XBD",
+      "title": "Women's Sling Bag, Cream",
+      "lengthMm": 290, "widthMm": 100, "heightMm": 210, "weightG": 300,
+      "hazmat": false, "fragile": false,
+      "availableQty": 13
+    },
+    {
+      "sku": "ABO-B08CKRTTZ8",
+      "title": "Men's Flip-Flops, Grey and Red, Pack of 2",
+      "lengthMm": 290, "widthMm": 200, "heightMm": 40, "weightG": 469,
+      "hazmat": false, "fragile": false,
+      "availableQty": 25
+    },
+    {
+      "sku": "ABO-B014VBGKFW",
+      "title": "4-Piece Packing Cube Set, Medium, Black",
+      "lengthMm": 434, "widthMm": 318, "heightMm": 56, "weightG": 431,
+      "hazmat": false, "fragile": false,
+      "availableQty": 23
+    },
+    {
+      "sku": "ABO-B014VBINRA",
+      "title": "4-Piece Packing Cube Set, Slim, Green",
+      "lengthMm": 378, "widthMm": 190, "heightMm": 56, "weightG": 295,
+      "hazmat": false, "fragile": false,
+      "availableQty": 20
+    },
+    {
+      "sku": "ABO-B07FNJXDKT",
+      "title": "20-Inch Expandable Carry-On Spinner Suitcase with TSA Lock, Red",
+      "lengthMm": 375, "widthMm": 250, "heightMm": 555, "weightG": 2504,
+      "hazmat": false, "fragile": false,
+      "availableQty": 12
+    },
+    {
+      "sku": "ABO-B07RVY85TV",
+      "title": "Premium Garment Bag, Black",
+      "lengthMm": 451, "widthMm": 51, "heightMm": 572, "weightG": 1089,
+      "hazmat": false, "fragile": false,
+      "availableQty": 11
+    },
+    {
+      "sku": "ABO-B07FF2PS43",
+      "title": "Ergonomic Backpack, Black",
+      "lengthMm": 216, "widthMm": 298, "heightMm": 444, "weightG": 1365,
+      "hazmat": false, "fragile": false,
+      "availableQty": 15
+    },
+    {
+      "sku": "ABO-B07BHFTJGM",
+      "title": "Automatic Open Travel Umbrella with Wind Vent, Green",
+      "lengthMm": 284, "widthMm": 51, "heightMm": 64, "weightG": 399,
+      "hazmat": false, "fragile": false,
+      "availableQty": 12
     }
   ]
 }
