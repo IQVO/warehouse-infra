@@ -28,6 +28,13 @@ cluster.
 
 ---
 
+## Disclaimer
+
+This project is a domain-driven design study. It is not associated with,
+endorsed by or affiliated with any company, and it uses no company's code,
+data, logos or trademarks. All names, figures and examples are illustrative
+or synthetic.
+
 ## Architecture
 
 ```
@@ -1297,3 +1304,31 @@ same source hash, computed in `terraform/modules/application`), so a
 rebuilt image always carries a new tag and ArgoCD rolls the pods. They use
 `pullPolicy: IfNotPresent`, because they exist only in the kind nodes'
 containerd store and must never be pulled from Docker Hub.
+
+## Documentation
+
+The infrastructure is documented in warehouse-docs' fleet-operations and
+architecture pages (<https://iqvo.github.io/warehouse-docs/>); the per-context
+deployment registry is `terraform/apps.yaml` and the ADRs for every
+infra-level decision live in docs/adr/ in this repo.
+
+## Local development / quality gate
+
+`make check` runs every infra gate (terraform fmt/validate via scripts/tf.sh,
+helm-lint over the fleet charts, chart-selector-check, alert-rules-check,
+guide-lint); `make check-fast` is the pre-push subset.
+
+## Tests
+
+CI jobs: `acceptance-units` (unit sensors), `terraform` (plan-time checks),
+`observability-as-code` (dashboards and alert rules), `shellcheck`,
+`seed-scripts`, `helm-lint`, `chart-selector-check`, `guide-lint`.
+
+## Architecture Decision Records
+
+The ADR index is docs/adr/ — 9 decisions (record-architecture-decisions,
+application delivery boundary, per-application terraform state, and the rest).
+
+## License
+
+MIT — see [LICENSE](LICENSE).

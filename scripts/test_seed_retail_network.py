@@ -32,6 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_FILE = os.path.join(REPO_ROOT, "scripts", "data", "retail-network-seed.json")
+LEGACY_SKU_TITLED = ["ABO-B000B5KPG8", "ABO-B000G0F3CY", "ABO-B000IK09WG", "ABO-B000SLW522", "ABO-B000UGZD9M"]
 NOW = "2026-10-24T16:00:00Z"        # Saturday 11:00 in America/Chicago (CDT, UTC-5)
 
 
@@ -408,15 +409,35 @@ def network():
         srv.server_close()
 
 
+def _behaviour_data_file():
+    """The shipped data file cut down to its first five catalogue items.
+
+    The behaviour tests below pin counts, listing ids and dictionary text for a
+    small catalogue; the shipped catalogue grows with the storefront, so they
+    run on this fixed cut and only the shipped-file tests read DATA_FILE whole.
+    """
+    with open(DATA_FILE, encoding="utf-8") as src:
+        cfg = json.load(src)
+    cfg["catalog"] = cfg["catalog"][:5]
+    f = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+    json.dump(cfg, f)
+    f.close()
+    return f.name
+
+
+BEHAVIOUR_DATA = _behaviour_data_file()
+
+
 def run(base, *extra, now=NOW):
     out, err = io.StringIO(), io.StringIO()
+    data = [] if "--data" in extra else ["--data", BEHAVIOUR_DATA]
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        code = SEED.main(["--base-url", base, "--settle-seconds", "0", "--tx-poll-seconds", "0", "--now", now, *extra])
+        code = SEED.main(["--base-url", base, "--settle-seconds", "0", "--tx-poll-seconds", "0", "--now", now, *data, *extra])
     return code, out.getvalue(), err.getvalue()
 
 
 def data_file(mutate):
-    with open(DATA_FILE, encoding="utf-8") as src:
+    with open(BEHAVIOUR_DATA, encoding="utf-8") as src:
         cfg = json.load(src)
     mutate(cfg)
     f = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
@@ -452,6 +473,18 @@ class SeedTests(unittest.TestCase):
             self.assertEqual(fake.writes(), [], "a second run sends no write at all")
             self.assertIn("0 created, 0 updated", out)
             self.assertNotIn("FAILED", out)
+
+    def test_the_whole_shipped_catalogue_seeds_and_a_second_run_writes_nothing(self):
+        cfg = SEED.load_config(DATA_FILE)
+        with network() as (fake, base):
+            code, out, _ = run(base, "--data", DATA_FILE)
+            self.assertEqual(code, 0, out)
+            self.assertEqual(sorted(i["title"] for i in fake.items), sorted(i["title"] for i in cfg["catalog"]))
+            self.assertEqual(len(fake.listings), len(cfg["catalog"]))
+            fake.log.clear()
+            code, out, _ = run(base, "--data", DATA_FILE)
+            self.assertEqual(code, 0, out)
+            self.assertEqual(fake.writes(), [], "a second run sends no write at all")
 
     def test_every_write_carries_an_idempotency_key(self):
         with network() as (fake, base):
@@ -1066,8 +1099,16 @@ class DataFileTests(unittest.TestCase):
         self.assertEqual(cfg["fulfillmentNodes"][0]["profile"]["profileRevision"], 1)
         skus = [i["sku"] for i in cfg["catalog"]]
         self.assertEqual(len(skus), len(set(skus)))
-        self.assertTrue(all(s.startswith("ABO-") for s in skus), "real SKUs of the e2e product catalogue, not invented ones")
-        self.assertTrue(all(i["title"].startswith(i["sku"]) and i["availableQty"] > 0 for i in cfg["catalog"]))
+        self.assertTrue(all(re.match(r"(ABO|WANDS)-[A-Z0-9]+\Z", s) for s in skus), "real SKUs of the e2e product catalogue, not invented ones")
+        self.assertTrue(all(i["availableQty"] > 0 for i in cfg["catalog"]))
+        # The title is the natural key AND the name a shopper sees. The first five keep their original
+        # SKU-prefixed titles (live identities: renaming one would create a second catalogue item); every
+        # later item is shopper-facing, so no SKU or dataset code leaks into the storefront.
+        legacy = [i for i in cfg["catalog"] if i["title"].startswith(i["sku"])]
+        self.assertEqual([i["sku"] for i in legacy], LEGACY_SKU_TITLED)
+        for i in cfg["catalog"][len(legacy):]:
+            self.assertNotRegex(i["title"], r"\b(ABO|WANDS)-", i["sku"])
+            self.assertTrue(0 < len(i["title"]) <= 200 and i["title"] == i["title"].strip(), i["sku"])
 
     def test_the_profile_is_consistent_with_node_topologys_rules(self):
         prof = SEED.load_config(DATA_FILE)["fulfillmentNodes"][0]["profile"]

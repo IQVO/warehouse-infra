@@ -115,6 +115,18 @@ mcp:
   route:
     enabled: true
     path: /api/mcp/workforce-management
+a2a:
+  enabled: true
+  # cmd/a2a (workforce-management ADR-0039) runs the same use cases over the same
+  # OLTP database as REST and MCP: the staffing_status read and the assign_labor
+  # write, which publishes LaborAssigned/LaborReassigned through the same
+  # transactional outbox the api Deployment's relay drains. Delegation only:
+  # facts still travel as CloudEvents on Kafka. Kong rewrites
+  # /api/a2a/workforce-management to / so /.well-known/agent-card.json stays
+  # reachable under the same prefix; parentRefs come from _platform.yaml.
+  route:
+    enabled: true
+    path: /api/a2a/workforce-management
 pathCatalogue:
   content: ''
   enabled: false

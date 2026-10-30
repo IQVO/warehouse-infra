@@ -85,6 +85,14 @@ mcp:
   route:
     enabled: true
     path: /api/mcp/network-fulfillment
+a2a:
+  enabled: true
+  # A2A inbound adapter (see the repo's A2A ADR): delegation only; facts still travel as
+  # CloudEvents on Kafka. Kong rewrites the path to / so the well-known agent card
+  # stays reachable under the same prefix; parentRefs come from _platform.yaml.
+  route:
+    enabled: true
+    path: /api/a2a/network-fulfillment
 productTranslation:
   mappings:
     - networkProductId: lst-344aebc6-8145-453b-9992-5ea7f850b389
@@ -97,6 +105,168 @@ productTranslation:
       sku: ABO-B000SLW522
     - networkProductId: lst-8596de1c-9c86-4795-8746-f2f382fcb270
       sku: ABO-B000UGZD9M
+    - networkProductId: lst-47dc3625-bd4b-498e-952b-22225496a6e4
+      sku: ABO-B003M0NT1M
+    - networkProductId: lst-2dc90f49-510d-4957-87df-bbda4cf86e85
+      sku: ABO-B003YDYYFM
+    - networkProductId: lst-c4700789-3233-4891-b29f-b347293d8152
+      sku: ABO-B004HYFOZQ
+    - networkProductId: lst-a21c25a7-d3d4-4843-83b9-35a7372d5aa2
+      sku: ABO-B00D87M8YS
+    - networkProductId: lst-0d7f9ee0-6cf1-4966-b0b7-f2e078db596b
+      sku: ABO-B00DUGZFA6
+    - networkProductId: lst-e5f9fa48-2b46-416e-a880-1dfa8df73936
+      sku: ABO-B00E1GYAOQ
+    - networkProductId: lst-c6dd82c5-d338-43b6-bad3-cfc2e1cdaa52
+      sku: ABO-B00NH13UFQ
+    - networkProductId: lst-6ba668a8-1d39-4a9b-830f-d1b984f89afa
+      sku: ABO-B00UL18HT4
+    - networkProductId: lst-cb30cc92-c75a-49a1-bc1e-538b24bacb1d
+      sku: ABO-B014VBGKFW
+    - networkProductId: lst-5a9062e6-290b-472d-bb20-f5e19da08c78
+      sku: ABO-B014VBINRA
+    - networkProductId: lst-8a0c69b8-c465-462f-a437-b6b559d8d621
+      sku: ABO-B017C8O684
+    - networkProductId: lst-14454742-d4b6-444c-8377-bc62d2a9a71d
+      sku: ABO-B01FN7XAYW
+    - networkProductId: lst-62428157-2b44-4304-ae08-f543a784f708
+      sku: ABO-B0739X3GPT
+    - networkProductId: lst-3a82db39-6d45-4d70-8941-7fb81ef83eef
+      sku: ABO-B073P1YLMJ
+    - networkProductId: lst-9e0307fd-5ecd-4ead-9fca-58f8ad8edafa
+      sku: ABO-B0744KF1XY
+    - networkProductId: lst-6a6115a1-d073-49f7-8c2c-513d8857bffd
+      sku: ABO-B0747KN9FQ
+    - networkProductId: lst-5cabd6db-d5de-40b2-b666-413948e9778e
+      sku: ABO-B0753LWVWH
+    - networkProductId: lst-a5f4ca9a-e0d3-4a02-b15e-6ae1bd999f44
+      sku: ABO-B075HWDSV2
+    - networkProductId: lst-2a6af28b-4d38-49a0-8139-af70f922848a
+      sku: ABO-B079X87CY1
+    - networkProductId: lst-e83199cb-9053-4e17-8f74-fa532881df57
+      sku: ABO-B07B8VJBCL
+    - networkProductId: lst-d520648c-4a5a-4c79-9e4c-5a99fc699f52
+      sku: ABO-B07BH1J713
+    - networkProductId: lst-3348b8d7-de46-47fb-bc7b-bf640d057a2f
+      sku: ABO-B07BHFTJGM
+    - networkProductId: lst-4b15293c-4770-4488-9c55-02083964ec06
+      sku: ABO-B07FF2PS43
+    - networkProductId: lst-5355bed0-15a9-4215-8ec3-f4194d5d0301
+      sku: ABO-B07FNJXDKT
+    - networkProductId: lst-ed49e82a-af63-48b2-81dc-92160e2327e2
+      sku: ABO-B07G28NF3L
+    - networkProductId: lst-d3303c56-48e2-48de-ba7d-1fdf9e9453fc
+      sku: ABO-B07GDQLQQZ
+    - networkProductId: lst-d8752fe6-533c-4421-9997-b5e832d45711
+      sku: ABO-B07GWVHX45
+    - networkProductId: lst-a41f96df-3191-4a38-9bc3-d28d12d43bf9
+      sku: ABO-B07J596C1M
+    - networkProductId: lst-f537dfa6-01c4-4645-a531-ed7e402f80e4
+      sku: ABO-B07KSB1MLX
+    - networkProductId: lst-b8ee64e3-b633-49e6-a5b9-66f855713302
+      sku: ABO-B07L3X92BS
+    - networkProductId: lst-4f76e429-686c-4515-9c0e-d70d8a317db7
+      sku: ABO-B07PBX6XV3
+    - networkProductId: lst-306de4e4-23e4-4506-9e5e-77adf1a89956
+      sku: ABO-B07QLKL97P
+    - networkProductId: lst-2b567131-9fb8-45c9-a898-9c02dd2e64cc
+      sku: ABO-B07RVY85TV
+    - networkProductId: lst-95e9d792-bda3-4334-a4cf-fe2c97bc9d9d
+      sku: ABO-B07SQYV4BT
+    - networkProductId: lst-acb4b157-0c60-4642-9983-66add6954efa
+      sku: ABO-B07T2C3QNZ
+    - networkProductId: lst-b1247477-26ac-46b5-9578-99a1e4d2ac9a
+      sku: ABO-B07TWFDN96
+    - networkProductId: lst-7a973009-3e5f-437d-82d0-f12b1926ee9a
+      sku: ABO-B07WMJ276V
+    - networkProductId: lst-5f35ac39-c453-4e1a-bafd-02098b2e740b
+      sku: ABO-B07X5CQ4GQ
+    - networkProductId: lst-e59e154f-b414-4f05-87ac-67902f82b1da
+      sku: ABO-B07X9SSSGJ
+    - networkProductId: lst-b04c77fa-d36c-481b-97ad-2e133269405d
+      sku: ABO-B07XDZ8XBD
+    - networkProductId: lst-0a9172da-f560-447f-ad72-8ce3c47dcb9d
+      sku: ABO-B07ZL1TDV2
+    - networkProductId: lst-2300db00-631c-4a0b-888e-34c44c0363d7
+      sku: ABO-B081DDZ21V
+    - networkProductId: lst-aebdc7b9-83fd-4de4-a518-6f76121e30bc
+      sku: ABO-B081HN2KC9
+    - networkProductId: lst-0e94c526-4f46-4efc-993f-8805fe83f69a
+      sku: ABO-B084ZGRDM5
+    - networkProductId: lst-c3508f7c-7662-4dc7-a60e-702f66540b8b
+      sku: ABO-B085T18FGM
+    - networkProductId: lst-cc0ace98-5989-49d4-a358-b2fba73d4041
+      sku: ABO-B08823VD1M
+    - networkProductId: lst-9d440eed-ed18-4534-a4e9-3ea493defd57
+      sku: ABO-B08CKRTTZ8
+    - networkProductId: lst-6ca89839-8483-41d2-b971-d6f510ff4a58
+      sku: ABO-B08D6ZBZTB
+    - networkProductId: lst-dab60587-9d1a-4846-88ff-625306440e8d
+      sku: ABO-B08GKXQ7MS
+    - networkProductId: lst-54ae9995-6501-4fe5-8b56-0add2442ee26
+      sku: WANDS-1050
+    - networkProductId: lst-5c6fd538-db9c-480c-ab6b-e2ad6c32eb26
+      sku: WANDS-12528
+    - networkProductId: lst-063e1c6c-365c-4b28-a0ac-bc2674fc766d
+      sku: WANDS-12530
+    - networkProductId: lst-58ec8b36-2b35-450a-bfeb-e63aa2e2a476
+      sku: WANDS-15779
+    - networkProductId: lst-7574db6f-d63b-40f9-96d4-84109e607986
+      sku: WANDS-17961
+    - networkProductId: lst-6c5ef322-200c-4128-a8f2-149ddb8dc716
+      sku: WANDS-18200
+    - networkProductId: lst-be26d83b-8fb5-49a1-ae5c-21238c61fd24
+      sku: WANDS-18537
+    - networkProductId: lst-fdd6edd5-b4ef-4f28-b7fd-75b0632bbb63
+      sku: WANDS-19784
+    - networkProductId: lst-8613fa2e-3d5a-4778-be31-bab45f7a6203
+      sku: WANDS-20923
+    - networkProductId: lst-80e0a08c-40bf-43b2-9bcb-f96c6537bebb
+      sku: WANDS-21484
+    - networkProductId: lst-ffed686e-b391-412a-892e-44426245f159
+      sku: WANDS-21521
+    - networkProductId: lst-31af8077-d049-4e3b-9210-b544007e9009
+      sku: WANDS-22323
+    - networkProductId: lst-d1f20782-7fa3-4f09-bf2d-d000b667e41c
+      sku: WANDS-26614
+    - networkProductId: lst-162503a7-1c9b-43ec-92aa-0dd56d89a26c
+      sku: WANDS-26728
+    - networkProductId: lst-0823565a-ad0a-47bd-b785-88f1fd08f737
+      sku: WANDS-26783
+    - networkProductId: lst-869fea5b-274c-4c5a-a785-d6fda76e1553
+      sku: WANDS-27448
+    - networkProductId: lst-fdae97bb-d5b7-4d09-9c72-5a68c57cb686
+      sku: WANDS-27454
+    - networkProductId: lst-a532b8df-ac0f-4b6f-8af5-c7d4963b889b
+      sku: WANDS-28748
+    - networkProductId: lst-ac796b06-a3f1-40d2-8f9e-f7b7844f0d7b
+      sku: WANDS-29166
+    - networkProductId: lst-fefaead5-b5c6-4492-af2e-ea730cc3d885
+      sku: WANDS-3020
+    - networkProductId: lst-2b46914e-0a02-4fbe-96e1-fa7beeb15851
+      sku: WANDS-30322
+    - networkProductId: lst-4f6331fc-a591-46a0-9461-78657817c3e1
+      sku: WANDS-30693
+    - networkProductId: lst-ced0848f-aeab-4ce8-9a7f-16cd9d4794d0
+      sku: WANDS-31810
+    - networkProductId: lst-a3fb7db2-b890-44dd-bfdf-47f3e002e789
+      sku: WANDS-33343
+    - networkProductId: lst-57115694-e095-483f-93b3-c968fc26e3bb
+      sku: WANDS-35821
+    - networkProductId: lst-b8f576f7-c7fe-4e08-b162-c78b8cf53d46
+      sku: WANDS-36444
+    - networkProductId: lst-a10a44df-4a60-48ba-ae4a-93f6b7a15179
+      sku: WANDS-36647
+    - networkProductId: lst-e1f4b67a-349f-4baf-a4c7-3ff62808b4fe
+      sku: WANDS-36733
+    - networkProductId: lst-294d7f64-047e-4764-bde3-ecb725675ef9
+      sku: WANDS-36755
+    - networkProductId: lst-2c30a93e-b9ce-4ae4-b090-1ca74bd73251
+      sku: WANDS-39584
+    - networkProductId: lst-928a1f9f-d829-4fea-95c3-1b4d2036b4da
+      sku: WANDS-6025
+    - networkProductId: lst-cd9f8b36-f882-4a25-a668-426a173f499b
+      sku: WANDS-6775
 service:
   port: 80
   targetPort: 8080

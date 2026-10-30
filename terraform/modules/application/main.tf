@@ -31,8 +31,10 @@ locals {
     ]),
     [
       filesha256("${local.source_dir}/Dockerfile"),
-      filesha256("${local.source_dir}/go.mod"),
-      filesha256("${local.source_dir}/go.sum"),
+      # Non-Go images (storefront-web's Node SSR server) have no Go module
+      # files; try() keeps their hash to the globs + Dockerfile.
+      try(filesha256("${local.source_dir}/go.mod"), ""),
+      try(filesha256("${local.source_dir}/go.sum"), ""),
     ],
   )))
 
