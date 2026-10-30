@@ -10,6 +10,12 @@
 # provisioning Job (ADR 0005) before the first sync.
 
 config:
+  # The one ISO 4217 currency of every price (PRICING_CURRENCY). The retail
+  # network on this cluster is a US network (Austin delivery station, US postal
+  # prefixes, America/Chicago), the cart estimate defaults to USD and the
+  # storefront formats en-US, so the binary's BRL default would refuse every
+  # USD price the storefront seed publishes (422 currency-mismatch).
+  currency: "USD"
   # fixed, stable group id: a rescheduled pod resumes from its committed
   # offsets. MANDATORY (the binary exits at boot without it).
   offerAvailabilityConsumerGroup: "pricing-offer-availability"
