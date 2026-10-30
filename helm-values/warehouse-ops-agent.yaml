@@ -20,6 +20,10 @@ credentials:
 extraEnv:
   - name: WES_WORK_PLANNING_A2A_URL
     value: http://wes-work-planning-a2a.warehouse-systems.svc.cluster.local:8093/
+  # ADR 0028: advisory, read-only exceptionContext on release proposals. Unset = disabled.
+  # Never changes whether a token is minted.
+  - name: EXCEPTION_MANAGEMENT_A2A_URL
+    value: http://exception-management-a2a.warehouse-systems.svc.cluster.local:8093/
 gatewayApi:
   enabled: true
   hosts:
