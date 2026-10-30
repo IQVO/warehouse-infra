@@ -109,6 +109,14 @@ mcp:
   route:
     enabled: true
     path: /api/mcp/task-interleaving
+a2a:
+  enabled: true
+  # cmd/a2a (task-interleaving's A2A inbound adapter ADR): delegation only; facts still travel as
+  # CloudEvents on Kafka. Kong rewrites the path to / so the well-known agent card
+  # stays reachable under the same prefix; parentRefs come from _platform.yaml.
+  route:
+    enabled: true
+    path: /api/a2a/task-interleaving
 service:
   port: 80
   targetPort: 8080

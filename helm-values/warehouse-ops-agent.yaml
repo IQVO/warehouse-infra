@@ -10,6 +10,20 @@
 # empty.
 credentials:
   existingSecret: warehouse-ops-agent-anthropic
+# Act slice (warehouse-ops-agent ADR 0027): the human-confirmed release of the
+# next work unit. Opt-in: this variable is what builds the agent's one write
+# adapter; without it POST /act/release-next-work/* answers 503 and the agent
+# is read-only. The target is the wes-work-planning A2A agent (its ADR-0046).
+# The used-confirmation-token set is process-local, so replicaCount MUST stay 1
+# (the chart default; not overridden here) unless the used-token set is shared;
+# APPROVAL_TTL (default 5m) is left at its default.
+extraEnv:
+  - name: WES_WORK_PLANNING_A2A_URL
+    value: http://wes-work-planning-a2a.warehouse-systems.svc.cluster.local:8093/
+  # ADR 0028: advisory, read-only exceptionContext on release proposals. Unset = disabled.
+  # Never changes whether a token is minted.
+  - name: EXCEPTION_MANAGEMENT_A2A_URL
+    value: http://exception-management-a2a.warehouse-systems.svc.cluster.local:8093/
 gatewayApi:
   enabled: true
   hosts:
