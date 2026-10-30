@@ -10,6 +10,12 @@
 # provisioning Job (ADR 0005) before the first sync.
 
 config:
+  # The one ISO 4217 currency of every price (PRICING_CURRENCY). The retail
+  # network on this cluster is a US network (Austin delivery station, US postal
+  # prefixes, America/Chicago), the cart estimate defaults to USD and the
+  # storefront formats en-US, so the binary's BRL default would refuse every
+  # USD price the storefront seed publishes (422 currency-mismatch).
+  currency: "USD"
   # fixed, stable group id: a rescheduled pod resumes from its committed
   # offsets. MANDATORY (the binary exits at boot without it).
   offerAvailabilityConsumerGroup: "pricing-offer-availability"
@@ -33,3 +39,11 @@ service:
   port: 80
   targetPort: 8080
   type: ClusterIP
+a2a:
+  enabled: true
+  # A2A inbound adapter (see the repo's A2A ADR): delegation only; facts still travel as
+  # CloudEvents on Kafka. Kong rewrites the path to / so the well-known agent card
+  # stays reachable under the same prefix; parentRefs come from _platform.yaml.
+  route:
+    enabled: true
+    path: /api/a2a/pricing

@@ -33,3 +33,12 @@ service:
   port: 80
   targetPort: 8080
   type: ClusterIP
+a2a:
+  enabled: true
+  # A2A inbound adapter (see the repo's A2A ADR): delegation only; facts still travel as
+  # CloudEvents on Kafka. Read-only agent: no payment provider, no card data, no write.
+  # Kong rewrites the path to / so the well-known agent card stays reachable under the
+  # same prefix; parentRefs come from _platform.yaml.
+  route:
+    enabled: true
+    path: /api/a2a/customer-payments
