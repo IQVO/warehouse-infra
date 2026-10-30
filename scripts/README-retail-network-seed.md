@@ -59,7 +59,7 @@ and joined by a lane. Counts are for a fresh cluster with the shipped data file.
 | 2 | vendor-connectivity | `POST /vendors` (`V-WS`); `POST /vendor/nodes` (`vendorNodeCode` = `site-1`, network-fulfillment's `SITE_ID`); `PUT /vendor/nodes/{id}/profile` (revision 1); every write is asynchronous and polled via `GET /vendor/transactions/{id}` | 1 vendor, 1 node, 1 profile |
 | 3 | node-topology | `POST /nodes/{id}:activate` (the vendor node); `POST /lanes` (node -> station, `GROUND`, 120 min); `PUT /service-areas/{prefix}` (`787`, `786`) | 1 lane, 2 service areas |
 | 4 | last-mile-delivery | `POST /waves`: one daily wave per service date, 14 days | 14 waves |
-| 5 | offer-availability | `POST /catalog-items` (real fleet SKUs of the e2e product catalogue); `POST /listings` (item x node) | 5 items, 5 listings |
+| 5 | offer-availability | `POST /catalog-items` (real fleet SKUs of the e2e product catalogue); `POST /listings` (item x node) | 86 items, 86 listings |
 | 6 | vendor-connectivity | `POST /vendor/inventory` (`fullUpdate: true`, `basis: PHYSICAL`, 200 each), relayed to offer-availability | 1 feed |
 | 7 | delivery-promise | nothing: the policy is the built-in default `v0` (`GET /promise-policies/current` is only read) | 0 |
 
@@ -89,7 +89,7 @@ at all** (the unit tests assert it).
 | lane | origin + destination | an OPEN lane = exists; `409 duplicate-lane` = exists |
 | service area | postal prefix | same station = exists; another station = reported and left alone (`--reassign` bumps the version) |
 | wave | station + date + induct cutoff | an existing non-cancelled wave = exists |
-| catalogue item | `title` (starts with the SKU) | absent -> create (the network generates the id) |
+| catalogue item | `title` | absent -> create (the network generates the id) |
 | listing | item + node | absent -> create; `409 duplicate-listing` = exists |
 | inventory | a listing that was never fed | fed once; a listing that already carries a feed is not overwritten unless `--restock` |
 
@@ -117,8 +117,14 @@ change (`profileRevision` + 1), declared exactly once.
 
 Node codes, SKUs, quantities, hours, cutoffs, lane and wave times live there, not in the
 script. The SKUs are real SKUs of `e2e-tests` `fixtures/products/fulfilment-products.json`
-(dimensions copied from it); titles start with the SKU, which is the catalogue's natural
-key. The script validates the file before it sends anything (exit 2).
+(dimensions, weight and fragility copied from it). The title is the catalogue's natural key
+and the product name a shopper sees in the storefront: the first five items keep their
+original SKU-prefixed titles (live identities: renaming one creates a second item), every
+later item carries a neutral shopper-facing title (brand and model names removed). Never edit
+a title that is already on the network; add a new item instead. The storefront merchandising
+of these SKUs (departments, prices, descriptions) is `e2e-tests`
+`fixtures/storefront/catalogue.json`, provisioned by `make provision-storefront` there. The
+script validates the file before it sends anything (exit 2).
 
 ## Verify (`--verify`)
 

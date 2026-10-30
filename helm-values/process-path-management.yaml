@@ -98,6 +98,14 @@ mcp:
   route:
     enabled: true
     path: /api/mcp/process-path-management
+a2a:
+  enabled: true
+  # cmd/a2a (process-path-management's A2A inbound adapter ADR): delegation only; facts still travel as
+  # CloudEvents on Kafka. Kong rewrites the path to / so the well-known agent card
+  # stays reachable under the same prefix; parentRefs come from _platform.yaml.
+  route:
+    enabled: true
+    path: /api/a2a/process-path-management
 pathCatalogue:
   content: ''
   enabled: false
