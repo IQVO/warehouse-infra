@@ -29,14 +29,22 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: scripts/mcp-probe/go.mod
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           languages: ${{ matrix.language }}
           queries: security-extended
-          # Go code lives in scripts/mcp-probe only; no root module, so no
-          # autobuild is possible. build-mode none still extracts and scans.
-          build-mode: none
+          # The only Go code in this repo is scripts/mcp-probe; there is no
+          # root module, so the build is scoped to that directory.
+          paths: ["scripts/mcp-probe"]
+          build-mode: manual
+
+      - name: Build mcp-probe
+        run: cd scripts/mcp-probe && go build ./...
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
