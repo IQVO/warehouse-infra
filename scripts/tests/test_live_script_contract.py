@@ -27,6 +27,15 @@ class LiveScriptContractTest(unittest.TestCase):
         self.assertNotIn("Authorization", source)
         self.assertNotIn("BEARER", source.upper())
 
+    def test_mcp_conformance_probe_is_opt_in_and_off_the_acceptance_workflow(self):
+        source = (ROOT / "scripts" / "run-mcp-acceptance.sh").read_text()
+        self.assertIn('"${MCP_CONFORMANCE:-0}" == "1"', source)
+        self.assertIn("scripts/mcp-conformance-2026-07-28.py", source)
+        workflow = (ROOT / ".github" / "workflows" / "cluster-acceptance.yml").read_text()
+        self.assertNotIn("MCP_CONFORMANCE", workflow)
+        self.assertNotIn("mcp-conformance", workflow)
+        self.assertNotIn("MCP_CONFORMANCE", (ROOT / "scripts" / "run-cluster-acceptance.sh").read_text())
+
 
 if __name__ == "__main__":
     unittest.main()

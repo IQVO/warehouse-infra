@@ -51,7 +51,7 @@ CHARTS := \
 	../storefront-bff/charts/storefront-bff \
 	../storefront-web/charts/storefront-web
 
-.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test seed-network seed-network-dry-run seed-network-verify seed-network-translation seed-network-translation-check check check-all
+.PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test mcp-conformance-test seed-network seed-network-dry-run seed-network-verify seed-network-translation seed-network-translation-check check check-all
 
 help:
 	@echo "warehouse-infra — local quality gate (no CI workflow yet; this IS the gate)"
@@ -74,6 +74,8 @@ help:
 	@echo "                  (promtool if installed, else docker $(PROMETHEUS_IMAGE))"
 	@echo "  seed-scripts-test  unit tests of the post-deploy seed scripts against fakes of the"
 	@echo "                  services they call (scripts/test_seed_*.py; no cluster needed)"
+	@echo "  mcp-conformance-test  unit tests of the MCP 2026-07-28 conformance probe against fakes"
+	@echo "                  (scripts/test_mcp_conformance.py; the probe runs on a cluster only with MCP_CONFORMANCE=1)"
 	@echo "  seed-network    WRITES to the cluster: seed the retail network (vendor V-WS, node site-1,"
 	@echo "                  topology, waves, catalogue, stock) through Kong; idempotent. Owner-run,"
 	@echo "                  NOT part of check (scripts/README-retail-network-seed.md)"
@@ -83,7 +85,7 @@ help:
 	@echo "                  helm-values/network-fulfillment.yaml; needs the seeded network, NOT part of check"
 	@echo "  seed-network-translation-check  READ-ONLY: exit 1 unless that values file's dictionary matches the network"
 	@echo ""
-	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test"
+	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test mcp-conformance-test"
 	@echo "  check-all       alias for check — no deeper local gate exists yet"
 	@echo "                  (see scripts/test-exposure-policy.sh and smoke-test.sh for"
 	@echo "                  cluster-dependent checks that need a live kind cluster —"
@@ -179,6 +181,14 @@ seed-scripts-test:
 	python3 scripts/test_seed_transfer_lanes.py
 	python3 scripts/test_seed_retail_network.py
 
+# MCP 2026-07-28 conformance probe (Agentic Standard v2): stdlib unit tests against
+# fakes of a conforming, a default-options and a session-demanding MCP server.
+# The probe itself runs against a cluster only via scripts/run-mcp-acceptance.sh
+# (MCP_CONFORMANCE=1, opt-in) or by hand.
+mcp-conformance-test:
+	python3 -m py_compile scripts/mcp-conformance-2026-07-28.py
+	python3 scripts/test_mcp_conformance.py
+
 # The retail-network seed (scripts/seed-retail-network.py). seed-network WRITES to the
 # live cluster through Kong (override the base with RETAIL_NETWORK_BASE_URL); it is
 # idempotent and NOT part of `check`. Run the dry run first.
@@ -203,7 +213,7 @@ seed-network-translation-check:
 	python3 scripts/seed-retail-network.py --check-translation helm-values/network-fulfillment.yaml
 
 # The fast self-correction loop: run this after every change, before committing.
-check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test
+check: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test mcp-conformance-test
 
 # No deeper local gate exists yet — see the help text above for the
 # cluster-dependent scripts that are NOT part of this target.

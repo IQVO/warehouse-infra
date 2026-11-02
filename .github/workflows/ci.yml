@@ -333,6 +333,20 @@ jobs:
         run: make seed-scripts-test
 
   # ============================================================
+  # CLASSIFICATION: UNIT TESTS (MCP 2026-07-28 conformance probe)
+  # scripts/mcp-conformance-2026-07-28.py against stdlib fakes of a conforming,
+  # a go-sdk default-options and a session-demanding MCP server. Stdlib only.
+  # The probe is opt-in on a cluster (MCP_CONFORMANCE=1 in run-mcp-acceptance.sh).
+  # ============================================================
+  mcp-conformance-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: MCP conformance probe unit tests
+        run: make mcp-conformance-test
+
+  # ============================================================
   # CLASSIFICATION: PACKAGING VALIDATION (Helm charts)
   # Every chart this repo deploys lives in a SIBLING repo, so this job
   # checks out all eleven (ten service repos + warehouse-console) next to
