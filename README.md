@@ -1111,6 +1111,43 @@ Both run in the CI job `observability-as-code`.
 
 ---
 
+## MCP 2026-07-28 conformance probe
+
+`scripts/mcp-conformance-2026-07-28.py` (stdlib-only python3) checks, with raw
+stateless HTTP and no `initialize`, that an MCP server speaks the 2026-07-28
+revision (Agentic Standard v2). One table row per server, exit 1 on any FAIL:
+
+| check | PASS when | FAIL hint |
+|-------|-----------|-----------|
+| `discover` | `server/discover` returns `result.supportedVersions` containing `2026-07-28` | `-32022 protocol version not supported`: the server runs go-sdk default options; set `mcp.StreamableHTTPOptions{Stateless: true}` in its `internal/adapters/inbound/mcp/server.go` |
+| `tools` | `tools/list` works with no session id | the server demands an `Mcp-Session-Id` (or answers `-32022`) |
+| `authority` | every tool declares `_meta["com.warehouse/authority"]` in `L1`..`L4` | WARN with the declared/total count; FAIL with `--require-authority` |
+| `legacy` | `initialize` with protocolVersion `2025-06-18` still answers 200 | clients not yet migrated would break |
+
+```bash
+# explicit targets (repeatable)
+python3 scripts/mcp-conformance-2026-07-28.py --target workforce-management=http://127.0.0.1:8090/mcp
+
+# every MCP service of `scripts/exposure_inventory.py --kind mcps` (needs PyYAML),
+# through Kong's prefix form: <base>/<service>
+python3 scripts/mcp-conformance-2026-07-28.py --base http://localhost:8000/api/mcp --require-authority
+
+# machine output / per-request timeout (seconds)
+python3 scripts/mcp-conformance-2026-07-28.py --json --timeout 5 --base http://localhost:8000/api/mcp
+```
+
+It never prints session ids, headers or URL credentials. It is **opt-in** in
+`scripts/run-mcp-acceptance.sh`: `MCP_CONFORMANCE=1` (plus
+`MCP_CONFORMANCE_REQUIRE_AUTHORITY=1` for the strict authority check) runs it
+against each server's port-forward after the Go SDK probe and fails the run once
+every server was probed. The default stays off so today's acceptance does not
+turn red before the fleet wave, and the `cluster-acceptance` workflow does not
+set it. Unit tests (stdlib fakes of a conforming, a default-options and a
+session-demanding server): `make mcp-conformance-test`, CI job
+`mcp-conformance-probe`.
+
+---
+
 ## Known gaps in the services (observed, deliberately not fixed here)
 
 This task is infra-only. These are real and worth a follow-up in the service
@@ -1322,7 +1359,7 @@ guide-lint); `make check-fast` is the pre-push subset.
 
 CI jobs: `acceptance-units` (unit sensors), `terraform` (plan-time checks),
 `observability-as-code` (dashboards and alert rules), `shellcheck`,
-`seed-scripts`, `helm-lint`, `chart-selector-check`, `guide-lint`.
+`seed-scripts`, `mcp-conformance-probe`, `helm-lint`, `chart-selector-check`, `guide-lint`.
 
 ## Architecture Decision Records
 
