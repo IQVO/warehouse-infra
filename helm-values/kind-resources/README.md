@@ -23,3 +23,7 @@ still burst. Production-like environments use the chart defaults; only this kind
 
 Regenerate after a chart adds a component: every `resources.requests.cpu` above 25m in
 `<repo>/charts/<chart>/values.yaml` on develop gets an entry here (the overlay is generated, not hand-written).
+
+## Disclaimer
+
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.

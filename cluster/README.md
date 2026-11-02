@@ -56,3 +56,7 @@ Example shape (all repositories are required for release gating):
   "e2e-tests": "<40-char-sha>"
 }
 ```
+
+## Disclaimer
+
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
