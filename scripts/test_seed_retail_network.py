@@ -9,7 +9,7 @@ The fake is ONE real HTTP server on 127.0.0.1 that serves the contract the seed 
 the Kong prefix /api/<context>, with the behaviour the specs promise (each service's
 apis/openapi.yaml on its develop branch):
 
-  node-topology        regions, nodes (+ :activate), operational profile, lanes, service areas
+  node-topology        regions, nodes (+ /activations), operational profile, lanes, service areas
   vendor-connectivity  vendors, ASYNCHRONOUS node registration / profile / inventory (202 +
                        transactionId, polled), the vendor's node view
   offer-availability   catalogue (keyset paged), listings (LIVE only on an ACTIVE node), feeds
@@ -147,8 +147,8 @@ class Fake:
                 return 200, {"nodes": [self.public(n, False) for n in self.nodes.values()
                                        if qu.get("type") in (None, n["nodeType"]) and qu.get("region") in (None, n["regionId"])]}
             return self.register_node(body)
-        if p[0] == "nodes" and len(p) == 2 and p[1].endswith(":activate"):
-            return self.activate(p[1][:-len(":activate")])
+        if p[0] == "nodes" and len(p) == 3 and p[2] == "activations":
+            return self.activate(p[1])
         if p[0] == "nodes" and len(p) == 2 and m == "GET":
             return (200, self.public(self.nodes[p[1]])) if p[1] in self.nodes else problem(404, "not-found")
         if p == ["lanes"]:
@@ -356,7 +356,7 @@ class Fake:
         if rest == "/promise-policies/current":
             return 200, {"policyVersion": "v0", "version": 0, "offerTtlMinutes": 10, "holdTtlMinutes": 15, "packagesPerOrder": 1,
                          "capacitySharePercent": 100, "orderDeadlines": [], "publishedAt": "0001-01-01T00:00:00Z"}
-        if rest == "/delivery-offers:quote":
+        if rest == "/delivery-quotes":
             served = body["destinationPostalPrefix"] in self.areas
             stocked = all(any(l["catalogItemId"] == line["catalogItemId"] and l["state"] == "LIVE" and l["availability"]["availableQty"] >= line["quantity"]
                               for l in self.listings.values()) for line in body["lines"])
@@ -538,7 +538,7 @@ class SeedTests(unittest.TestCase):
             code, out, _ = run(base, "--verify", "--quote")
             self.assertEqual(code, 0, out)
             posts = fake.writes()
-            self.assertEqual([(w[0], w[1].split("?")[0]) for w in posts], [("POST", "/api/delivery-promise/delivery-offers:quote")])
+            self.assertEqual([(w[0], w[1].split("?")[0]) for w in posts], [("POST", "/api/delivery-promise/delivery-quotes")])
             self.assertIn("offers: NEXT_DAY, STANDARD", out)
 
     def test_verify_fails_when_a_listing_is_not_purchasable(self):

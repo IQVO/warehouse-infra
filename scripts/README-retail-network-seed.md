@@ -33,10 +33,10 @@ service is `<base>/<context>`. Equivalent direct calls:
 ```bash
 python3 scripts/seed-retail-network.py --dry-run
 python3 scripts/seed-retail-network.py                    # seed, then verify
-python3 scripts/seed-retail-network.py --verify --quote   # also one POST /delivery-offers:quote
+python3 scripts/seed-retail-network.py --verify --quote   # also one POST /delivery-quotes
 ```
 
-`--quote` is opt-in because `POST /delivery-offers:quote` **persists a short-lived offer**:
+`--quote` is opt-in because `POST /delivery-quotes` **persists a short-lived offer**:
 it is the only non-GET request `--verify` can send, and without `--quote` it sends none.
 
 Other flags: `--restock` (refeed the seeded quantities even where a feed exists),
@@ -55,9 +55,9 @@ and joined by a lane. Counts are for a fresh cluster with the shipped data file.
 
 | # | Context | Seeded through | Count |
 |---|---------|----------------|-------|
-| 1 | node-topology | `POST /regions`; `POST /nodes` (a network-operated `DELIVERY_STATION`) + `POST /nodes/{id}:activate` | 1 region, 1 station |
+| 1 | node-topology | `POST /regions`; `POST /nodes` (a network-operated `DELIVERY_STATION`) + `POST /nodes/{id}/activations` | 1 region, 1 station |
 | 2 | vendor-connectivity | `POST /vendors` (`V-WS`); `POST /vendor/nodes` (`vendorNodeCode` = `site-1`, network-fulfillment's `SITE_ID`); `PUT /vendor/nodes/{id}/profile` (revision 1); every write is asynchronous and polled via `GET /vendor/transactions/{id}` | 1 vendor, 1 node, 1 profile |
-| 3 | node-topology | `POST /nodes/{id}:activate` (the vendor node); `POST /lanes` (node -> station, `GROUND`, 120 min); `PUT /service-areas/{prefix}` (`787`, `786`) | 1 lane, 2 service areas |
+| 3 | node-topology | `POST /nodes/{id}/activations` (the vendor node); `POST /lanes` (node -> station, `GROUND`, 120 min); `PUT /service-areas/{prefix}` (`787`, `786`) | 1 lane, 2 service areas |
 | 4 | last-mile-delivery | `POST /waves`: one daily wave per service date, 14 days | 14 waves |
 | 5 | offer-availability | `POST /catalog-items` (real fleet SKUs of the e2e product catalogue); `POST /listings` (item x node) | 86 items, 86 listings |
 | 6 | vendor-connectivity | `POST /vendor/inventory` (`fullUpdate: true`, `basis: PHYSICAL`, 200 each), relayed to offer-availability | 1 feed |
@@ -223,8 +223,8 @@ code); sortation or air nodes and linehaul lane schedules (multi-leg paths).
 
 ## Undoing
 
-The network has no delete. Retire the node with `POST /nodes/{id}:retire`, discontinue the
-items with `POST /catalog-items/{id}:discontinue`, close the lane with `POST /lanes/{id}:close`.
+The network has no delete. Retire the node with `POST /nodes/{id}/retirements`, discontinue the
+items with `POST /catalog-items/{id}/discontinuations`, close the lane with `POST /lanes/{id}/closures`.
 
 ## Tests
 

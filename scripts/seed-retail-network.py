@@ -32,7 +32,7 @@ node is ACTIVE with a profile and has an outbound lane; the script only reads th
 IDEMPOTENCY (every write is an upsert by NATURAL KEY: GET first, write only if needed)
 -------------------------------------------------------------------------------------
   region                code                       absent -> POST; 409 region-code-taken = exists
-  delivery station      type+region+postal code    absent -> POST, PROPOSED -> :activate
+  delivery station      type+region+postal code    absent -> POST, PROPOSED -> /activations
   vendor                vendorId                   absent -> POST /vendors
   fulfillment node      vendorRef (V-WS, site-1)   absent -> POST /vendor/nodes (async, polled);
                                                    an existing node is ADOPTED, never registered twice
@@ -59,7 +59,7 @@ USAGE
     python3 scripts/seed-retail-network.py                    # seed, then verify
     python3 scripts/seed-retail-network.py --verify           # read-only PASS/FAIL table
     python3 scripts/seed-retail-network.py --verify --quote   # also ask for a delivery quote
-                                                              # (POST /delivery-offers:quote: persists
+                                                              # (POST /delivery-quotes: persists
                                                               # a short-lived offer, the only non-GET)
     python3 scripts/seed-retail-network.py --emit-translation # READ-ONLY: the productTranslation block for
                                                               # helm-values/network-fulfillment.yaml, YAML only on stdout
@@ -109,6 +109,7 @@ import os
 import re
 import sys
 import time
+import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -664,7 +665,7 @@ class Seeder:
             return
         if status != "PROPOSED":
             raise StepError(f"{label} is {status}: the seed activates only PROPOSED nodes (a suspension is an operator decision)")
-        self.write("ACTIVATE", label, self.nt, "POST", f"/nodes/{q(node_id)}:activate", None,
+        self.write("ACTIVATE", label, self.nt, "POST", f"/nodes/{q(node_id)}/activations", None,
                    self.key("activate", node_id), ok=(200,))
         self.fresh = True
 
@@ -1119,10 +1120,11 @@ class Seeder:
         if not item:
             return False, "first seeded item is not in the catalogue"
         prefix = self.cfg["deliveryStations"][0]["serviceAreaPrefixes"][0]
-        status, body = self.dp.call("POST", "/delivery-offers:quote",
-                                    {"destinationPostalPrefix": prefix, "lines": [{"catalogItemId": item, "quantity": 1}]})
+        status, body = self.dp.call("POST", "/delivery-quotes",
+                                    {"destinationPostalPrefix": prefix, "lines": [{"catalogItemId": item, "quantity": 1}]},
+                                    key=f"seed-rn:quote:{uuid.uuid4()}")
         if status != 200 or not isinstance(body, dict):
-            return False, f"POST /delivery-offers:quote -> {status} {short(body)}"
+            return False, f"POST /delivery-quotes -> {status} {short(body)}"
         tiers = sorted({o["tier"] for o in body.get("offers", [])})
         why = ", ".join(f"{u['tier']}={u['constraint']}" for u in body.get("unavailable", []))
         return bool(tiers), f"offers: {', '.join(tiers) or 'none'}" + (f"; unavailable: {why}" if why else "")
