@@ -323,7 +323,6 @@ CONTEXTS = [
         # network-fulfillment publishes no docs site (no Docusaurus config,
         # https://iqvo.github.io/network-fulfillment/ is 404), so its alert
         # rules link the runbook file on GitHub instead.
-        "runbook_url": "https://github.com/IQVO/network-fulfillment/blob/develop/docs/operations/runbook.md",
         "business_metrics": [],
     },
     {
@@ -352,7 +351,6 @@ CONTEXTS = [
         # alerts are live.
         "service_regex": "customer-ordering.*",
         "loki_app": "customer-ordering",
-        "runbook_url": "https://github.com/IQVO/customer-ordering/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "ordering_orders_placed_total",
@@ -369,7 +367,6 @@ CONTEXTS = [
         # rows stay empty until the chart attaches a Kong prometheus plugin.
         "service_regex": "pricing.*",
         "loki_app": "pricing",
-        "runbook_url": "https://github.com/IQVO/pricing/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "pricing_quotes_issued_total",
@@ -386,7 +383,6 @@ CONTEXTS = [
         # rows stay empty until the chart attaches a Kong prometheus plugin.
         "service_regex": "product-content.*",
         "loki_app": "product-content",
-        "runbook_url": "https://github.com/IQVO/product-content/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "content_products_published_total",
@@ -403,7 +399,6 @@ CONTEXTS = [
         # rows stay empty until the chart attaches a Kong prometheus plugin.
         "service_regex": "product-discovery.*",
         "loki_app": "product-discovery",
-        "runbook_url": "https://github.com/IQVO/product-discovery/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "discovery_searches_served_total",
@@ -420,7 +415,6 @@ CONTEXTS = [
         # rows stay empty until the chart attaches a Kong prometheus plugin.
         "service_regex": "shopping-cart.*",
         "loki_app": "shopping-cart",
-        "runbook_url": "https://github.com/IQVO/shopping-cart/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "cart_lines_added_total",
@@ -437,7 +431,6 @@ CONTEXTS = [
         # rows stay empty until the chart attaches a Kong prometheus plugin.
         "service_regex": "checkout.*",
         "loki_app": "checkout",
-        "runbook_url": "https://github.com/IQVO/checkout/blob/develop/docs/operations/runbook.md",
         "business_metrics": [],
     },
     {
@@ -448,7 +441,6 @@ CONTEXTS = [
         # rows stay empty until the chart attaches a Kong prometheus plugin.
         "service_regex": "customer-payments.*",
         "loki_app": "customer-payments",
-        "runbook_url": "https://github.com/IQVO/customer-payments/blob/develop/docs/operations/runbook.md",
         "business_metrics": [],
     },
     {
@@ -470,7 +462,6 @@ CONTEXTS = [
         # rows stay empty until the chart attaches a Kong prometheus plugin.
         "service_regex": "storefront-bff.*",
         "loki_app": "storefront-bff",
-        "runbook_url": "https://github.com/IQVO/storefront-bff/blob/develop/docs/operations/runbook.md",
         "business_metrics": [],
     },
     {
@@ -481,7 +472,6 @@ CONTEXTS = [
         # rows stay empty until the chart attaches a Kong prometheus plugin.
         "service_regex": "storefront-web.*",
         "loki_app": "storefront-web",
-        "runbook_url": "https://github.com/IQVO/storefront-web/blob/develop/docs/operations/runbook.md",
         "business_metrics": [],
     },
     {
@@ -495,7 +485,6 @@ CONTEXTS = [
         # alerts are live.
         "service_regex": "delivery-promise.*",
         "loki_app": "delivery-promise",
-        "runbook_url": "https://github.com/IQVO/delivery-promise/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "promising_promises_made_total",
@@ -515,7 +504,6 @@ CONTEXTS = [
         # alerts are live.
         "service_regex": "last-mile-delivery.*",
         "loki_app": "last-mile-delivery",
-        "runbook_url": "https://github.com/IQVO/last-mile-delivery/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "last_mile_delivery_package_attempted_total",
@@ -535,7 +523,6 @@ CONTEXTS = [
         # alerts are live.
         "service_regex": "linehaul-transportation.*",
         "loki_app": "linehaul-transportation",
-        "runbook_url": "https://github.com/IQVO/linehaul-transportation/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "linehaul_loads_dispatched_total",
@@ -555,7 +542,6 @@ CONTEXTS = [
         # alerts are live.
         "service_regex": "node-performance.*",
         "loki_app": "node-performance",
-        "runbook_url": "https://github.com/IQVO/node-performance/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "nodeperformance_scorecards_recomputed_total",
@@ -575,7 +561,6 @@ CONTEXTS = [
         # alerts are live.
         "service_regex": "node-topology.*",
         "loki_app": "node-topology",
-        "runbook_url": "https://github.com/IQVO/node-topology/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "topology_nodes_registered_total",
@@ -595,7 +580,6 @@ CONTEXTS = [
         # alerts are live.
         "service_regex": "offer-availability.*",
         "loki_app": "offer-availability",
-        "runbook_url": "https://github.com/IQVO/offer-availability/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "availability_inventory_feeds_applied_total",
@@ -615,7 +599,6 @@ CONTEXTS = [
         # alerts are live.
         "service_regex": "order-sourcing.*",
         "loki_app": "order-sourcing",
-        "runbook_url": "https://github.com/IQVO/order-sourcing/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "sourcing_groups_sourced_total",
@@ -635,7 +618,6 @@ CONTEXTS = [
         # alerts are live.
         "service_regex": "shipping-and-tracking.*",
         "loki_app": "shipping-and-tracking",
-        "runbook_url": "https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "shipping_labels_issued_total",
@@ -655,7 +637,6 @@ CONTEXTS = [
         # alerts are live.
         "service_regex": "vendor-connectivity.*",
         "loki_app": "vendor-connectivity",
-        "runbook_url": "https://github.com/IQVO/vendor-connectivity/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "vendor_submissions_processed_total",
@@ -675,7 +656,6 @@ CONTEXTS = [
         # alerts are live.
         "service_regex": "seller-inbound.*",
         "loki_app": "seller-inbound",
-        "runbook_url": "https://github.com/IQVO/seller-inbound/blob/develop/docs/operations/runbook.md",
         "business_metrics": [
             (
                 "seller_inbound_shipment_shipped_total",
