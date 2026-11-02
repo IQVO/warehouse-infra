@@ -54,3 +54,7 @@ and points it at the ADR (ADR 0001, decision 6):
   Nginx `:80` for assets and Kong `:8000` for APIs, never chained.
 - [`docs/scalability/pgbouncer-connection-pooling.md`](../scalability/pgbouncer-connection-pooling.md):
   PgBouncer in transaction mode in front of every OLTP database.
+
+## Disclaimer
+
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
