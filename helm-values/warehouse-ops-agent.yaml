@@ -127,3 +127,10 @@ upstreams:
     endpoint: http://wes-work-planning-mcp.warehouse-systems.svc.cluster.local:8090/mcp
   workforceManagement:
     endpoint: http://workforce-management-mcp.warehouse-systems.svc.cluster.local:8090/mcp
+    # ADR 0029 (warehouse-ops-agent): the labor-reallocation act slice. Opt-in; the
+    # target is the workforce-management A2A agent (its ADR-0039), which takes the
+    # optional proposalId/approvedBy/agentId attribution (its ADR-0041). Needs the
+    # MCP endpoint above for the staffing reads. Set through this chart value, not
+    # extraEnv: the chart renders WORKFORCE_MANAGEMENT_A2A_URL itself and a second
+    # entry would duplicate the env key. Token state is process-local: replicaCount stays 1.
+    a2aEndpoint: http://workforce-management-a2a.warehouse-systems.svc.cluster.local:8093/
