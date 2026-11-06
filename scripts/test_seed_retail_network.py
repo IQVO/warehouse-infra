@@ -64,6 +64,7 @@ class Fake:
         self.items, self.listings, self.waves, self.feeds = [], {}, [], []
         self.once = {}                # (METHOD, path prefix) -> [(status, body, headers)] answered first
         self.always = {}              # (METHOD, path prefix) -> (status, body)
+        self.shape = {}               # exact GET path -> a 200 body served verbatim (a wrong collection shape)
         self.fail_tx = {}             # transaction kind -> error codes
         self.tx_polls = 2
         self.hide_regions = 0         # the next N GET /regions answer [] (the preflight is the first)
@@ -112,6 +113,8 @@ class Fake:
             for (m, prefix), (st, b) in self.always.items():
                 if m == method and parsed.path.startswith(prefix):
                     return st, b, {}
+            if method == "GET" and parsed.path in self.shape:
+                return 200, self.shape[parsed.path], {}
             parts = parsed.path.strip("/").split("/", 2)           # api, <context>, rest
             ctx, rest = parts[1], "/" + (parts[2] if len(parts) > 2 else "")
             if method != "GET" and key and (method, parsed.path, key) in self.idem:
@@ -135,8 +138,8 @@ class Fake:
             if m == "GET":
                 if self.hide_regions:
                     self.hide_regions -= 1
-                    return 200, []
-                return 200, list(self.regions)
+                    return self.page_of([], "regionId", qu)
+                return self.page_of(self.regions, "regionId", qu)
             if any(r["code"] == body.get("code") for r in self.regions):
                 return problem(409, "region-code-taken")
             r = {"regionId": self.next_id("region"), "code": body["code"], "name": body["name"]}
@@ -144,8 +147,9 @@ class Fake:
             return 201, r
         if p == ["nodes"]:
             if m == "GET":
-                return 200, {"nodes": [self.public(n, False) for n in self.nodes.values()
-                                       if qu.get("type") in (None, n["nodeType"]) and qu.get("region") in (None, n["regionId"])]}
+                return self.page_of([self.public(n, False) for n in self.nodes.values()
+                                     if qu.get("type") in (None, n["nodeType"]) and qu.get("region") in (None, n["regionId"])],
+                                    "nodeId", qu, ("type", "region", "status"))
             return self.register_node(body)
         if p[0] == "nodes" and len(p) == 3 and p[2] == "activations":
             return self.activate(p[1])
@@ -153,8 +157,9 @@ class Fake:
             return (200, self.public(self.nodes[p[1]])) if p[1] in self.nodes else problem(404, "not-found")
         if p == ["lanes"]:
             if m == "GET":
-                return 200, {"lanes": [l for l in self.lanes if qu.get("origin") in (None, l["originNodeId"])
-                                       and qu.get("destination") in (None, l["destinationNodeId"])]}
+                return self.page_of([l for l in self.lanes if qu.get("origin") in (None, l["originNodeId"])
+                                     and qu.get("destination") in (None, l["destinationNodeId"])],
+                                    "laneId", qu, ("origin", "destination"))
             return self.open_lane(body)
         if p[0] == "service-areas":
             return self.service_area(m, p[1], body)
@@ -301,20 +306,37 @@ class Fake:
         return []
 
     # ---- offer-availability
-    def keyset(self, rows, key, qu, field):
-        after = qu.get("after")
+    def page_of(self, rows, key, qu, filters=()):
+        """One keyset page in the fleet envelope {items, nextCursor} (REST guideline, 2026-11-01).
+
+        Like every real collection: `limit` (1-500) and `cursor` plus the route's own filters are the only
+        query parameters (anything else, `after` included, is 400 unknown-query-parameter), the cursor is
+        opaque, and the server may cap the page below what the client asked (self.page).
+        """
+        if set(qu) - {"limit", "cursor", *filters}:
+            return problem(400, "unknown-query-parameter")
+        try:
+            limit = int(qu.get("limit", 100))
+        except ValueError:
+            limit = 0
+        if not 1 <= limit <= 500:
+            return problem(400, "invalid-limit")
         rows = sorted(rows, key=lambda r: r[key])
-        rows = [r for r in rows if after is None or r[key] > after]
-        size = min(int(qu.get("limit", 100)), self.page)
-        out = {field: rows[:size]}
+        cursor = qu.get("cursor")
+        if cursor is not None:
+            if not cursor.startswith("after:"):
+                return problem(400, "invalid-cursor")
+            rows = [r for r in rows if r[key] > cursor[len("after:"):]]
+        size = min(limit, self.page)
+        out = {"items": rows[:size]}
         if len(rows) > size:
-            out["nextCursor"] = rows[size - 1][key]
+            out["nextCursor"] = "after:" + rows[size - 1][key]
         return 200, out
 
     def c_offer_availability(self, m, rest, qu, body):
         p = rest.strip("/").split("/")
         if p == ["catalog"]:
-            return self.keyset(self.items, "catalogItemId", qu, "items")
+            return self.page_of(self.items, "catalogItemId", qu)
         if p == ["catalog-items"]:
             if min(body["lengthMm"], body["widthMm"], body["heightMm"], body["weightG"]) < 1:
                 return problem(422, "invalid-item-dimensions")
@@ -323,7 +345,7 @@ class Fake:
             return 201, it
         if p == ["listings"] and m == "GET":
             rows = [l for l in self.listings.values() if qu.get("nodeId") in (None, l["nodeId"])]
-            return self.keyset(rows, "listingId", qu, "listings")
+            return self.page_of(rows, "listingId", qu, ("nodeId", "catalogItemId"))
         if p == ["listings"]:
             if any(l["nodeId"] == body["nodeId"] and l["catalogItemId"] == body["catalogItemId"] for l in self.listings.values()):
                 return problem(409, "duplicate-listing")
@@ -341,7 +363,8 @@ class Fake:
     # ---- last-mile-delivery
     def c_last_mile_delivery(self, m, rest, qu, body):
         if m == "GET":
-            return 200, {"items": [w for w in self.waves if w["stationNodeId"] == qu["stationNodeId"] and w["serviceDate"] == qu["serviceDate"]]}
+            return self.page_of([w for w in self.waves if w["stationNodeId"] == qu.get("stationNodeId")
+                                 and w["serviceDate"] == qu.get("serviceDate")], "waveId", qu, ("stationNodeId", "serviceDate"))
         st = self.nodes.get(body["stationNodeId"])
         if not st or st["nodeType"] != "DELIVERY_STATION":
             return problem(422, "unknown-station")
@@ -368,9 +391,10 @@ class Fake:
     # ---- linehaul-transportation
     def c_linehaul_transportation(self, m, rest, qu, body):
         n = self.nodes.get(qu.get("origin", ""))
+        rows = []
         if n and n["status"] == "ACTIVE" and n.get("operationalProfile") and any(l["originNodeId"] == n["nodeId"] and l["status"] == "OPEN" for l in self.lanes):
-            return 200, {"departures": [{"departureId": "dep-1", "kind": "PICKUP", "state": "SCHEDULED", "originNodeId": n["nodeId"]}]}
-        return 200, {"departures": []}
+            rows = [{"departureId": "dep-1", "kind": "PICKUP", "state": "SCHEDULED", "originNodeId": n["nodeId"]}]
+        return self.page_of(rows, "departureId", qu, ("origin", "destination", "from", "to"))
 
 
 @contextlib.contextmanager
@@ -473,6 +497,73 @@ class SeedTests(unittest.TestCase):
             self.assertEqual(fake.writes(), [], "a second run sends no write at all")
             self.assertIn("0 created, 0 updated", out)
             self.assertNotIn("FAILED", out)
+
+    def test_every_collection_is_read_to_its_last_page(self):
+        with network() as (fake, base):
+            fake.page = 1                         # one row per page on every collection
+            fake.add_region("AAA-1")              # decoys sort before what the seed looks for:
+            fake.add_region("AAA-2")
+            fake.add_vendor_node("site-0")
+            fake.add_vendor_node("site-0b")
+            code, out, _ = run(base)
+            self.assertEqual(code, 0, out)
+            self.assertEqual(sorted(r["code"] for r in fake.regions), ["AAA-1", "AAA-2", "SIM-SC"])
+            self.assertEqual(len(fake.items), 5)
+            self.assertEqual(len(fake.listings), 5)
+            self.assertEqual(len(fake.waves), 14)
+            fake.log.clear()
+            code, out, _ = run(base)
+            self.assertEqual(code, 0, out)
+            self.assertEqual(fake.writes(), [], "rows on a later page must be found, not created again")
+            self.assertEqual(len([n for n in fake.nodes.values() if n["nodeType"] == "FULFILLMENT_CENTER"]), 3)
+            paged = [e[1] for e in fake.log if e[0] == "GET" and "cursor=" in e[1]]
+            for path in ("/regions", "/nodes", "/catalog", "/listings"):
+                self.assertTrue(any(p.split("?")[0].endswith(path) for p in paged), (path, paged[:5]))
+
+    def test_only_the_declared_collection_parameters_are_sent(self):
+        with network() as (fake, base):
+            code, out, _ = run(base)
+            self.assertEqual(code, 0, out)       # the fake answers 400 unknown-query-parameter otherwise
+            gets = [e[1] for e in fake.log if e[0] == "GET" and "?" in e[1]]
+            self.assertTrue(gets)
+            self.assertFalse([g for g in gets if "after=" in g], "`after` is not a parameter of any collection")
+
+    def test_a_200_that_is_not_a_page_is_a_failure_never_an_empty_collection(self):
+        pages = {"/api/node-topology/regions": "GET /regions", "/api/node-topology/nodes": "GET /nodes",
+                 "/api/node-topology/lanes": "GET /lanes", "/api/offer-availability/catalog": "GET /catalog",
+                 "/api/offer-availability/listings": "GET /listings", "/api/last-mile-delivery/waves": "GET /waves",
+                 "/api/linehaul-transportation/departures": "GET /departures"}
+        wrong = {"bare array (the retired shape)": [{"x": 1}], "retired object key": {"nodes": [], "lanes": [],
+                 "listings": [], "departures": []}, "items null": {"items": None}, "items missing": {"nextCursor": "x"}}
+        seeded_shapes = ("bare array (the retired shape)", "retired object key")
+        with network() as (fake, base):
+            self.assertEqual(run(base)[0], 0)
+            for path, message in pages.items():
+                for name, reply in wrong.items():
+                    with self.subTest(path=path, shape=name):
+                        fake.log.clear()
+                        fake.shape[path] = reply
+                        try:
+                            code, out, _ = run(base, "--verify")           # read-only, every shape
+                            self.assertEqual(code, 1, out)
+                            self.assertIn(message, out)
+                            if name in seeded_shapes:                      # the full seed, which could write
+                                code, out, _ = run(base)
+                                self.assertEqual(code, 1, out)
+                                self.assertEqual(fake.writes(), [], "an unreadable collection must not be taken for an empty one")
+                                self.assertIn(message, out)
+                        finally:
+                            del fake.shape[path]
+
+    def test_a_cursor_chain_that_never_ends_is_refused(self):
+        with network() as (fake, base):
+            self.assertEqual(run(base)[0], 0)
+            fake.log.clear()
+            fake.shape["/api/offer-availability/catalog"] = {"items": [], "nextCursor": "again"}
+            code, out, _ = run(base)
+            self.assertEqual(code, 1, out)
+            self.assertEqual(fake.writes(), [])
+            self.assertIn("nextCursor", out)
 
     def test_the_whole_shipped_catalogue_seeds_and_a_second_run_writes_nothing(self):
         cfg = SEED.load_config(DATA_FILE)
