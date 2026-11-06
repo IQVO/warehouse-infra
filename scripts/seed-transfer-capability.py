@@ -139,14 +139,41 @@ def problem_type(body: object) -> str:
     return ""
 
 
+PAGE_LIMIT = 500    # the largest page the fleet's collections allow (limit 1-500)
+MAX_PAGES = 1000    # a bound, not a target: a cursor chain longer than this is a broken server
+
+
+def get_all(api: Api, path: str) -> list:
+    """Every item of a collection GET answering the fleet envelope {items, nextCursor}.
+
+    Follows nextCursor to the last page. A 200 that is not a page (a bare array, a retired object key, items
+    missing or null) raises SetupError: reading it as an empty collection would silently seed nothing.
+    Only `limit` and `cursor` are sent; any other query parameter is 400 unknown-query-parameter.
+    """
+    items: list = []
+    cursor = None
+    seen: set = set()
+    for _ in range(MAX_PAGES):
+        query = {"limit": PAGE_LIMIT, **({"cursor": cursor} if cursor else {})}
+        status, body = api.call("GET", f"{path}?{urllib.parse.urlencode(query)}")
+        if status != 200 or not isinstance(body, dict) or not isinstance(body.get("items"), list):
+            raise SetupError(f"GET {path} -> {status} {body} (expected a page {{items, nextCursor}})")
+        items.extend(body["items"])
+        cursor = body.get("nextCursor")
+        if not cursor:
+            return items
+        if not isinstance(cursor, str) or cursor in seen:
+            raise SetupError(f"GET {path}: the nextCursor chain does not end (got {cursor!r} again)")
+        seen.add(cursor)
+    raise SetupError(f"GET {path}: more than {MAX_PAGES} pages")
+
+
 def load_defaults(api: Api) -> dict[str, tuple[bool, bool]]:
     """GET /site-roles/transfer-defaults -> {siteRole: (origin, destination)}."""
     try:
-        status, body = api.call("GET", "/site-roles/transfer-defaults")
+        body = get_all(api, "/site-roles/transfer-defaults")
     except SiteError as e:
         raise SetupError(str(e)) from e
-    if status != 200 or not isinstance(body, list):
-        raise SetupError(f"GET /site-roles/transfer-defaults -> {status} {body}")
     table: dict[str, tuple[bool, bool]] = {}
     for row in body:
         if not isinstance(row, dict):
@@ -168,11 +195,9 @@ def load_defaults(api: Api) -> dict[str, tuple[bool, bool]]:
 def load_sites(api: Api) -> list[dict]:
     """GET /sites -> the site list, ordered by site code."""
     try:
-        status, body = api.call("GET", "/sites")
+        body = get_all(api, "/sites")
     except SiteError as e:
         raise SetupError(str(e)) from e
-    if status != 200 or not isinstance(body, list):
-        raise SetupError(f"GET /sites -> {status} {body}")
     for s in body:
         if not isinstance(s, dict) or not s.get("siteCode"):
             raise SetupError(f"GET /sites: malformed site {s!r}")

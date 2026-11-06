@@ -25,6 +25,7 @@ import json
 import os
 import threading
 import unittest
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -61,6 +62,10 @@ class FakeFacilityLayout:
         self.caps = {k: list(v) for k, v in (capabilities or {}).items()}
         self.defaults = DEFAULTS if defaults is None else defaults
         self.defaults_status = 200
+        self.defaults_reply = None    # a 200 body served verbatim instead of a page (a wrong shape)
+        self.sites_reply = None       # same for GET /sites
+        self.page_cap = None          # the most rows the server returns per page (None = as asked)
+        self.queries = []             # (method, path, raw query string)
         self.log = []                 # (method, path-without-prefix, body)
         self.lose_race = {}           # siteCode -> number of PUTs that answer 409 concurrent-modification
         self.race_winner = {}         # siteCode -> (origin, dest) the concurrent writer lands
@@ -81,13 +86,44 @@ class FakeFacilityLayout:
     def puts(self):
         return [entry for entry in self.log if entry[0] == "PUT"]
 
+    def page(self, rows, query):
+        """One keyset page in the fleet envelope {items, nextCursor} (REST guideline, 2026-11-01).
+
+        Like the real collections: only `limit` (1-500) and `cursor` are known query parameters, anything
+        else is 400 unknown-query-parameter, and a server may cap the page below what the client asked.
+        """
+        unknown = sorted(set(query) - {"limit", "cursor"})
+        if unknown:
+            return 400, {"type": PROBLEM + "unknown-query-parameter", "status": 400}
+        try:
+            limit = int(query.get("limit", ["100"])[0])
+            start = int(query["cursor"][0][1:]) if "cursor" in query else 0
+        except (ValueError, IndexError):
+            return 400, {"type": PROBLEM + "invalid-cursor", "status": 400}
+        if not 1 <= limit <= 500:
+            return 400, {"type": PROBLEM + "invalid-limit", "status": 400}
+        size = min(limit, self.page_cap or limit)
+        body = {"items": rows[start:start + size]}
+        if start + size < len(rows):
+            body["nextCursor"] = f"c{start + size}"
+        return 200, body
+
     def handle(self, method, path, body):
+        path, _, raw_query = path.partition("?")
+        query = urllib.parse.parse_qs(raw_query, keep_blank_values=True)
         with self.lock:
             self.log.append((method, path, body))
+            self.queries.append((method, path, raw_query))
             if method == "GET" and path == "/site-roles/transfer-defaults":
-                return self.defaults_status, self.defaults
+                if self.defaults_status != 200:
+                    return self.defaults_status, self.defaults
+                if self.defaults_reply is not None:
+                    return 200, self.defaults_reply
+                return self.page(self.defaults, query)
             if method == "GET" and path == "/sites":
-                return 200, list(self.sites.values())
+                if self.sites_reply is not None:
+                    return 200, self.sites_reply
+                return self.page(list(self.sites.values()), query)
             parts = path.strip("/").split("/")
             if len(parts) == 3 and parts[0] == "sites" and parts[2] == "transfer-capability":
                 code = parts[1]
@@ -279,6 +315,60 @@ class SeedTransferCapabilityTest(unittest.TestCase):
         self.assertIn("ABE8       FAILED", out)
         self.assertEqual(sum(1 for _, p, _ in fake.puts() if p == "/sites/ABE8/transfer-capability"), 1,
                          "a PUT that 5xx'd is never blindly repeated")
+
+    def test_follows_nextcursor_to_the_last_page_of_sites_and_defaults(self):
+        fake = self.fleet()
+        fake.page_cap = 2          # 6 sites and 5 defaults: three and three pages
+        code, out = self.run_seed(self.start(fake))
+        self.assertEqual(code, 0, out)
+        self.assertEqual({p for _, p, _ in fake.puts()},
+                         {"/sites/ABE8/transfer-capability", "/sites/XD01/transfer-capability",
+                          "/sites/DAT3/transfer-capability"},
+                         "a site or role on a later page must still be reconciled")
+        self.assertIn("defaults  : 5 roles", out)
+        site_pages = [q for m, p, q in fake.queries if m == "GET" and p == "/sites"]
+        self.assertEqual(len(site_pages), 3, site_pages)
+        self.assertIn("cursor=c2", site_pages[1])
+        self.assertIn("cursor=c4", site_pages[2])
+
+    def test_only_sends_the_declared_collection_parameters(self):
+        fake = self.fleet()
+        code, out = self.run_seed(self.start(fake))
+        self.assertEqual(code, 0, out)       # the fake answers 400 unknown-query-parameter otherwise
+        for method, path, raw in fake.queries:
+            if path in ("/sites", "/site-roles/transfer-defaults"):
+                self.assertEqual(sorted(urllib.parse.parse_qs(raw)), ["limit"], (path, raw))
+
+    def test_a_200_that_is_not_a_page_is_refused_not_read_as_empty(self):
+        wrong = {
+            "bare array (the retired shape)": [site("ABE8", "NON_SORTABLE_FC")],
+            "retired object key": {"sites": [site("ABE8", "NON_SORTABLE_FC")]},
+            "items null": {"items": None},
+            "items missing": {"nextCursor": "x"},
+        }
+        for name, reply in wrong.items():
+            with self.subTest(sites=name):
+                fake = self.fleet()
+                fake.sites_reply = reply
+                code, out = self.run_seed(self.start(fake))
+                self.assertEqual(code, 2, out)
+                self.assertEqual(fake.puts(), [])
+                self.assertIn("GET /sites", out)
+            with self.subTest(defaults=name):
+                fake = self.fleet()
+                fake.defaults_reply = reply
+                code, out = self.run_seed(self.start(fake))
+                self.assertEqual(code, 2, out)
+                self.assertEqual(fake.puts(), [])
+                self.assertIn("transfer-defaults", out)
+
+    def test_a_server_that_never_ends_the_cursor_chain_is_not_followed_forever(self):
+        fake = self.fleet()
+        fake.sites_reply = {"items": [site("ABE8", "NON_SORTABLE_FC")], "nextCursor": "again"}
+        code, out = self.run_seed(self.start(fake))
+        self.assertEqual(code, 2, out)
+        self.assertEqual(fake.puts(), [])
+        self.assertIn("nextCursor", out)
 
     def test_unreadable_defaults_table_writes_nothing_and_exits_2(self):
         fake = self.fleet()
