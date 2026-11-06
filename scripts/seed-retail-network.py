@@ -525,16 +525,26 @@ class Seeder:
             return "tolerated", resp
         raise StepError(f"{label}: {method} {path} -> {status} {short(resp)}")
 
-    def pages(self, api: Api, path: str, params: dict, field: str) -> list:
-        out, after = [], None
+    def pages(self, api: Api, path: str, params: dict | None = None) -> list:
+        """Every item of a collection GET answering the fleet envelope {items, nextCursor}.
+
+        Follows nextCursor to the last page. Only `limit` and `cursor` (plus the route's own filters in
+        `params`) are sent: any other query parameter is 400 unknown-query-parameter. A 200 that is not a page
+        (a bare array, a retired object key such as nodes/lanes/listings/departures, items missing or null) is
+        a StepError, never an empty collection: reading it as empty would create what already exists.
+        """
+        out, cursor, seen = [], None, set()
         for _ in range(1000):
-            body = self.read(api, path + qs(**params, limit=500, after=after))
-            if not isinstance(body, dict):
-                raise StepError(f"GET {path}: unexpected answer {short(body)}")
-            out += body.get(field, [])
-            after = body.get("nextCursor")
-            if not after:
+            body = self.read(api, path + qs(**(params or {}), limit=500, cursor=cursor))
+            if not isinstance(body, dict) or not isinstance(body.get("items"), list):
+                raise StepError(f"GET {path}: not a page {{items, nextCursor}}: {short(body)}")
+            out += body["items"]
+            cursor = body.get("nextCursor")
+            if not cursor:
                 return out
+            if not isinstance(cursor, str) or cursor in seen:
+                raise StepError(f"GET {path}: the nextCursor chain does not end (got {cursor!r} again)")
+            seen.add(cursor)
         raise StepError(f"GET {path}: more than 1000 pages")
 
     def wait_tx(self, label: str, tx_id: str) -> dict:
@@ -570,22 +580,19 @@ class Seeder:
 
     # ---- finders (natural keys); shared with verify
     def find_region(self) -> Any:
-        regions = self.read(self.nt, "/regions")
-        if not isinstance(regions, list):
-            raise StepError(f"GET /regions: unexpected answer {short(regions)}")
+        regions = self.pages(self.nt, "/regions")
         return next((r for r in regions if r.get("code") == self.cfg["region"]["code"]), None)
 
     def find_station(self, ds: dict, region_id: str) -> Any:
         if is_dry(region_id):
             return None
-        body = self.read(self.nt, "/nodes" + qs(type="DELIVERY_STATION", region=region_id))
-        return next((n for n in body.get("nodes", []) if n.get("status") != "RETIRED"
+        nodes = self.pages(self.nt, "/nodes", {"type": "DELIVERY_STATION", "region": region_id})
+        return next((n for n in nodes if n.get("status") != "RETIRED"
                      and (n.get("location") or {}).get("postalCode") == ds["postalCode"]
                      and (n.get("location") or {}).get("countryCode") == ds["countryCode"]), None)
 
     def find_fc(self, fc: dict) -> Any:
-        body = self.read(self.nt, "/nodes" + qs(type="FULFILLMENT_CENTER"))
-        for n in body.get("nodes", []):
+        for n in self.pages(self.nt, "/nodes", {"type": "FULFILLMENT_CENTER"}):
             ref = n.get("vendorRef") or {}
             if (ref.get("vendorId") == self.vendor_id and ref.get("vendorNodeCode") == fc["vendorNodeCode"]
                     and n.get("status") != "RETIRED"):
@@ -593,11 +600,11 @@ class Seeder:
         return None
 
     def catalog_by_title(self) -> dict:
-        return {it["title"]: it for it in self.pages(self.oa, "/catalog", {}, "items")}
+        return {it["title"]: it for it in self.pages(self.oa, "/catalog")}
 
     def open_lane(self, origin: str, destination: str) -> Any:
-        body = self.read(self.nt, "/lanes" + qs(origin=origin, destination=destination))
-        return next((l for l in body.get("lanes", []) if l.get("status") == "OPEN"), None)
+        lanes = self.pages(self.nt, "/lanes", {"origin": origin, "destination": destination})
+        return next((l for l in lanes if l.get("status") == "OPEN"), None)
 
     # ---- stage 0: reachability
     def preflight(self) -> None:
@@ -804,7 +811,7 @@ class Seeder:
                 label = f"wave {ds['code']} {day} window {start:%H:%MZ}-{end:%H:%MZ}, induct {induct:%H:%MZ}"
                 try:
                     if not is_dry(sid):
-                        have = self.read(self.lm, "/waves" + qs(stationNodeId=sid, serviceDate=day.isoformat())).get("items", [])
+                        have = self.pages(self.lm, "/waves", {"stationNodeId": sid, "serviceDate": day.isoformat()})
                         if any(parse_ts(x["inductCutoffAt"]) == induct and x.get("state") != "CANCELLED" for x in have):
                             self.same(label)
                             continue
@@ -847,7 +854,7 @@ class Seeder:
             if not fid:
                 self.skip(f"listings on {code}: needs fulfillment node {code}")
                 continue
-            have = {} if is_dry(fid) else {l["catalogItemId"]: l for l in self.pages(self.oa, "/listings", {"nodeId": fid}, "listings")}
+            have = {} if is_dry(fid) else {l["catalogItemId"]: l for l in self.pages(self.oa, "/listings", {"nodeId": fid})}
             for it in self.cfg["catalog"]:
                 label = f"listing {it['sku']} @ {code}"
                 cid = self.state["items"].get(it["sku"])
@@ -867,7 +874,7 @@ class Seeder:
                     elif out == "done":
                         self.state["listings"][(code, it["sku"])] = resp["listingId"]
                     else:
-                        again = {l["catalogItemId"]: l for l in self.pages(self.oa, "/listings", {"nodeId": fid}, "listings")}
+                        again = {l["catalogItemId"]: l for l in self.pages(self.oa, "/listings", {"nodeId": fid})}
                         self.state["listings"][(code, it["sku"])] = again[cid]["listingId"]
                 except (StepError, KeyError) as e:
                     self.fail(str(e) if isinstance(e, StepError) else f"{label}: listing not found after 409")
@@ -886,7 +893,7 @@ class Seeder:
                 self.fail(str(e))
 
     def feed(self, fc: dict, code: str, fid: str) -> None:
-        listings = [] if is_dry(fid) else self.pages(self.oa, "/listings", {"nodeId": fid}, "listings")
+        listings = [] if is_dry(fid) else self.pages(self.oa, "/listings", {"nodeId": fid})
         by_id = {l["listingId"]: l for l in listings}
         targets = {}         # listingId -> quantity to declare
         for it in self.cfg["catalog"]:
@@ -965,7 +972,7 @@ class Seeder:
                 if node is None:
                     problems.append(f"fulfillment node {code} (vendor {self.vendor_id}) is not in node-topology: seed the network first")
                     continue
-                by_item = {l["catalogItemId"]: l for l in self.pages(self.oa, "/listings", {"nodeId": node["nodeId"]}, "listings")}
+                by_item = {l["catalogItemId"]: l for l in self.pages(self.oa, "/listings", {"nodeId": node["nodeId"]})}
             except StepError as e:
                 problems.append(str(e))
                 continue
@@ -1076,7 +1083,7 @@ class Seeder:
         def pickups():
             if "id" not in found:
                 return False, "no node"
-            deps = self.read(self.lh, "/departures" + qs(origin=found["id"], limit=50)).get("departures", [])
+            deps = self.pages(self.lh, "/departures", {"origin": found["id"]})
             pick = [d for d in deps if d.get("kind") == "PICKUP" and d.get("state") == "SCHEDULED"]
             return bool(pick), f"{len(pick)} SCHEDULED pickup departure(s), generated by linehaul-transportation"
 
@@ -1086,7 +1093,7 @@ class Seeder:
             if "id" not in found:
                 return False, "no node"
             cat = self.catalog_by_title()
-            by_item = {l["catalogItemId"]: l for l in self.pages(self.oa, "/listings", {"nodeId": found["id"]}, "listings")}
+            by_item = {l["catalogItemId"]: l for l in self.pages(self.oa, "/listings", {"nodeId": found["id"]})}
             bad, parts = [], []
             for it in self.cfg["catalog"]:
                 l = by_item.get((cat.get(it["title"]) or {}).get("catalogItemId"))
@@ -1106,7 +1113,7 @@ class Seeder:
         tz, n = tzinfo(ds["timezone"]), 0
         today = self.now.astimezone(tz).date()
         for i in range(3):
-            items = self.read(self.lm, "/waves" + qs(stationNodeId=sid, serviceDate=(today + dt.timedelta(days=i)).isoformat())).get("items", [])
+            items = self.pages(self.lm, "/waves", {"stationNodeId": sid, "serviceDate": (today + dt.timedelta(days=i)).isoformat()})
             n += sum(1 for x in items if x.get("state") == "OPEN")
         return n > 0, f"{n} OPEN wave(s)"
 
