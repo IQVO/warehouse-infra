@@ -280,10 +280,37 @@ def _nominatim(loc: dict):
 
 
 # ------------------------------------------------------------------ main
+PAGE_LIMIT = 500    # the largest page the fleet's collections allow (limit 1-500)
+MAX_PAGES = 1000    # a bound, not a target: a cursor chain longer than this is a broken server
+
+
+def get_all(api: Api, path: str) -> list:
+    """Every item of a collection GET answering the fleet envelope {items, nextCursor}.
+
+    Follows nextCursor to the last page. A 200 that is not a page (a bare array, a retired object key, items
+    missing or null) raises SetupError: reading it as an empty collection would silently seed nothing.
+    Only `limit` and `cursor` are sent; any other query parameter is 400 unknown-query-parameter.
+    """
+    items: list = []
+    cursor = None
+    seen: set = set()
+    for _ in range(MAX_PAGES):
+        query = {"limit": PAGE_LIMIT, **({"cursor": cursor} if cursor else {})}
+        status, body = api.call("GET", f"{path}?{urllib.parse.urlencode(query)}")
+        if status != 200 or not isinstance(body, dict) or not isinstance(body.get("items"), list):
+            raise SetupError(f"GET {path} -> {status} {body} (expected a page {{items, nextCursor}})")
+        items.extend(body["items"])
+        cursor = body.get("nextCursor")
+        if not cursor:
+            return items
+        if not isinstance(cursor, str) or cursor in seen:
+            raise SetupError(f"GET {path}: the nextCursor chain does not end (got {cursor!r} again)")
+        seen.add(cursor)
+    raise SetupError(f"GET {path}: more than {MAX_PAGES} pages")
+
+
 def read_capabilities(facility: Api):
-    status, sites = facility.call("GET", "/sites")
-    if status != 200 or not isinstance(sites, list):
-        raise SetupError(f"GET /sites -> {status} {sites}")
+    sites = get_all(facility, "/sites")
     origins, destinations = set(), set()
     for s in sites:
         if s.get("status") != ACTIVE:
@@ -318,9 +345,7 @@ def main(argv=None) -> int:
     facility, nip = Api(args.facility_url), Api(args.nip_url)
     try:
         if args.refresh_coordinates:
-            status, sites = facility.call("GET", "/sites")
-            if status != 200 or not isinstance(sites, list):
-                raise SetupError(f"GET /sites -> {status} {sites}")
+            sites = get_all(facility, "/sites")
             added = refresh_coordinates(sites, args.coordinates)
             print(f"\nseed-transfer-lanes: {len(added)} site(s) geocoded into {args.coordinates}")
             return 0
@@ -330,14 +355,16 @@ def main(argv=None) -> int:
         # yet) gets no lane. It is listed loudly instead of aborting: run --refresh-coordinates for a new site.
         no_coords = sorted((origins | destinations) - set(coords))
         origins, destinations = origins & set(coords), destinations & set(coords)
-        status, existing = nip.call("GET", "/v1/transfer-lanes")
-        if status != 200 or not isinstance(existing, dict):
-            raise SetupError(f"GET /v1/transfer-lanes -> {status} {existing}")
+        existing = get_all(nip, "/v1/transfer-lanes")
+        for e in existing:
+            lane = e.get("lane") if isinstance(e, dict) else None
+            if not isinstance(lane, dict) or "Origin" not in lane or "Destination" not in lane:
+                raise SetupError(f"GET /v1/transfer-lanes: malformed entry {e!r}")
     except SetupError as e:
         print(f"seed-transfer-lanes: {e}", file=sys.stderr)
         return 2
 
-    have = {(e["lane"]["Origin"], e["lane"]["Destination"]): e["lane"] for e in existing.get("lanes", [])}
+    have = {(e["lane"]["Origin"], e["lane"]["Destination"]): e["lane"] for e in existing}
     want, isolated = compute_lanes(origins, destinations, coords, args.neighbours, args.max_km)
     wanted_keys = {(l["Origin"], l["Destination"]) for l in want}
 

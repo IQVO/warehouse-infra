@@ -19,6 +19,7 @@ import os
 import tempfile
 import threading
 import unittest
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -56,6 +57,9 @@ class Fakes:
         self.lanes = {}        # (o, d) -> [lane, revision]
         self.log = []          # (method, path, body)
         self.fail_put = set()  # (o, d) whose PUT answers 500
+        self.sites_reply = None   # a 200 body served verbatim for GET /sites instead of a page
+        self.lanes_reply = None   # same for GET /v1/transfer-lanes
+        self.page_cap = None      # the most rows per page the servers return (None = as asked)
         self.lock = threading.Lock()
 
     def handler(self, kind):
@@ -74,19 +78,39 @@ class Fakes:
                 self.wfile.write(raw)
 
             def do_GET(self):
+                path, _, raw_query = self.path.partition("?")
+                query = urllib.parse.parse_qs(raw_query, keep_blank_values=True)
                 with fakes.lock:
                     fakes.log.append(("GET", self.path, None))
-                    if kind == "facility" and self.path == "/sites":
-                        return self._send(200, SITES)
-                    if kind == "facility" and self.path.endswith("/transfer-capability"):
-                        code = self.path.split("/")[2]
+                    if kind == "facility" and path == "/sites":
+                        if fakes.sites_reply is not None:
+                            return self._send(200, fakes.sites_reply)
+                        return self._page(SITES, query)
+                    if kind == "facility" and path.endswith("/transfer-capability"):
+                        code = path.split("/")[2]
                         o, d = CAPS.get(code, (False, False))
                         return self._send(200, {"siteCode": code, "transferOriginEnabled": o,
                                                 "transferDestinationEnabled": d, "capabilityRevision": 1})
-                    if kind == "nip" and self.path == "/v1/transfer-lanes":
-                        return self._send(200, {"lanes": [{"lane": l, "revision": r, "updatedAt": "2026-10-17T00:00:00Z"}
-                                                          for l, r in fakes.lanes.values()]})
+                    if kind == "nip" and path == "/v1/transfer-lanes":
+                        if fakes.lanes_reply is not None:
+                            return self._send(200, fakes.lanes_reply)
+                        return self._page([{"lane": l, "revision": r, "updatedAt": "2026-10-17T00:00:00Z"}
+                                           for l, r in fakes.lanes.values()], query)
                 self._send(404, {"status": 404})
+
+            def _page(self, rows, query):
+                """The fleet envelope {items, nextCursor}: only limit (1-500) and cursor are known parameters."""
+                if set(query) - {"limit", "cursor"}:
+                    return self._send(400, {"type": "unknown-query-parameter", "status": 400})
+                limit = int(query.get("limit", ["100"])[0])
+                start = int(query["cursor"][0][1:]) if "cursor" in query else 0
+                if not 1 <= limit <= 500:
+                    return self._send(400, {"type": "invalid-limit", "status": 400})
+                size = min(limit, fakes.page_cap or limit)
+                body = {"items": rows[start:start + size]}
+                if start + size < len(rows):
+                    body["nextCursor"] = f"c{start + size}"
+                self._send(200, body)
 
             def do_PUT(self):
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
@@ -203,6 +227,59 @@ class SeedTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual([e for e in fakes.log if e[0] == "PUT"], [], "a second run writes nothing")
             self.assertIn("0 created, 0 updated", out)
+
+    def test_follows_nextcursor_on_sites_and_on_the_lane_catalogue(self):
+        with cluster() as (fakes, urls):
+            fakes.page_cap = 2            # 7 sites, then the whole lane catalogue, in pages of two
+            code, out, _ = run(urls)
+            self.assertEqual(code, 0, out)
+            full = dict(fakes.lanes)
+            self.assertTrue(full)
+            self.assertIn("NO LANES for SIM1", out, "SIM1 sits on the last page of /sites")
+            fakes.log.clear()
+            code, out, _ = run(urls)
+            self.assertEqual(code, 0, out)
+            self.assertEqual([e for e in fakes.log if e[0] == "PUT"], [],
+                             "lanes on a later catalogue page must be recognised as present")
+            self.assertIn(f"{len(full)} lanes computed: 0 created, 0 updated, {len(full)} unchanged, 0 unmanaged", out)
+            lane_gets = [e[1] for e in fakes.log if e[0] == "GET" and e[1].startswith("/v1/transfer-lanes")]
+            self.assertGreater(len(lane_gets), 1, lane_gets)
+            self.assertIn("cursor=c2", lane_gets[1])
+
+    def test_a_200_that_is_not_a_page_is_refused_not_read_as_empty(self):
+        entry = {"lane": {"Origin": "PHL7", "Destination": "JFK8"}, "revision": 1}
+        wrong = {
+            "bare array (the retired shape)": [entry],
+            "retired object key": {"lanes": [entry]},
+            "items null": {"items": None},
+            "items missing": {"nextCursor": "x"},
+        }
+        for name, reply in wrong.items():
+            with self.subTest(lanes=name), cluster() as (fakes, urls):
+                fakes.lanes_reply = reply
+                code, out, err = run(urls)
+                self.assertEqual(code, 2, out)
+                self.assertEqual([e for e in fakes.log if e[0] == "PUT"], [], "refused before any write")
+                self.assertIn("GET /v1/transfer-lanes", err)
+            with self.subTest(sites=name), cluster() as (fakes, urls):
+                fakes.sites_reply = reply
+                code, out, err = run(urls)
+                self.assertEqual(code, 2, out)
+                self.assertEqual([e for e in fakes.log if e[0] == "PUT"], [])
+                self.assertIn("GET /sites", err)
+
+    def test_refresh_coordinates_reads_every_page_of_sites(self):
+        with cluster() as (fakes, urls):
+            fakes.page_cap = 2
+            seen = []
+            real = SEED.refresh_coordinates
+            SEED.refresh_coordinates = lambda sites, path, **kw: seen.extend(s["siteCode"] for s in sites) or []
+            try:
+                code, _, err = run(urls, "--refresh-coordinates")
+            finally:
+                SEED.refresh_coordinates = real
+            self.assertEqual(code, 0, err)
+            self.assertEqual(sorted(seen), sorted(s["siteCode"] for s in SITES))
 
     def test_dry_run_writes_nothing(self):
         with cluster() as (fakes, urls):
