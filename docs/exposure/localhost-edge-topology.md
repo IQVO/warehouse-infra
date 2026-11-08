@@ -8,7 +8,7 @@ The fleet's product surface has two very different kinds of traffic: static
 frontend assets (the `warehouse-console` shell plus eight Module Federation
 remotes) and REST APIs (eight bounded contexts plus `warehouse-ops-agent`).
 Both have to be reachable from a browser on the developer's own machine, from
-the local `kind` cluster.
+the k3s cluster (through `scripts/k3s-edges.sh`).
 
 Before this decision the cluster exposed APIs only. Kong owned host port 80 and
 routed `/<service>` to each context, and the frontends had no in-cluster
@@ -88,7 +88,7 @@ developer port.
 
 **This is not a rolling upgrade.** Two immutable fields change:
 
-1. kind's `extraPortMappings` (Kong 80 -> 8000, web gateway added on 80).
+1. The cluster's host port mappings, at the time kind's `extraPortMappings` (Kong 80 -> 8000, web gateway added on 80); on k3s the same ports are the port-forwards of `scripts/k3s-edges.sh`.
 2. Each chart's Deployment `selector.matchLabels`, which gained
    `app.kubernetes.io/component` so the new frontend workload is not selected
    by the OLTP Service. (That Service genuinely selected the OLTP, projector,

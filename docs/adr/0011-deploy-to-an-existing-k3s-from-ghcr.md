@@ -81,8 +81,9 @@ The images already published to ghcr.io by each application's `docker-publish` j
 - The k3s environment runs the images of one `develop` snapshot. Moving it forward is: run `publish-images`, run
   `k3s-pin-images.sh`, commit the lock file, `tf.sh --target k3s apps apply`. A chart change still reaches the
   cluster through ArgoCD on merge; an image change does not, without the pin.
-- `terraform/10-platform` still carries the kind-era variable defaults (`expose_node_ports = true`, sidecars on, ...); the
-  k3s target file overrides them. Removing the kind code paths is a follow-up (see Amendment).
+- The toggles that used to flip between kind and k3s (`expose_node_ports`, `manage_gateway_api_crds`,
+  `deploy_metrics_server`, `istio_injection_enabled`, `argocd_lean`, `kafka_external_access_enabled`, `image_source`) are gone;
+  their k3s values are built in (Amendment).
 - A k3s node allows 110 pods (kubelet `maxPods`, also not ours to change). The platform plus the fleet needs more
   than one node (ArgoCD runs without Dex, notifications and the ApplicationSet controller there: `argocd_lean`): with the agent down the applications that do not fit stay `Pending` until it returns.
 
@@ -102,9 +103,13 @@ The owner banned `kind`. Two rules now hold for every deploy of this repo:
    `scripts/down.sh --target k3s --yes`). No new `kind` cluster is created, started or loaded into.
 2. **Every deployed image must already exist on GitHub**: built by the `publish-images` workflow and pinned in
    `terraform/targets/k3s.images.yaml`. Nothing is built from a local checkout. An application with no pinned tag
-   fails the plan (`image_source = "registry"`). A chart or values change still reaches the cluster through ArgoCD
+   fails the plan. A chart or values change still reaches the cluster through ArgoCD
    from `develop`; the images it runs are the pinned ones.
 
-Consequences: the `kind` default of `scripts/tf.sh`/`up.sh`, `00-cluster`'s `kind_cluster`, `scripts/build-and-load.sh`
-and the `local-<hash>` image tags are legacy and unsupported. They are left in place by this amendment so the existing
-kind state stays readable; deleting them is a follow-up change of its own.
+Consequences: everything kind-specific is removed. `00-cluster` creates nothing (no `kind_cluster`, no kind
+provider); `modules/application` builds and loads nothing; `scripts/tf.sh`, `up.sh` and `down.sh` default to k3s and refuse
+kind; `scripts/build-and-load*.sh`, the vendored Gateway API CRD bundle, `metrics-server.tf`, `exposure.tf` (NodePort
+Services) and Kafka's EXTERNAL listener are deleted; the platform layer no longer hashes sibling checkouts, so a plan needs
+none. The nightly kind `cluster-acceptance` workflow is deleted: `scripts/run-cluster-acceptance.sh --existing` is the
+read-only acceptance of the k3s cluster, run from the workstation. `helm-values/kind-resources/` keeps its name (ArgoCD reads
+it by path); it holds the CPU-request overlays that apply on k3s.

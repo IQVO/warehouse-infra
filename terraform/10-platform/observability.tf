@@ -48,7 +48,7 @@ resource "kubernetes_namespace" "observability" {
 # Chart 4.x installs Jaeger v2, which is itself an OpenTelemetry Collector
 # distribution: one Deployment, one Service, in-memory storage by default, and
 # a native OTLP receiver on 4317/4318. That is exactly the all-in-one shape a
-# local kind cluster wants — the same "real but proportionate" call the
+# small local cluster wants — the same "real but proportionate" call the
 # Postgres release makes by running one instance with four logical databases
 # instead of four clusters.
 #
@@ -113,11 +113,11 @@ resource "helm_release" "jaeger" {
 #
 # Subcharts node-exporter and pushgateway are off. This Prometheus exists to
 # hold application metrics coming through the Collector; a node-exporter
-# DaemonSet with hostPath mounts on a two-node kind cluster is cost without
+# DaemonSet with hostPath mounts on a two-node cluster is cost without
 # benefit here.
 #
 # Alertmanager is ON (gap SLO-1): ONE replica, no PVC (emptyDir; silences on
-# a disposable kind cluster are not worth a volume), requests 10m / 32Mi.
+# a disposable cluster are not worth a volume), requests 10m / 32Mi.
 # Its config has a route whose default receiver is `null`, a receiver with
 # no integrations. The honest statement: a local cluster has no pager, so
 # NOTHING IS DELIVERED ANYWHERE. What Alertmanager adds is grouping
@@ -536,7 +536,7 @@ resource "helm_release" "otel_collector" {
 
     # Trim the Service down to what is actually used. The chart enables Jaeger's
     # own legacy receiver ports and Zipkin by default; the services speak OTLP
-    # and nothing else, and every extra port here is also a hostPort on the kind
+    # and nothing else, and every extra port here is also a hostPort on the
     # node.
     ports = {
       otlp = {

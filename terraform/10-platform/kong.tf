@@ -22,8 +22,9 @@
 # fleet-wide flag day, and a service not yet migrated keeps routing exactly
 # as it always has via its existing `Ingress` object.
 #
-# Exposure: proxy Service is NodePort (there is no cloud load balancer here);
-# kind's extraPortMappings publish those NodePorts on the host. See main.tf.
+# Exposure: the proxy Service is ClusterIP (ADR 0011). A NodePort would answer
+# on the node's LAN address and the whole fleet is unauthenticated, so nothing is
+# published: scripts/k3s-edges.sh port-forwards it to 127.0.0.1.
 # ---------------------------------------------------------------------------
 
 resource "helm_release" "kong" {
@@ -61,27 +62,22 @@ resource "helm_release" "kong" {
 
     proxy = {
       enabled = true
-      type    = var.expose_node_ports ? "NodePort" : "ClusterIP"
-      http = merge({
+      type    = "ClusterIP"
+      http = {
         enabled       = true
         servicePort   = 80
         containerPort = 8000
-        }, var.expose_node_ports ? {
-        nodePort = local.cluster.ports.kong_proxy_http_node_port
-      } : {})
-      tls = merge({
+      }
+      tls = {
         enabled       = true
         servicePort   = 443
         containerPort = 8443
-        }, var.expose_node_ports ? {
-        nodePort = local.cluster.ports.kong_proxy_https_node_port
-      } : {})
+      }
     }
 
-    # The chart's Kong Manager Service is a NodePort by default. On kind that is
-    # unreachable from outside the Docker network; on a node with a LAN address
-    # (k3s) it would publish the manager UI. Nothing here uses it.
-    manager = var.expose_node_ports ? {} : { type = "ClusterIP" }
+    # The chart's Kong Manager Service is a NodePort by default: on a node with a
+    # LAN address it would publish the manager UI. Nothing here uses it.
+    manager = { type = "ClusterIP" }
 
     ingressController = {
       enabled      = true
@@ -97,7 +93,7 @@ resource "helm_release" "kong" {
     # Annotating the pod directly lets Prometheus's existing chart-default
     # `kubernetes-pods` scrape job pick it up with zero Prometheus-side
     # config: no separate job, no extra Service, no port to punch through
-    # the kind host mapping.
+    # a host port.
     podAnnotations = {
       "prometheus.io/scrape" = "true"
       "prometheus.io/port"   = "8100"

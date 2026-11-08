@@ -8,22 +8,12 @@ output "cluster" {
     kube_context    = var.kube_context
     kubeconfig_file = var.kubeconfig_file
     ports = {
-      web_gateway_node_port      = var.web_gateway_node_port
-      web_gateway_host_port      = var.web_gateway_host_port
-      kong_proxy_http_node_port  = var.kong_proxy_http_node_port
-      kong_proxy_http_host_port  = var.kong_proxy_http_host_port
-      kong_proxy_https_node_port = var.kong_proxy_https_node_port
-      kong_proxy_https_host_port = var.kong_proxy_https_host_port
-      grafana_node_port          = var.grafana_node_port
-      grafana_host_port          = var.grafana_host_port
-      jaeger_node_port           = var.jaeger_node_port
-      jaeger_host_port           = var.jaeger_host_port
-      prometheus_node_port       = var.prometheus_node_port
-      prometheus_host_port       = var.prometheus_host_port
-      kiali_node_port            = var.kiali_node_port
-      kiali_host_port            = var.kiali_host_port
-      kafka_node_port            = var.kafka_node_port
-      kafka_host_port            = var.kafka_host_port
+      web_gateway_host_port     = var.web_gateway_host_port
+      kong_proxy_http_host_port = var.kong_proxy_http_host_port
+      grafana_host_port         = var.grafana_host_port
+      jaeger_host_port          = var.jaeger_host_port
+      prometheus_host_port      = var.prometheus_host_port
+      kiali_host_port           = var.kiali_host_port
     }
   }
 }

@@ -69,7 +69,7 @@ locals {
   frontend = try(local.a.site, false) ? (
     var.deploy_frontends ? { values_key = "image" } : null
     ) : (
-    contains(keys(local.platform.frontend_source_hash), local.app_name) ? {} : null
+    contains(local.platform.frontend_apps, local.app_name) ? {} : null
   )
 
   database = try(local.a.database, false) ? merge(local.oltp_endpoints, {

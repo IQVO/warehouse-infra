@@ -3,7 +3,7 @@
 # https://istio-release.storage.googleapis.com/charts
 #
 # Sidecar mode over ambient on purpose: it needs no CNI DaemonSet and no
-# ztunnel, which is markedly less fragile inside kind, and namespace-label
+# ztunnel, which is markedly less fragile on a small cluster, and namespace-label
 # injection (istio-injection=enabled) requires zero application changes.
 #
 # Ordering is a hard requirement: istio-base installs the CRDs that istiod's
@@ -50,7 +50,7 @@ resource "helm_release" "istiod" {
   wait    = true
 
   values = [yamlencode({
-    # kind nodes are small; the production-default istiod requests are
+    # the nodes are small; the production-default istiod requests are
     # generous enough to leave the pod Pending on a laptop.
     pilot = {
       resources = {

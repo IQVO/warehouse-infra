@@ -12,7 +12,7 @@
 # on purpose: data is never dropped by a plan.
 #
 # Completed Jobs keep their pods until something deletes them, and on the
-# single-worker kind node those pods squat scheduler slots (maxPods 110): the
+# single-worker node those pods squat scheduler slots (maxPods 110): the
 # 2026-10-22 returns/exceptions apply wedged exactly there, with ~37 Succeeded
 # provision pods pinning the node at cap. ttl_seconds_after_finished hands the
 # cleanup to the TTL controller instead: 10 minutes keeps the Job (and its
@@ -56,7 +56,7 @@ resource "kubernetes_job_v1" "provision" {
     backoff_limit = 6
 
     # See the module header: completed Job pods squat maxPods slots on the
-    # kind worker; the TTL controller returns them 10 minutes after completion.
+    # worker; the TTL controller returns them 10 minutes after completion.
     ttl_seconds_after_finished = 600
 
     template {

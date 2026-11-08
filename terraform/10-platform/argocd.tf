@@ -32,17 +32,21 @@ resource "helm_release" "argocd" {
   timeout = 1200
   wait    = true
 
-  values = concat(
-    [file("${path.module}/../../helm-values/argocd.yaml")],
-    # Last, so it wins over the file above.
-    var.argocd_lean ? [yamlencode({
+  values = [
+    file("${path.module}/../../helm-values/argocd.yaml"),
+    # Last, so it wins over the file above. Lean ArgoCD (ADR 0011): no Dex (SSO),
+    # no notifications controller, no ApplicationSet controller. Nothing here uses
+    # them (auth is disabled; every Application is created directly by
+    # modules/application) and three pods fewer matter on k3s, where a node holds
+    # 110 pods.
+    yamlencode({
       dex           = { enabled = false }
       notifications = { enabled = false }
       applicationSet = {
         enabled = false
       }
-    })] : [],
-  )
+    }),
+  ]
 
   depends_on = [kubernetes_namespace.argocd]
 }

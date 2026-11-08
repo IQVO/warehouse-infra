@@ -1,16 +1,20 @@
 # warehouse-infra
 
-> **kind is banned (ADR 0011, amended 2026-11-08).** Every deploy targets the existing k3s cluster with images built on GitHub and pinned in `terraform/targets/k3s.images.yaml`. This README still describes the retired kind environment in places (architecture sketch, ports, CPU overlay, rebuild notes); read it as history and follow `CLAUDE.md`, ADR 0011 and `.claude/skills/deploy-local-checkout` for how to deploy. The platform layer (`terraform/10-platform`) still carries kind-era defaults that `terraform/targets/k3s.tfvars.json` overrides; removing them is tracked as the follow-up to this change.
+Kubernetes deployment of the `warehouse-systems` bounded contexts onto an
+**existing k3s cluster** (kube context `k3s-multipass`, two arm64 nodes): **PostgreSQL**,
+**Kafka**, **Istio**, the observability stack, **Kong** (north-south API gateway) and an
+**Nginx web gateway** (the product UI), all brought up by `./scripts/up.sh`: three Terraform
+layers (cluster, platform, one state per application), applied in order.
 
-A fully local Kubernetes environment for the `warehouse-systems` bounded
-contexts: a **kind** cluster running **PostgreSQL**, **Kafka**, **Istio**
-(sidecar mesh), the observability stack, **Kong** (north-south API gateway) and
-an **Nginx web gateway** (the product UI), all provisioned by `./scripts/up.sh`:
-three Terraform layers (cluster, platform, one state per application), applied in order.
+> **kind is banned (ADR 0011).** Every deploy targets k3s, and every deployed image must
+> already exist on GitHub: it is built by the `publish-images` workflow and pinned in
+> `terraform/targets/k3s.images.yaml`. Nothing is built or side-loaded locally, and this
+> repo never changes the machines (no SSH, no sysctl, no node configuration): Terraform only
+> talks to the Kubernetes API.
 
-Nothing here talks to a cloud. There is no cloud load balancer, no registry
-push, no remote state — images are built locally and side-loaded into kind, and
-both gateways are reached through kind's `extraPortMappings`.
+There is no cloud load balancer and nothing is published on the nodes. The fleet is
+unauthenticated, so both gateways are ClusterIP Services that `scripts/k3s-edges.sh`
+bridges to `127.0.0.1` with `kubectl port-forward`.
 
 The product has **two independent host-facing edges**, and neither proxies to
 the other:
@@ -40,101 +44,95 @@ or synthetic.
 ## Architecture
 
 ```
-                    HOST (macOS / Linux)
+                    WORKSTATION (macOS / Linux)
    open http://localhost            (UI, via the Nginx web gateway)
    curl http://localhost:8000/api/inventory-storage/healthz
                           │
-                          │  kind extraPortMappings
-                          │  host :80  -> node :30080
-                          │  host :443 -> node :30443
+                          │  scripts/k3s-edges.sh: kubectl port-forward,
+                          │  bound to 127.0.0.1 only
                           ▼
   ┌───────────────────────────────────────────────────────────────────────┐
-  │  kind cluster "warehouse"   (1 control-plane + 1 worker, v1.36.1)      │
+  │  k3s cluster "k3s-multipass"   (server + agent, arm64; 110 pods/node)  │
   │                                                                       │
   │   ns: kong                                                            │
   │   ┌─────────────────────────────────────────────┐                     │
   │   │  Kong Gateway (DB-less)  +  Kong Ingress     │                     │
   │   │  Controller, one pod, two containers         │                     │
-  │   │  Service type NodePort  30080 / 30443        │                     │
+  │   │  Service type ClusterIP                      │                     │
   │   └───────────────────┬─────────────────────────┘                     │
-  │                       │  routes by path prefix, strip-path=true        │
-  │                       │  ( /inventory-storage/healthz -> /healthz )    │
+  │                       │  Gateway API HTTPRoutes, strip-path            │
   │                       ▼                                               │
-  │   ns: warehouse-systems     [ istio-injection=enabled ]                │
+  │   ns: warehouse-systems     [ istio-injection=disabled ]               │
   │   ┌───────────────────────────────────────────────────────────────┐   │
-  │   │  inventory-storage      wes-work-planning                     │   │
-  │   │  ┌──────┬──────────┐    ┌──────┬──────────┐                   │   │
-  │   │  │ app  │istio-proxy│    │ app  │istio-proxy│   ... 4 pods,    │   │
-  │   │  │ :8080│  sidecar  │    │ :8080│  sidecar  │   all 2/2        │   │
-  │   │  └──────┴──────────┘    └──────┴──────────┘                   │   │
-  │   │  workforce-management   fulfillment-execution                 │   │
+  │   │  the fleet's applications (one ArgoCD Application each),       │   │
+  │   │  images from ghcr.io/iqvo/warehouse-infra at pinned tags       │   │
   │   └───────────────────────────────┬───────────────────────────────┘   │
   │                                   │  DATABASE_URL                     │
   │                                   ▼                                   │
   │   ns: warehouse-data                                                  │
   │   ┌───────────────────────────────────────────────────────────────┐   │
-  │   │  postgres-postgresql-0   (one release, four logical databases) │   │
-  │   │    inventory_storage   wes_work_planning                      │   │
-  │   │    workforce_management  fulfillment_execution                │   │
-  │   │    ...each owned by its own least-privilege role              │   │
+  │   │  postgres + pgbouncer (one release; one role and database per  │   │
+  │   │  application, created by a Job: see "Databases")               │   │
   │   └───────────────────────────────────────────────────────────────┘   │
   │                                                                       │
-  │   ns: istio-system                                                    │
-  │   ┌───────────────────────────────────────────────────────────────┐   │
-  │   │  istiod  — injects the sidecars above via its mutating webhook │   │
-  │   └───────────────────────────────────────────────────────────────┘   │
+  │   ns: istio-system   istiod (mesh control plane; no sidecars)         │
+  │   ns: argocd         lean ArgoCD (no Dex, notifications, ApplicationSet) │
   └───────────────────────────────────────────────────────────────────────┘
 ```
 
-Kong sits **outside** the mesh (the `kong` namespace is not labelled for
-injection) and proxies into it. Istio's default mTLS mode is `PERMISSIVE`, so
-the sidecars accept Kong's plaintext traffic without extra configuration.
+Kong sits outside the application namespace and proxies into it. There are no Istio
+sidecars (`istio-injection=disabled`, ADR 0011): on a stock node
+`fs.inotify.max_user_instances` is 128, a host setting this repo may not change, and
+sidecars crash around 50 pods. The mesh has no `PeerAuthentication` or
+`AuthorizationPolicy`, so the applications run the same without them.
 
 ---
 
 ## Ports & hosts reference
 
-Every host port this cluster ever binds is an explicit `extra_port_mappings`
-entry on the kind control-plane node in `terraform/main.tf` — nothing here is
-discovered or auto-forwarded. kind port mappings are **immutable**: changing
-any host port below means destroying and recreating the cluster, not a
-rolling apply.
+Nothing is published on the k3s nodes (ADR 0011): every Service is ClusterIP, and the
+only host ports are the ones `scripts/k3s-edges.sh` binds on `127.0.0.1` with
+`kubectl port-forward`. Each edge port is a number in that script (override one with
+`EDGE_<NAME>_PORT`), not a cluster setting, so changing it is a restart of the script,
+not an apply.
 
-This section is the port-level map (which host port reaches which Service,
-and which container port that Service targets). For the path-level API
-route table (Kong's `/api/<context>` prefixes) see "Route table" below.
-
-### Host-reachable ports (kind `extraPortMappings`, `terraform/00-cluster/main.tf`)
-
-| Host URL / port                  | `listen_address` | Container (NodePort) | Backing Service                         | What it is |
-|-----------------------------------|-------------------|-----------------------|------------------------------------------|------------|
-| `http://localhost` (`:80`)        | `127.0.0.1`       | `30081`               | `web-gateway` (`warehouse-systems`)       | **Product UI** — Nginx web gateway: console shell + `/mfes/<context>/` remotes |
-| `http://localhost/catalog/` (`:80`) | `127.0.0.1` | `30081` | `web-gateway` -> `ecosystem` (`warehouse-systems`) | **EventCatalog** — architecture catalog at `/catalog/` (base-prefixed SSG, bytes only) |
-| `http://localhost:8000`           | `127.0.0.1`       | `30080`               | `kong-kong-proxy` (`kong`)                | **Product API** — Kong HTTP proxy, `/api/<context>/*` |
-| `https://localhost:443`           | `0.0.0.0`         | `30443`               | `kong-kong-proxy` (`kong`)                | Kong HTTPS proxy (unused by the product today; no chart routes TLS) |
-| `http://localhost:3000`           | `0.0.0.0`         | `30300`               | `grafana-nodeport` (`observability`)      | Grafana (`admin` / `var.grafana_admin_password`, default `admin`) |
-| `http://localhost:16686`          | `0.0.0.0`         | `30686`               | `jaeger-nodeport` (`observability`)       | Jaeger query UI |
-| `http://localhost:9090`           | `0.0.0.0`         | `30909`               | `prometheus-nodeport` (`observability`)   | Prometheus UI |
-| `http://localhost:20001`          | `0.0.0.0`         | `30200`               | `kiali-nodeport` (`istio-system`)         | Kiali service-mesh UI |
-| `localhost:9092` (Kafka protocol) | `0.0.0.0`         | `9092` *(below the default NodePort range — see `service_node_port_range`)* | `kafka-controller-0-external` (`warehouse-systems`) | Kafka's EXTERNAL listener, for host-side clients (e2e-tests, local `go run`) |
-
-The two **product edges** (`:80` and `:8000`) bind to `127.0.0.1` only —
-every REST/MCP endpoint in this fleet is currently unauthenticated (fleet
-auth was rolled out then fully reverted 2026-09-11), so they must not be
-reachable from the local network. Every other row above keeps its historical
-`0.0.0.0` binding (platform/observability tooling, not product surface).
-
-**ArgoCD has no host port mapping at all**, by deliberate design — it sits
-outside both product edges and is reached only via
-`kubectl port-forward svc/argocd-server -n argocd 8080:443`. See "ArgoCD"
+This section is the port-level map (which workstation port reaches which Service). For
+the path-level API route table (Kong's `/api/<context>` prefixes) see "Route table"
 below.
 
-**Kong Manager** (`kong-kong-manager`, NodePort `8002`/`8445` inside the
-`kong` namespace) is also not mapped to a host port — nothing in `main.tf`
-publishes it. It exists only because the `kong/kong` chart always creates
-it; reach it with `kubectl port-forward` if you ever need Kong's admin UI.
+### Workstation ports (`scripts/k3s-edges.sh`, all bound to `127.0.0.1`)
 
-### In-cluster-only ports (ClusterIP — no host mapping, reached via `kubectl port-forward` or from inside the mesh)
+| Local URL / port                  | Backing Service                           | What it is |
+|-----------------------------------|--------------------------------------------|------------|
+| `http://localhost` (`:80`)        | `web-gateway` (`warehouse-systems`)        | **Product UI** — Nginx web gateway: console shell + `/mfes/<context>/` remotes |
+| `http://localhost/catalog/` (`:80`) | `web-gateway` -> `ecosystem` (`warehouse-systems`) | **EventCatalog** — architecture catalog at `/catalog/` (base-prefixed SSG, bytes only) |
+| `http://localhost:8000`           | `kong-kong-proxy` (`kong`)                 | **Product API** — Kong HTTP proxy, `/api/<context>/*` |
+| `http://localhost:3000`           | `grafana` (`observability`)                | Grafana (`admin` / `var.grafana_admin_password`, default `admin`) |
+| `http://localhost:16686`          | `jaeger` (`observability`)                 | Jaeger query UI |
+| `http://localhost:9090`           | `prometheus-server` (`observability`)      | Prometheus UI |
+| `http://localhost:20001`          | `kiali` (`istio-system`)                   | Kiali service-mesh UI |
+
+Port 80 is privileged: the script re-runs itself under `sudo` (one password prompt) and
+the forwards still bind `127.0.0.1` only. The UI has to stay on `:80`: Kong's CORS origin
+(`helm-values/_platform.yaml`) and `storefront.localhost` are fixed to it.
+
+Every REST/MCP endpoint in this fleet is currently unauthenticated (fleet auth was rolled
+out then fully reverted 2026-09-11), so nothing may be reachable from the local network:
+that is why the edges are loopback port-forwards and not NodePorts.
+
+**Kafka has no host-reachable listener.** Host-side clients (e2e-tests, a local `go run`)
+use `kubectl -n warehouse-systems port-forward svc/kafka 9092:9092` and the broker's
+in-cluster advertised addresses, or run inside the cluster.
+
+**ArgoCD has no edge at all**, by deliberate design — it sits outside both product edges
+and is reached only via `kubectl port-forward svc/argocd-server -n argocd 8080:443`. See
+"ArgoCD" below.
+
+**Kong Manager** (`kong-kong-manager`) is a ClusterIP Service nothing forwards. It exists
+only because the `kong/kong` chart always creates it; reach it with `kubectl port-forward`
+if you ever need Kong's admin UI.
+
+### In-cluster-only ports (ClusterIP — not forwarded by `scripts/k3s-edges.sh`, reached via `kubectl port-forward` or from inside the cluster)
 
 Every bounded-context service's OLTP pod listens on container port `8080`
 (`cmd/*/main.go` defaults `HTTP_ADDR` to `":8080"`; every Dockerfile
@@ -341,7 +339,7 @@ one Deployment answers (its `charts/product-master/tests/test_service_selectors.
 Installed by `terraform/10-platform/argocd.tf` (`helm-values/argocd.yaml`) in its own
 `argocd` namespace. **Deliberately not on any host port** — neither product
 edge (`:80` Nginx, `:8000` Kong) is meant to carry deployment-control-plane
-traffic, and nothing in `main.tf`'s `extraPortMappings` publishes it.
+traffic, and nothing publishes it (it is not in `scripts/k3s-edges.sh`).
 
 ```bash
 kubectl -n argocd port-forward svc/argocd-server 8080:443
@@ -354,14 +352,12 @@ match this fleet's fully-unauthenticated posture, so no login is needed.
 
 `argocd-server`'s in-cluster Service (`argocd` namespace) listens on `80`
 (HTTP, redirects) and `443` (HTTPS, the one used above); `argocd-repo-server`
-on `8081`; `argocd-applicationset-controller` on `7000`; `argocd-dex-server`
-on `5556`/`5557` (SSO, unused here since auth is off); `argocd-redis` on
+on `8081`; `argocd-redis` on
 `6379`. None of these need a host port — only `argocd-server` is ever
 reached directly, and only via port-forward.
 
 **Probe budgets and render parallelism** (`helm-values/argocd.yaml`). The
-chart's 1 s timeout on `/healthz?full=true` fails chronically on the single kind
-worker: on 2026-10-14 `argocd-server` had 98 liveness failures in 16 h and
+chart's 1 s timeout on `/healthz?full=true` fails chronically on a small node: on 2026-10-14 `argocd-server` had 98 liveness failures in 16 h and
 `argocd-repo-server` was killed 23 times in 5 h (exit 137). When a Terraform
 apply made all 16 Applications re-render at once (`helm template` ~14 s, git
 fetch ~32 s, `GenerateManifest` up to ~78 s) the repo-server entered a
@@ -379,19 +375,19 @@ These are Helm values for the ArgoCD release, so they take effect only after a
 Terraform apply of `argocd.tf`; merging the PR changes nothing in a running
 cluster.
 
-### kind CPU-request overlay
+### CPU-request overlay
 
-The kind cluster is **one worker** with the Docker VM's 10 CPUs. The charts
-request 50-100m CPU per container (about 10 cores for ~76 app containers) while
-measured use is ~10 % of that, and every Deployment is 1 replica with the
-default RollingUpdate (`maxSurge` 1). A fleet-wide rollout therefore left new
-pods `Pending` (`Insufficient cpu`) and stalled (2026-10-14). The overlay lowers
-`requests.cpu` to `25m` for every component whose chart default is higher (API,
-MCP, analytics projector and reports, frontend, console); limits and memory keep
-the chart defaults, so a busy pod can still burst.
+A k3s node holds 110 pods and a few CPUs. The charts request 50-100m CPU per container
+(about 10 cores for ~76 app containers) while measured use is ~10 % of that, and every
+Deployment is 1 replica with the default RollingUpdate (`maxSurge` 1). A fleet-wide
+rollout therefore left new pods `Pending` (`Insufficient cpu`) and stalled (2026-10-14).
+The overlay lowers `requests.cpu` to `25m` for every component whose chart default is
+higher (API, MCP, analytics projector and reports, frontend, console); limits and memory
+keep the chart defaults, so a busy pod can still burst.
 
 * `helm-values/kind-resources/<app>.yaml` — one generated overlay per
-  Application (17 files plus a `README.md`), the LAST of its three value files
+  Application (the directory name is a legacy of the retired kind environment; ArgoCD
+  reads it by path, so it stays), the LAST of its three value files
   (ADR 0002 D2): Helm deep-merges it, so only `requests.cpu` changes. Regenerate
   it when a chart adds a component with a CPU request above `25m`. A change
   deploys on merge to `develop`, through an ArgoCD sync.
@@ -404,8 +400,8 @@ kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.co
 kubectl describe nodes | grep -A8 'Allocated resources'
 ```
 
-The overlay is a kind-environment setting only; a production-like environment
-uses the chart defaults.
+The overlay is an environment setting for this small cluster; a production-like
+environment uses the chart defaults.
 
 ---
 
@@ -594,22 +590,23 @@ and demand per site, so they follow the inventory seed.
 
 ## Prerequisites
 
-Versions this was actually built and verified against, on `darwin/arm64`:
+Tools on the workstation (`up.sh` checks they are on `PATH`):
 
-| Tool      | Version                       |
-|-----------|-------------------------------|
-| Docker    | 29.7.2 (server)               |
-| kind      | v0.32.0                       |
-| Helm      | v4.2.4                        |
-| Terraform | v1.5.7                        |
-| kubectl   | v1.36.3                       |
+| Tool      | Version (verified on `darwin/arm64`) |
+|-----------|--------------------------------------|
+| Terraform | v1.5.7                               |
+| Helm      | v4.2.4                               |
+| kubectl   | v1.36.3, with the `k3s-multipass` context in `~/.kube/config` (client certificate or token auth; exec plugins are not supported) |
+| python3   | any recent 3                         |
+| gh        | to run `publish-images` and `k3s-pin-images.sh` |
+
+No Docker daemon is needed: nothing is built or loaded locally.
 
 Chart / image versions, all resolved against live registries rather than
-guessed (see `terraform/variables.tf` for the reasoning behind each pin):
+guessed (see `terraform/10-platform/variables.tf` for the reasoning behind each pin):
 
 | Component   | Chart                                                   | Version  | Image                                          |
 |-------------|---------------------------------------------------------|----------|------------------------------------------------|
-| Kubernetes  | —                                                       | —        | `kindest/node:v1.36.1` (digest-pinned)         |
 | PostgreSQL  | `oci://registry-1.docker.io/bitnamicharts/postgresql`   | `16.7.4` | `docker.io/bitnamilegacy/postgresql:17.5.0-debian-12-r3` |
 | Istio       | `istio/base` + `istio/istiod`                           | `1.30.3` | upstream                                       |
 | Kong        | `kong/kong`                                             | `3.4.1`  | Kong Gateway 3.9 + KIC 3.5                     |
@@ -639,105 +636,74 @@ is exactly what that flag is for.
 
 ## Bring it up
 
-One command, from zero:
+The machines are not ours (ADR 0011): Terraform only talks to the k3s Kubernetes API, and every
+image is pulled from `ghcr.io/iqvo/warehouse-infra/` at the tag pinned in
+`terraform/targets/k3s.images.yaml`.
 
 ```bash
-cd warehouse-infra
-./scripts/up.sh
+# 1. publish the images once per snapshot of the fleet (GitHub Actions, arm64), then pin them
+gh workflow run publish-images.yml -R IQVO/warehouse-infra          # inputs: ref, ui_kit_ref, apps, platform
+gh run watch -R IQVO/warehouse-infra
+scripts/k3s-pin-images.sh --latest                                  # writes terraform/targets/k3s.images.yaml; commit it through a PR
+
+# 2. plan, then bring it up (scripts/tf.sh and up.sh default to --target k3s)
+scripts/tf.sh cluster plan                                          # no resources: reads the kubeconfig context
+scripts/tf.sh platform plan
+scripts/up.sh
+
+# 3. reach the edges from this machine (127.0.0.1 only; asks for sudo once for port 80)
+scripts/k3s-edges.sh                                                # UI :80, API :8000, Grafana :3000, ...
 ```
 
-That applies the three Terraform layers in order (ADR 0007): `00-cluster`,
-`10-platform`, then `20-apps`, one state per application (ADR 0003). In order:
+`scripts/up.sh` applies the three Terraform layers in order (ADR 0007): `00-cluster`
+(creates nothing: it publishes the kubeconfig context's credentials), `10-platform`
+(PostgreSQL and PgBouncer, Kafka, Istio, Kong, ArgoCD, observability, the Nginx web gateway,
+the Gateway API `GatewayClass` and `Gateway`), then `20-apps`, one state per application
+(ADR 0003): its Secrets, its role and database (a Job, see "Databases") and its ArgoCD
+Application, whose `valuesObject` carries the pinned image tags. Apply the layers in this
+order the first time: each reads the one before it through `terraform_remote_state` on the
+local backend, and a changed platform output needs the platform applied before `20-apps`.
 
-1. `00-cluster` creates the kind cluster (control-plane + worker) with the
-   Kong port mappings; `10-platform` does everything down to step 4, and
-   `20-apps` the rest,
-2. installs **PostgreSQL** (empty: each application's role and database are
-   created later by a Job, see "Databases"),
-3. installs **istio-base**, then **istiod** (base first — it owns the CRDs
-   istiod's manifests reference),
-4. installs **Kong**,
-5. `docker build`s all four services from their existing Dockerfiles and
-   `kind load docker-image`s them into the cluster,
-6. installs the four service charts with their database URLs and Kong routes.
+`terraform/targets/k3s.tfvars.json` names the kubeconfig context, the image registry and lock
+file, and the cluster DNS IP. Its state is `terraform.tfstate.k3s` (applications:
+`terraform.tfstate.d.k3s/<app>/`), its plugins `.terraform.k3s`. The packages are public, so no pull
+Secret exists (if that changes: `TF_VAR_ghcr_token` creates one).
 
 Equivalent by hand:
 
 ```bash
-cd warehouse-infra
 scripts/tf.sh cluster  apply -auto-approve
 scripts/tf.sh platform apply -auto-approve
 scripts/tf.sh apps     apply -auto-approve      # or: scripts/tf.sh app <name> apply
 ```
 
 `scripts/tf.sh` (also `make cluster-plan`, `platform-plan`, `app-plan APP=<name>`,
-`apps-plan` and the `-apply` twins) passes `terraform/terraform.tfvars` to every
+`apps-plan` and the `-apply` twins) passes `terraform/terraform.tfvars` and the target file to every
 layer, chooses an application's workspace with `TF_WORKSPACE` for that one
 command, rejects a name that is not in `terraform/apps.yaml`, and waits up to
-five minutes for a state lock. Each layer reads the one before it through
-`terraform_remote_state` on the local backend, so apply them in this order the
-first time. Changing one application touches only that application's state:
+five minutes for a state lock. Changing one application touches only that application's state:
 
 ```bash
 make app-plan  APP=product-master
 make app-apply APP=product-master
 ```
 
-Then verify end to end:
+Then verify end to end (with `scripts/k3s-edges.sh` running):
 
 ```bash
 ./scripts/smoke-test.sh
 ```
 
-To stand up only the platform, without building or deploying the four
-services:
-
-```bash
-scripts/tf.sh cluster apply -auto-approve
-scripts/tf.sh platform apply -auto-approve
-```
+A k3s node holds 110 pods; the platform plus the fleet needs both nodes, so with the agent down
+the applications that do not fit stay `Pending`. Check `kubectl get nodes` before and during an apply.
 
 ### If port 80 is taken
 
-`kong_proxy_http_host_port` defaults to `80` and `kong_proxy_https_host_port`
-to `443`. If something on your machine already owns them, kind cluster creation
-fails with a bind error. Override:
+`scripts/k3s-edges.sh` forwards the UI on `:80`. If something on your machine already owns it, stop
+that process first. The UI has to stay on `:80` (Kong's CORS origin is fixed to it); `EDGE_UI_PORT=8081`
+moves it, but then the console no longer matches the CORS origin and you should call the API directly.
 
-Put them in `terraform/terraform.tfvars` (every layer reads that file) before
-the first `./scripts/up.sh`:
-
-```hcl
-kong_proxy_http_host_port  = 8000
-kong_proxy_https_host_port = 8443
-```
-
----
-
-## Running on the existing k3s cluster (ADR 0011)
-
-The same three layers can deploy to a k3s cluster this repo does not own (context `k3s-multipass`, arm64). The
-machine is never touched: Terraform only talks to its Kubernetes API, nothing is built or side-loaded, and the
-images are pulled from `ghcr.io/iqvo/warehouse-infra/`.
-
-```bash
-# 1. publish the images once per snapshot of the fleet (GitHub Actions, arm64), then pin them
-gh workflow run publish-images.yml -R IQVO/warehouse-infra          # inputs: ref, ui_kit_ref, apps, platform
-gh run watch -R IQVO/warehouse-infra
-scripts/k3s-pin-images.sh --latest                                  # writes terraform/targets/k3s.images.yaml; commit it
-
-# 2. plan, then bring it up (every command takes --target k3s; its state never mixes with kind's)
-scripts/tf.sh --target k3s cluster plan                             # no resources: reads the kubeconfig context
-scripts/tf.sh --target k3s platform plan
-scripts/up.sh --target k3s
-
-# 3. reach the edges from this machine (127.0.0.1 only; asks for sudo once for port 80)
-scripts/k3s-edges.sh                                                # UI :80, API :8000, Grafana :3000, ...
-```
-
-`terraform/targets/k3s.tfvars.json` names the kubeconfig context and flips the kind assumptions off
-(`expose_node_ports`, `manage_gateway_api_crds`, `deploy_metrics_server`, `image_source = registry`). The packages
-are public, so no pull Secret exists (if that changes: `TF_VAR_ghcr_token` creates one). Nothing is published on the node, because the fleet is unauthenticated; stop any kind cluster before
-`k3s-edges.sh` (same ports). Tear down: `scripts/down.sh --target k3s --yes` (destroys the releases, not the machine).
+Tear down: `scripts/down.sh --target k3s --yes` (destroys the releases, not the machines).
 
 ## Route table
 
@@ -967,7 +933,7 @@ every application in `terraform/20-apps/main.tf`'s registry (the
 `kind: service` contexts, network-inventory-planning, network-fulfillment,
 `warehouse-ops-agent`, `warehouse-console` and the EventCatalog: 17
 Applications). Terraform still bootstraps the
-platform (kind, Postgres, Kafka, Istio, Kong, the Nginx web gateway, and
+platform (Postgres, Kafka, Istio, Kong, the Nginx web gateway, and
 ArgoCD itself) and each application's platform contract, but it runs no
 `helm install`/`upgrade` and writes no application configuration: each
 Application renders its chart with the value files in `helm-values/`
@@ -991,8 +957,9 @@ APP=<name>` after adding an entry:
 > ([ADR 0008](docs/adr/0008-one-migration-for-the-layers.md)). A checkout older
 > than that layout must not apply: its root has no state any more.
 
-1. Builds and side-loads the new service's image (the module's
-   `null_resource.build_and_load`).
+1. Reads the service's image tag from the lock file (`terraform/targets/k3s.images.yaml`,
+   written by `scripts/k3s-pin-images.sh` from a `publish-images` run). Nothing is built
+   here; a service with no pinned tag fails the plan.
 2. Creates its `<service>-db` Secret directly (the module's
    `kubernetes_secret.db`) — no chart ever sees a plaintext `DATABASE_URL`
    value through an ArgoCD `Application`'s Git/cluster-visible spec.
@@ -1029,34 +996,19 @@ Local admin access is `kubectl port-forward` only, same as above.
 `terraform apply`, and `prune: true` deletes both the `Application` and the
 Helm release it owned — no orphaned resources left behind.
 
-**Image tags are content-derived**, not the fixed `"local"` value from
-before this GitOps rollout: `modules/application` tags each image
-`local-<hash12>` over the service's Go source/migrations/Dockerfile/go.mod/
-go.sum. This is required, not cosmetic — ArgoCD's
-sync only fires on an actual diff, and a tag that never changes on rebuild
-gives it nothing to detect. This also happens to fix the older
-"rebuilt image alone does not roll a running Deployment" pitfall documented
-below, as a side effect.
+**Image tags are the pinned ones**, `<commit>[-<ui-kit commit>]-arm64`, written by
+`publish-images` and pinned in `terraform/targets/k3s.images.yaml` (ADR 0011). Never a
+floating tag such as `latest` or `local`: ArgoCD's sync only fires on an actual diff, and a
+tag that never changes gives it nothing to detect.
 
 ---
 
 ## metrics-server (HPA support)
 
-`var.deploy_metrics_server` (default `true`) installs the
-kubernetes-sigs/metrics-server chart into `kube-system`. Every service
-chart in this fleet already ships an `autoscaling/v2` HPA targeting
-CPU/memory utilization; without a `metrics.k8s.io` API server in the
-cluster those HPAs sit at `<unknown>` forever
-(`kubectl describe hpa <name>` reports `FailedGetResourceMetrics`). This
-resource is what makes them work.
-
-It sets `--kubelet-insecure-tls` in the chart's `args` — a genuine
-kind-specific need, not a general shortcut: kind's kubelet serving certs
-are self-signed per-node at cluster boot and aren't trusted by
-metrics-server by default, so without the flag every node scrape fails
-with `x509: certificate signed by unknown authority`. See
-`terraform/10-platform/metrics-server.tf`'s header comment for the full rationale.
-Verify it after an apply with:
+k3s ships metrics-server, so this repo installs none (`deploy_metrics_server` is gone,
+ADR 0011). Every service chart in this fleet ships an `autoscaling/v2` HPA targeting
+CPU/memory utilization, and the `metrics.k8s.io` API that k3s provides is what makes them
+report real numbers instead of `<unknown>`. Verify it with:
 
 ```bash
 kubectl top nodes
@@ -1224,28 +1176,12 @@ repos, but rewriting handlers here would have been out of scope:
 
 ```bash
 cd warehouse-infra
-./scripts/down.sh
+./scripts/down.sh --target k3s --yes
 ```
 
-That deletes the kind cluster, which removes everything inside it and is what
-actually reclaims the Docker containers and their disk, and then drops the three
-layers' Terraform state (with the cluster gone none of them describes anything).
-`terraform destroy` layer by layer is not used: it leaves about 60 phantom
-resources and takes far longer than the cluster delete it ends with.
-
-By hand:
-
-```bash
-kind delete cluster --name warehouse
-rm -f terraform/{00-cluster,10-platform}/terraform.tfstate* && rm -rf terraform/20-apps/terraform.tfstate.d
-```
-
-The locally built `warehouse/*:local-<hash12>` images stay in your Docker
-daemon. Remove them with:
-
-```bash
-docker images --format '{{.Repository}}:{{.Tag}}' 'warehouse/*' | xargs docker rmi
-```
+That runs `terraform destroy` on `20-apps` (every application) and then on `10-platform`, and drops
+the k3s state files. `00-cluster` is never destroyed (it creates nothing) and the machines are never
+touched. Needs `--yes`: it deletes the Helm releases, the namespaces and the data.
 
 ---
 
@@ -1277,12 +1213,14 @@ warehouse-infra/
 │   ├── tf.sh                    # terraform in one layer or one application's workspace
 │   ├── migrate-state-to-layers.sh  # the recorded state mv of ADR 0007 step 2/3
 │   ├── down.sh                  # destroy apps + platform on k3s, drop the layers' k3s state
+│   ├── k3s-edges.sh             # port-forward the ClusterIP edges to 127.0.0.1
+│   ├── k3s-pin-images.sh        # pin a publish-images run in terraform/targets/k3s.images.yaml
 │   ├── smoke-test.sh            # curls all four /healthz through Kong
 │   └── seed-transfer-capability.py  # post-deploy: site transfer capability from role defaults
 └── terraform/
     ├── apps.yaml                # the application registry (ADR 0007), read by every layer
     ├── terraform.tfvars         # gitignored; one file, read by every layer
-    ├── 00-cluster/              # the kind cluster; publishes its connection (own state)
+    ├── 00-cluster/              # describes the k3s cluster (reads the kubeconfig context); publishes its connection (own state)
     ├── 10-platform/             # Postgres, PgBouncer, Kafka, Istio, Kong, ArgoCD, observability, Gateway API (own state)
     │   ├── locals.tf            # local.platform (_platform.yaml), the registry (apps.yaml) and what derives from it
     │   ├── postgres.tf, pgbouncer.tf, kafka.tf, istio.tf, kong.tf, argocd.tf, ...
@@ -1291,56 +1229,25 @@ warehouse-infra/
     │   ├── main.tf              # the selected workspace's modules/application instance (ADR 0003)
     │   └── terraform.tfstate.d/<name>/   # gitignored
     ├── modules/
-    │   ├── application/         # one application's platform contract: Secrets, images, Application (ADR 0004)
+    │   ├── application/         # one application's platform contract: Secrets, pinned image tags, Application (ADR 0004)
     │   └── database/            # one role and database, created by a Job (ADR 0005)
     ├── templates/               # pgbouncer.ini, userlist, pgbouncer-auth.sql, web-gateway.conf
-    ├── dashboards/, alerting/   # generated Grafana dashboards and Prometheus rules
-    └── gateway-api/             # the vendored Gateway API CRD bundle (ADR 0006)
+    ├── targets/                 # k3s.tfvars.json (the environment) and k3s.images.yaml (the pinned image tags)
+    └── dashboards/, alerting/   # generated Grafana dashboards and Prometheus rules
 ```
 
 ---
 
 ## Design notes
 
-**Why the `tehcyx/kind` Terraform provider and not `local-exec kind create`.**
-The provider was validated before adoption — it creates a two-node
-`kindest/node:v1.36.1` cluster against Docker 29.7.2 in ~27s, accepts
-`extra_port_mappings`, and participates properly in `terraform destroy`. A
-shell wrapper would have needed hand-written create/destroy/idempotency logic
-for no benefit. The kind **CLI** is still used for two narrow jobs where it is
-the right tool: exporting the kubeconfig (`null_resource.kubeconfig`, a safety
-net so the providers always have a valid file) and side-loading images.
-
-**Why the providers read the cluster's credential attributes, not a
-kubeconfig path.** This was got wrong first and fixed: pointing
-`kubernetes`/`helm` at a `config_path` is *racy*. Terraform evaluates a
-provider node early in the graph walk, before the resources that depend on it,
-so on a clean apply the kubeconfig file does not exist yet and both providers
-silently fall back to their default host — which surfaces as
-`Post "http://localhost/api/v1/namespaces": EOF` rather than an honest error.
-Putting `depends_on` on the *resource* does not help, because it is the
-*provider* that needs the ordering. Configuring both providers from
-`kind_cluster.warehouse.endpoint` / `.cluster_ca_certificate` /
-`.client_certificate` / `.client_key` creates a real dependency edge from the
-provider node to the cluster resource, so they are configured only after the
-cluster exists — and a single `terraform apply` works from clean state.
-Nothing here is machine-specific.
-
-**Since ADR 0007 the cluster is its own layer, so the providers read
-`terraform_remote_state` instead.** `00-cluster` publishes the same four
-attributes as a sensitive `connection` output; `10-platform` and `20-apps`
-configure `kubernetes`, `helm` and `kubectl` from it. A provider no longer
-depends on a resource of its own configuration, which is what the Kubernetes
-provider's documentation asks for, and a missing cluster state is a plan error
-that names the layer to apply first. The kubeconfig file is written to
-`terraform/00-cluster/kubeconfig`; its path is the relative `./kubeconfig` on
-purpose (it forces a new cluster when it changes, and every existing state holds
-that value).
-
-`null_resource.kubeconfig` still exports credentials, but purely for the
-human's benefit: setting `kubeconfig_path` on `kind_cluster` makes the provider
-write to that file *instead of* your default kubeconfig, which would leave
-plain `kubectl` with no `kind-warehouse` context. It exports to both.
+**Why the cluster layer creates nothing.** The k3s cluster belongs to someone else (ADR 0011), and
+kind is banned. `00-cluster` reads the credentials of one kubeconfig context (certificate or
+token auth) and publishes them as a sensitive `connection` output; `10-platform` and `20-apps`
+configure `kubernetes`, `helm` and `kubectl` from it through `terraform_remote_state`. A provider
+therefore never depends on a resource of its own configuration, which is what the Kubernetes
+provider's documentation asks for, and a missing cluster state is a plan error that names the layer
+to apply first. A `check` block fails the plan, naming the variable, when the context cannot be
+turned into credentials.
 
 **Why `kong/kong` and not `kong/ingress`.** `kong/kong` is one release running
 the gateway and the ingress controller as two containers in one pod, DB-less,
@@ -1350,24 +1257,24 @@ more to go wrong, for no benefit at this scale. Routing started as plain
 `Ingress` objects; it now uses Gateway API `HTTPRoute`s that each chart
 renders against the shared `warehouse-gateway` Gateway
 (`terraform/10-platform/gateway-api.tf`, `deploy_gateway_api`, on by default). The Gateway API
-CRDs, the `GatewayClass` and the `Gateway` are declarative `kubectl_manifest`
+`GatewayClass` and the `Gateway` are declarative `kubectl_manifest`
 resources, so Terraform detects and repairs drift
-([ADR 0006](docs/adr/0006-declarative-gateway-api.md)); the CRD bundle is
-vendored under `terraform/gateway-api/`.
+([ADR 0006](docs/adr/0006-declarative-gateway-api.md)); the CRDs themselves are k3s's own
+(ADR 0011).
 
-**Why sidecar Istio and not ambient.** Sidecar mode needs no CNI DaemonSet and
-no ztunnel, which is markedly less fragile inside kind, and namespace-label
-injection requires zero application changes.
+**Istio sidecars are off.** The mesh is installed (`istiod`, Kiali) but the applications namespace is
+`istio-injection=disabled`: a stock k3s node's inotify limit (128 instances, a host setting we may
+not change) is exhausted by the sidecars around 50 pods, and they also take ~100 containers from a
+node capped at 110 pods (ADR 0011). Sidecar mode rather than ambient stays the intended shape if
+sidecars come back: it needs no CNI DaemonSet and no ztunnel.
 
-**Why images are built by Terraform rather than by the script.** A
-`null_resource` per service, triggered by a hash over that service's `**/*.go`,
-`migrations/**`, `Dockerfile`, `go.mod` and `go.sum`, keeps the whole thing a
-single `terraform apply` while still rebuilding only what changed. Images are
-tagged `warehouse/<service>:local-<hash12>` (the first 12 characters of that
-same source hash, computed in `terraform/modules/application`), so a
-rebuilt image always carries a new tag and ArgoCD rolls the pods. They use
-`pullPolicy: IfNotPresent`, because they exist only in the kind nodes'
-containerd store and must never be pulled from Docker Hub.
+**Why images come from GitHub and Terraform only pins them.** One manual workflow
+(`.github/workflows/publish-images.yml`) builds every image of `apps.yaml` on native arm64 runners from one
+ref of every repository and pushes `ghcr.io/iqvo/warehouse-infra/<name>:<commit>[-<ui-kit commit>]-arm64`.
+`scripts/k3s-pin-images.sh <run-id>` writes the tags to `terraform/targets/k3s.images.yaml`, and
+`modules/application` puts the registry, repository and tag into each Application's `valuesObject`.
+An application with no pinned tag fails the plan, so a deploy can only ever run an image that exists on
+GitHub. Nothing is built or side-loaded locally (ADR 0011).
 
 ## Documentation
 
