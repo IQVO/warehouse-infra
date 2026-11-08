@@ -59,10 +59,12 @@ demand:
 # Required by warehouse-planning's chart (warehouse-planning #79, ADR 0017: the
 # chart refuses to render without them). Stable ids, pinned so a rename in code
 # cannot silently orphan the committed offsets.
-#   inbound  <- warehouse.inbound-receiving.events (DockAppointmentBooked / Cancelled)
-#   observed <- warehouse.fulfillment.events (TaskCompleted)
-inbound:
-  consumerGroup: "warehouse-planning-inbound-demand"
+#   dockAppointments <- warehouse.dock-scheduling.events (DockAppointmentBooked / Rescheduled /
+#                       Cancelled / NoShow; docs/adr/0020, replaces the retired inbound.consumerGroup,
+#                       which the chart now refuses to render)
+#   observed         <- warehouse.fulfillment.events (TaskCompleted)
+dockAppointments:
+  consumerGroup: "warehouse-planning-dock-appointments"
 observed:
   consumerGroup: "warehouse-planning-observed-capacity"
 
