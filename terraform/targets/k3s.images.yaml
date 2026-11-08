@@ -1,12 +1,12 @@
 # Written by scripts/k3s-pin-images.sh from a publish-images run (ADR 0011).
 # image: tag of ghcr.io/iqvo/warehouse-infra/<app>; frontend: tag of <app>-frontend.
-run: 42488905759
+run: 42536162790
 images:
   checkout:
     image: 1332afc-arm64
   customer-ordering:
-    frontend: c402222-308f597-arm64
-    image: c402222-arm64
+    frontend: 3368834-308f597-arm64
+    image: 3368834-arm64
   customer-payments:
     image: a18d5dd-arm64
   delivery-promise:
@@ -15,23 +15,23 @@ images:
   ecosystem:
     frontend: fed578e-308f597-arm64
   exception-management:
-    frontend: 294f462-308f597-arm64
-    image: 294f462-arm64
+    frontend: 35bb7d9-308f597-arm64
+    image: 35bb7d9-arm64
   facility-layout:
-    frontend: 7f96512-308f597-arm64
-    image: 7f96512-arm64
+    frontend: 1305245-308f597-arm64
+    image: 1305245-arm64
   fulfillment-execution:
-    frontend: a9cac1e-308f597-arm64
-    image: a9cac1e-arm64
+    frontend: f122e41-308f597-arm64
+    image: f122e41-arm64
   inbound-receiving:
-    frontend: 3c5d554-308f597-arm64
-    image: 3c5d554-arm64
+    frontend: 5501de7-308f597-arm64
+    image: 5501de7-arm64
   inventory-storage:
     frontend: 5af64ba-308f597-arm64
     image: 5af64ba-arm64
   labor-performance:
-    frontend: a398b23-308f597-arm64
-    image: a398b23-arm64
+    frontend: 5e48894-308f597-arm64
+    image: 5e48894-arm64
   last-mile-delivery:
     frontend: 3c6ae22-308f597-arm64
     image: 3c6ae22-arm64
@@ -54,8 +54,8 @@ images:
     frontend: 1a7f583-308f597-arm64
     image: 1a7f583-arm64
   order-management:
-    frontend: de101e4-308f597-arm64
-    image: de101e4-arm64
+    frontend: 303c107-308f597-arm64
+    image: 303c107-arm64
   order-sourcing:
     frontend: 2b8c8ae-308f597-arm64
     image: 2b8c8ae-arm64
@@ -101,15 +101,15 @@ images:
     frontend: 69030ee-308f597-arm64
     image: 69030ee-arm64
   warehouse-console:
-    frontend: 4ebedaf-308f597-arm64
+    frontend: 298ec71-308f597-arm64
   warehouse-ops-agent:
     image: e33eb99-arm64
   warehouse-planning:
-    frontend: 86248bb-308f597-arm64
-    image: 86248bb-arm64
+    frontend: ef8b946-308f597-arm64
+    image: ef8b946-arm64
   wes-work-planning:
     frontend: ed7fc41-308f597-arm64
     image: ed7fc41-arm64
   workforce-management:
-    frontend: 7d9e637-308f597-arm64
-    image: 7d9e637-arm64
+    frontend: 4811e77-308f597-arm64
+    image: 4811e77-arm64
