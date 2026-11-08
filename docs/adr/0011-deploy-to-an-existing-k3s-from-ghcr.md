@@ -51,6 +51,12 @@ The images already published to ghcr.io by each application's `docker-publish` j
 4. **Use what k3s ships.** `manage_gateway_api_crds = false` (the vendored v1.6.2 bundle would be refused by the
    cluster's v1.6.3 safe-upgrades policy, and two owners of one CRD set fight) and `deploy_metrics_server = false`.
    Traefik stays; it does not collide (nothing here uses a host port).
+   Two more things learned on the first apply: (a) **no Istio sidecars** (`istio_injection_enabled = false`): on
+   a stock node `fs.inotify.max_user_instances` is 128, a host setting we may not raise, and the sidecars die with
+   "couldn't initialize inotify: too many open files" at about 50 pods. The mesh has no PeerAuthentication or
+   AuthorizationPolicy, so nothing else changes; Kiali just has no traffic to draw. (b) **Kong Manager is ClusterIP**:
+   the chart makes it a NodePort, which on kind is unreachable from outside Docker but on k3s would be published
+   on the LAN.
 5. **Images: one workflow builds, a lock file pins, Terraform pulls.**
    - `.github/workflows/publish-images.yml` (manual) builds the 70 images of `apps.yaml` (39 services, 29 frontends,
      2 sites) from one ref of every repository, on native arm64 runners, and pushes
@@ -77,6 +83,8 @@ The images already published to ghcr.io by each application's `docker-publish` j
   cluster through ArgoCD on merge; an image change does not, without the pin.
 - The two environments share `terraform/10-platform` code; a variable's default is the kind behaviour.
 - `kind` and `k3s` cannot both hold `localhost:80`/`:8000` at once.
+- A k3s node allows 110 pods (kubelet `maxPods`, also not ours to change). The platform plus the fleet needs more
+  than one node: with the agent down the applications that do not fit stay `Pending` until it returns.
 
 ## Alternatives rejected
 

@@ -33,7 +33,7 @@ resource "kubernetes_namespace" "apps" {
   metadata {
     name = var.apps_namespace
     labels = {
-      "istio-injection"      = "enabled"
+      "istio-injection"      = var.istio_injection_enabled ? "enabled" : "disabled"
       "warehouse.local/tier" = "application"
     }
   }

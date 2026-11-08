@@ -44,11 +44,12 @@ MESH_NS="${ISTIO_NAMESPACE:-istio-system}"
 
 k() { kubectl --context "${CONTEXT}" "$@"; }
 
-# edge <local port> <namespace> <service> <label>
+# edge <local port> <namespace> <service> <service port> <label>
+# The service port is explicit: Jaeger's Service lists UDP agent ports first.
 pids=()
 edge() {
-  local port="$1" ns="$2" svc="$3" label="$4" remote
-  if ! remote="$(k -n "${ns}" get "svc/${svc}" -o jsonpath='{.spec.ports[0].port}' 2>/dev/null)" || [[ -z "${remote}" ]]; then
+  local port="$1" ns="$2" svc="$3" remote="$4" label="$5"
+  if ! k -n "${ns}" get "svc/${svc}" >/dev/null 2>&1; then
     echo "  skip ${label}: svc/${svc} not found in ${ns}" >&2
     return 0
   fi
@@ -66,12 +67,12 @@ edge() {
 trap 'kill "${pids[@]}" 2>/dev/null || true' EXIT INT TERM
 
 echo "==> forwarding from context ${CONTEXT} (127.0.0.1 only)" >&2
-edge "${EDGE_UI_PORT:-80}" "${APPS_NS}" web-gateway "UI (Nginx)"
-edge "${EDGE_API_PORT:-8000}" "${KONG_NS}" kong-kong-proxy "API (Kong)"
-edge "${EDGE_GRAFANA_PORT:-3000}" "${OBS_NS}" grafana "Grafana"
-edge "${EDGE_JAEGER_PORT:-16686}" "${OBS_NS}" jaeger "Jaeger"
-edge "${EDGE_PROMETHEUS_PORT:-9090}" "${OBS_NS}" prometheus-server "Prometheus"
-edge "${EDGE_KIALI_PORT:-20001}" "${MESH_NS}" kiali "Kiali"
+edge "${EDGE_UI_PORT:-80}" "${APPS_NS}" web-gateway 80 "UI (Nginx)"
+edge "${EDGE_API_PORT:-8000}" "${KONG_NS}" kong-kong-proxy 80 "API (Kong)"
+edge "${EDGE_GRAFANA_PORT:-3000}" "${OBS_NS}" grafana 3000 "Grafana"
+edge "${EDGE_JAEGER_PORT:-16686}" "${OBS_NS}" jaeger 16686 "Jaeger"
+edge "${EDGE_PROMETHEUS_PORT:-9090}" "${OBS_NS}" prometheus-server 9090 "Prometheus"
+edge "${EDGE_KIALI_PORT:-20001}" "${MESH_NS}" kiali 20001 "Kiali"
 
 [[ ${#pids[@]} -gt 0 ]] || { echo "error: nothing to forward -- is the platform applied?" >&2; exit 1; }
 wait
