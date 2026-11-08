@@ -25,6 +25,6 @@ Every CI job in `.github/workflows/ci.yml` is one Makefile target in `Makefile`,
 - Conformance scripts assume the Makefile's cwd (`cd terraform`), not the repo root; use the Makefile target rather than invoking the script from the root.
 - A missing tool (`helm`, `shellcheck`, `terraform`, PyYAML) fails the target with an install hint; that is an environment gap, not a code failure. Say so rather than skipping silently.
 - The CHARTS list is hand-maintained in two places (`Makefile`, `scripts/check-chart-selectors.py`). When a service is added, update both, or the check silently skips its chart.
-- Cluster-dependent checks are NOT part of `make check`: `scripts/test-exposure-policy.sh` (localhost edge policy, run it after any edge change) and `scripts/smoke-test.sh` need a live kind cluster.
+- Cluster-dependent checks are NOT part of `make check`: `scripts/test-exposure-policy.sh` (localhost edge policy, run it after any edge change) and `scripts/smoke-test.sh` need a live k3s cluster (edges via `scripts/k3s-edges.sh`).
 - `scripts/test-exposure-policy.sh` asserts on content-type and upstream identity, not bare HTTP status: the gateway's catch-all legitimately returns `200 text/html` for unknown `/api/**` paths. Do not "fix" that into a status-code check.
 - To prove a selector fix works, deliberately break a selector and watch the script report `selects N Deployments`, then restore it.

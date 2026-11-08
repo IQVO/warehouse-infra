@@ -18,7 +18,7 @@ amends or supersedes an earlier one with its own ADR
 | [0008](0008-one-migration-for-the-layers.md) | One migration moves the live state into all three layers | Accepted (2026-10-18). Amends ADR 0007 decisions 2 and 4; run on the live state 2026-10-18 |
 | [0009](0009-network-fulfillment-live-against-in-cluster-network.md) | network-fulfillment runs live against the in-cluster retail network | Proposed (2026-10-24). Replaces the "stub permanently" comment in `helm-values/network-fulfillment.yaml` |
 | [0010](0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted (2026-11-02). Seed script and values comment follow the renamed routes |
-| [0011](0011-deploy-to-an-existing-k3s-from-ghcr.md) | Deploy to an existing k3s cluster, with images from ghcr.io | Proposed (2026-11-08). Adds the `k3s` target; kind stays the default |
+| [0011](0011-deploy-to-an-existing-k3s-from-ghcr.md) | Deploy to an existing k3s cluster, with images from ghcr.io | Accepted (2026-11-08). k3s is the only deploy target (kind banned); images come from GitHub (publish-images, pinned) |
 
 ## Adding an ADR
 

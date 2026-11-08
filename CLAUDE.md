@@ -2,9 +2,11 @@
 
 <!-- harness-template: v4 -->
 
-Terraform + Helm deployment of the entire `warehouse-systems` fleet onto a
-local `kind` cluster named `warehouse`. This repo owns the cluster's
-existence, not any bounded context's business logic: one Terraform root
+Terraform + Helm deployment of the entire `warehouse-systems` fleet onto the
+existing k3s cluster (kube context `k3s-multipass`, ADR 0011). **`kind` is banned:
+every deploy targets k3s, and every deployed image must already exist on GitHub**
+(built by the `publish-images` workflow, pinned in `terraform/targets/k3s.images.yaml`).
+This repo does not own the cluster's machines, only what runs on them, and not any bounded context's business logic: one Terraform root
 module (plus the `application` child module, ADR 0002 and ADR 0004) and
 per-service values; each service's chart lives in that service's own repo.
 
@@ -21,7 +23,7 @@ already exist. Read it and `terraform/10-platform/locals.tf` before answering "w
 the cluster know about".
 
 ```
-terraform/00-cluster/  The kind cluster (own state)
+terraform/00-cluster/  Describes the cluster (k3s: reads the kubeconfig context; own state)
 terraform/10-platform/ Kafka, Postgres + PgBouncer, Istio, ArgoCD, observability, the Nginx/Kong
                        localhost edge (own state)
 terraform/20-apps/     One workspace and state per application (modules/application)
@@ -54,13 +56,14 @@ instance of `terraform/modules/application`.
    ArgoCD (an Application per instance of `terraform/modules/application`) installs each chart from the service
    repo's GitHub `develop`. NOTE: the older recipe here (`terraform taint
    helm_release.service[...]`) is obsolete; that resource no longer exists.
-2. **Images are built from the LOCAL sibling checkout, not `origin/develop`.**
-   `git -C ~/warehouse-systems/<repo> pull --ff-only origin develop` before
-   applying, and verify the new code is in the tree.
+2. **Images are never built locally.** Every image is built on GitHub by
+   `.github/workflows/publish-images.yml`, pinned with `scripts/k3s-pin-images.sh <run-id>` in
+   `terraform/targets/k3s.images.yaml`, and pulled from ghcr.io. A change reaches the cluster only after
+   publish-images ran on the merged `develop` and the pin is committed. Never deploy an unpinned app.
 3. **Never trust "apply succeeded" + "pod Running" as proof new code is
-   live.** Image tags are content-derived (`local-<hash12>`); never
-   simplify them back to a fixed `local` tag (frontends included). Confirm
-   with `kubectl rollout status` and the live image tag.
+   live.** Image tags are the pinned `<commit>[-<ui-kit commit>]-arm64` tags; never
+   use a floating tag such as `latest` or `local`. Confirm
+   with `kubectl rollout status` and the live image tag against the lock file.
 4. **Roles and databases come from Jobs, not from SQL.** `modules/database`
    creates each application's role and database on every apply, on an empty
    or a populated Postgres, and sets the role's password to the generated one
@@ -82,12 +85,12 @@ instance of `terraform/modules/application`.
    `selectorLabels` by `app.kubernetes.io/component`). Run
    `make chart-selector-check` before touching selector/label wiring.
 9. **Never `terraform destroy` the cluster.** It leaves ~60 phantom resources
-   in state. `scripts/down.sh` deletes the kind cluster and drops the layers'
-   state instead; recreate with `scripts/up.sh` (three layers, in order).
+   in state. `scripts/down.sh --target k3s --yes` removes the applications and the platform and
+   leaves the machines alone; recreate with `scripts/up.sh --target k3s` (three layers, in order).
 10. **Delete tracked files with `git rm -r <path>`, never bare `rm -rf`.**
-11. **Worktrees have no tfstate and no sibling repos.** Copy the real layer
-    states in (`00-cluster`, `10-platform`, the application workspaces you
-    need), plan one application with `scripts/tf.sh app <name> plan`, copy the
+11. **Worktrees have no tfstate and no sibling repos.** Copy the real k3s layer
+    states in (`terraform.tfstate.k3s` of `00-cluster` and `10-platform`, the application workspaces you
+    need), plan one application with `scripts/tf.sh --target k3s app <name> plan`, copy the
     state back after an apply, and symlink siblings (see
     `deploy-local-checkout`). Never apply from a checkout older than the
     layered layout (ADR 0007): the old root no longer has a state. Never
@@ -117,9 +120,9 @@ one through the other (`docs/exposure/localhost-edge-topology.md`). Run
 make check-fast         # tf-fmt-check + shellcheck + chart-selector-check (agent Stop hook)
 make check              # + tf-validate + helm-lint (mirrors ci.yml); check-all is an alias
 make guide-lint         # agent-guide lint (blocking in CI)
-scripts/tf.sh platform plan          # layers: cluster | platform | app <name> | apps (see deploy-local-checkout before apply)
+scripts/tf.sh --target k3s platform plan   # layers: cluster | platform | app <name> | apps (see deploy-local-checkout before apply)
 make app-plan APP=<name>             # one application's own state
-bash scripts/up.sh | down.sh | smoke-test.sh | test-exposure-policy.sh
+bash scripts/up.sh --target k3s | down.sh --target k3s | smoke-test.sh | test-exposure-policy.sh  (edges: scripts/k3s-edges.sh)
 ```
 
 ## Skills and rules

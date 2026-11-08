@@ -2,9 +2,9 @@
 
 ## Status
 
-Proposed (2026-11-08). Extends [ADR 0007](0007-state-split-in-four-steps.md) (the layers) and
-[ADR 0002](0002-application-delivery-boundary.md) (the application boundary). The kind environment is unchanged
-and stays the default.
+Accepted (2026-11-08). Extends [ADR 0007](0007-state-split-in-four-steps.md) (the layers) and
+[ADR 0002](0002-application-delivery-boundary.md) (the application boundary). **Amended 2026-11-08: k3s is the only
+deploy target. `kind` is banned (see Amendment below).**
 
 ## Context
 
@@ -81,8 +81,8 @@ The images already published to ghcr.io by each application's `docker-publish` j
 - The k3s environment runs the images of one `develop` snapshot. Moving it forward is: run `publish-images`, run
   `k3s-pin-images.sh`, commit the lock file, `tf.sh --target k3s apps apply`. A chart change still reaches the
   cluster through ArgoCD on merge; an image change does not, without the pin.
-- The two environments share `terraform/10-platform` code; a variable's default is the kind behaviour.
-- `kind` and `k3s` cannot both hold `localhost:80`/`:8000` at once.
+- `terraform/10-platform` still carries the kind-era variable defaults (`expose_node_ports = true`, sidecars on, ...); the
+  k3s target file overrides them. Removing the kind code paths is a follow-up (see Amendment).
 - A k3s node allows 110 pods (kubelet `maxPods`, also not ours to change). The platform plus the fleet needs more
   than one node (ArgoCD runs without Dex, notifications and the ApplicationSet controller there: `argocd_lean`): with the agent down the applications that do not fit stay `Pending` until it returns.
 
@@ -93,3 +93,18 @@ The images already published to ghcr.io by each application's `docker-publish` j
 - **A registry in the cluster / `ctr images import` / `registries.yaml`**: all of them change the nodes or add
   infrastructure that exists only to work around the constraint.
 - **NodePort edges with a firewall**: the firewall is on the machine.
+
+## Amendment (2026-11-08): k3s is the only target
+
+The owner banned `kind`. Two rules now hold for every deploy of this repo:
+
+1. **Every deploy targets the k3s cluster** (`scripts/tf.sh --target k3s ...`, `scripts/up.sh --target k3s`,
+   `scripts/down.sh --target k3s --yes`). No new `kind` cluster is created, started or loaded into.
+2. **Every deployed image must already exist on GitHub**: built by the `publish-images` workflow and pinned in
+   `terraform/targets/k3s.images.yaml`. Nothing is built from a local checkout. An application with no pinned tag
+   fails the plan (`image_source = "registry"`). A chart or values change still reaches the cluster through ArgoCD
+   from `develop`; the images it runs are the pinned ones.
+
+Consequences: the `kind` default of `scripts/tf.sh`/`up.sh`, `00-cluster`'s `kind_cluster`, `scripts/build-and-load.sh`
+and the `local-<hash>` image tags are legacy and unsupported. They are left in place by this amendment so the existing
+kind state stays readable; deleting them is a follow-up change of its own.
