@@ -117,7 +117,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.laborCapacityConsumerGroup": "warehouse-planning-labor-capacity",
         "config.storageCapacityConsumerGroup": "warehouse-planning-storage-capacity",
         "demand.consumerGroup": "warehouse-planning-demand",
-        "inbound.consumerGroup": "warehouse-planning-inbound-demand",
+        "dockAppointments.consumerGroup": "warehouse-planning-dock-appointments",
         "observed.consumerGroup": "warehouse-planning-observed-capacity",
         "demand.siteId": "SITE1",
     },
@@ -148,6 +148,7 @@ CHARTS: dict[str, dict[str, str]] = {
         # ADR 0012 (chart d17b4f1): the packaging view consumer is
         # mandatory too now -- same dummy treatment as the two above.
         "config.packagingConsumerGroup": "inbound-receiving-packaging",
+        "config.dockAppointmentConsumerGroup": "inbound-receiving-dock-appointments",
     },
     # slotting-optimization: OLTP api + the optional mcp, analytics
     # (projector/reports) and frontend (slotting_mfe) components, all of which
