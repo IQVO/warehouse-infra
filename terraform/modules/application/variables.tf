@@ -1,10 +1,10 @@
 variable "name" {
-  description = "The application's name: its repo directory under repos_root, its image name (warehouse/<name>), its Secret prefix (<name>-db) and its ArgoCD Application name."
+  description = "The application's name: its image name (<registry prefix>/<name>), its Secret prefix (<name>-db) and its ArgoCD Application name."
   type        = string
 }
 
 variable "deploy" {
-  description = "Build the API image and create the Secrets and the ArgoCD Application (the root passes var.deploy_services, or var.deploy_frontends for the static sites). The generated passwords exist either way, because the platform's initdb script and PgBouncer config consume them."
+  description = "Create the Secrets and the ArgoCD Application (the root passes var.deploy_services, or var.deploy_frontends for the static sites). The generated passwords exist either way, because the platform's initdb script and PgBouncer config consume them."
   type        = bool
   default     = true
 }
@@ -21,11 +21,9 @@ variable "argocd_namespace" {
 
 variable "registry" {
   description = <<-EOT
-    null (kind): the images are built from the sibling checkouts and
-    side-loaded into the kind cluster (var.image, var.frontend, cluster_name).
-
-    Set (k3s, ADR 0011): nothing is built or loaded here. The images already
-    sit in a registry and the chart is pointed at them:
+    Required (ADR 0011): nothing is built or loaded here -- kind is banned. The
+    images already sit in a registry (built by the publish-images workflow) and
+    the chart is pointed at them:
       prefix        <prefix>/<name> and <prefix>/<name>-frontend
       image_tag     tag of <prefix>/<name>           (required when var.image is set)
       frontend_tag  tag of <prefix>/<name>-frontend  (required when var.frontend is set)
@@ -37,22 +35,6 @@ variable "registry" {
     frontend_tag = optional(string)
     pull_secret  = optional(string, "")
   })
-  default = null
-}
-
-variable "cluster_name" {
-  description = "kind cluster the images are side-loaded into. Pass the kind_cluster resource's attribute so builds are ordered after the cluster exists. Unused when registry is set."
-  type        = string
-}
-
-variable "repos_root" {
-  description = "Directory that holds the sibling repo checkouts (the root passes \"$${path.module}/../..\"). Images are built from <repos_root>/<name>."
-  type        = string
-}
-
-variable "scripts_dir" {
-  description = "warehouse-infra's scripts/ directory, holding build-and-load.sh and build-and-load-frontend.sh."
-  type        = string
 }
 
 variable "chart" {
@@ -75,33 +57,27 @@ variable "values" {
 }
 
 variable "helm_values" {
-  description = "Values Terraform itself owns, placed in the Application's valuesObject (which wins over the value files). Empty for almost every application: configuration belongs in the value files. The module adds image.tag and frontend.image.tag for the images it builds. Never put a credential here: charts read credentials from the Secrets this module creates."
+  description = "Values Terraform itself owns, placed in the Application's valuesObject (which wins over the value files). Empty for almost every application: configuration belongs in the value files. The module adds image.tag and frontend.image.tag from the lock file. Never put a credential here: charts read credentials from the Secrets this module creates."
   type        = any
   default     = {}
 }
 
 variable "image" {
-  description = "Build the API image from <repos_root>/<name> and side-load it into kind. Its tag is local-<first 12 chars of a sha256 over the files matched by hash_globs plus Dockerfile, go.mod and go.sum>. Every file the Dockerfile copies into the image must be matched, or a change to it alone never rebuilds: the default covers the Go sources and every migrations tree the fleet's Dockerfiles ship. null when the image comes from a registry and the values set its repository and tag."
-  type = object({
-    hash_globs = optional(list(string), ["**/*.go", "migrations/**", "internal/**/migrations/**", "analytics/migrations/**"])
-  })
-  default = null
+  description = "Set (to {}) when the application has an API image: the chart gets image.repository and image.tag from var.registry. null when the application has no image of its own."
+  type        = object({})
+  default     = null
 }
 
 variable "frontend" {
   description = <<-EOT
-    Build a static frontend image, warehouse/<name>-frontend, from
-    <repos_root>/<name>/<dir> with scripts/build-and-load-frontend.sh.
-    source_hash is its 12-character content hash (the root computes it, because
-    it folds in the shared ui-kit's hash). values_key says which chart value
-    receives the tag: "frontend" (frontend.image.tag, a Module Federation
-    remote next to the API) or "image" (image.tag, an application that IS the
-    static site: the console shell, the EventCatalog).
+    Set when the application has a frontend image, <registry prefix>/<name>-frontend,
+    tagged var.registry.frontend_tag. values_key says which chart value receives
+    the tag: "frontend" (frontend.image.tag, a Module Federation remote next to
+    the API) or "image" (image.tag, an application that IS the static site: the
+    console shell, the EventCatalog).
   EOT
   type = object({
-    source_hash = string
-    dir         = optional(string, "web")
-    values_key  = optional(string, "frontend")
+    values_key = optional(string, "frontend")
   })
   default = null
 

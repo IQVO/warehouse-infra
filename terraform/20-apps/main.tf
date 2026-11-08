@@ -61,22 +61,15 @@ locals {
     path     = "charts/${local.app_name}"
   }
 
-  # hash_globs override from the registry (apps.yaml): Node apps like
-  # storefront-web hash their app sources instead of the Go defaults.
-  image = try(local.a.build_image, true) || (local.registry_mode && try(local.a.publish_image, false)) ? (
-    try(local.a.hash_globs, null) != null ? { hash_globs = local.a.hash_globs } : {}
-  ) : null
+  # Whether the application has an image of its own (apps.yaml build_image, or
+  # publish_image for an image rebuilt as a public copy): the tag comes from the
+  # lock file, the image from ghcr.io. Nothing is built here (ADR 0011).
+  image = try(local.a.build_image, true) || try(local.a.publish_image, false) ? {} : null
 
   frontend = try(local.a.site, false) ? (
-    var.deploy_frontends ? {
-      source_hash = local.platform.site_source_hash[local.app_name]
-      dir         = "."
-      values_key  = "image"
-    } : null
+    var.deploy_frontends ? { values_key = "image" } : null
     ) : (
-    contains(keys(local.platform.frontend_source_hash), local.app_name) ? {
-      source_hash = local.platform.frontend_source_hash[local.app_name]
-    } : null
+    contains(keys(local.platform.frontend_source_hash), local.app_name) ? {} : null
   )
 
   database = try(local.a.database, false) ? merge(local.oltp_endpoints, {
@@ -111,19 +104,18 @@ locals {
 
   helm_values = local.app_name == "warehouse-ops-agent" ? local.ops_agent_terraform_values : {}
 
-  # image_source = registry (ADR 0011): the tags come from the lock file, never
-  # from the checkouts. Absent app = not published yet: the precondition on the
-  # module's registry input says which script publishes it.
-  registry_mode = var.image_source == "registry"
-  image_lock    = jsondecode(local.registry_mode ? jsonencode(yamldecode(file("${path.module}/../${var.image_lock_file}")).images) : "{}")
-  locked        = lookup(local.image_lock, local.app_name, {})
+  # The tags come from the lock file (ADR 0011), never from the checkouts.
+  # Absent app = not published yet: the precondition on the module's registry
+  # input says which script publishes it.
+  image_lock = yamldecode(file("${path.module}/../${var.image_lock_file}")).images
+  locked     = lookup(local.image_lock, local.app_name, {})
 
-  module_registry = local.registry_mode ? {
+  module_registry = {
     prefix       = var.image_registry
     image_tag    = try(local.locked.image, null)
     frontend_tag = try(local.locked.frontend, null)
     pull_secret  = try(local.platform.image_pull_secret, "")
-  } : null
+  }
 
   values_source = {
     repo_url        = "https://github.com/IQVO/warehouse-infra.git"
@@ -153,14 +145,10 @@ module "application" {
 
   apps_namespace   = local.platform.apps_namespace
   argocd_namespace = local.platform.argocd_namespace
-  cluster_name     = local.platform.cluster_name
   registry         = local.module_registry
 
   postgres       = local.platform.postgres
   platform_ready = local.platform.gateway_ready
-
-  repos_root  = "${path.module}/../../.."
-  scripts_dir = "${path.module}/../../scripts"
 
   chart              = local.chart
   image              = local.image

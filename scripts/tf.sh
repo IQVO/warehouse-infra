@@ -14,11 +14,11 @@
 #
 #   scripts/tf.sh [--target <name>] <layer> ...    or   WAREHOUSE_TARGET=<name>
 #
-#   no target / kind   the local kind cluster: terraform.tfstate, as always.
-#   k3s                the existing k3s cluster of terraform/targets/k3s.tfvars.json.
-#                      Own state files (terraform.tfstate.k3s, terraform.tfstate.d.k3s/)
-#                      and own plugin directory (.terraform.k3s), so a k3s command can
-#                      never read or write the kind environment's state.
+#   no target / k3s    the existing k3s cluster of terraform/targets/k3s.tfvars.json
+#                      (the default and the only supported environment).
+#                      State files terraform.tfstate.k3s, terraform.tfstate.d.k3s/ and
+#                      plugin directory .terraform.k3s.
+#   kind               REFUSED: kind is banned (ADR 0011). Every deploy targets k3s.
 #
 # What it adds to a bare `terraform`:
 #  - terraform/terraform.tfvars is passed to plan/apply/destroy/refresh as
@@ -36,7 +36,7 @@ repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tf_dir="${repo}/terraform"
 
 # --- target (ADR 0011) -------------------------------------------------------
-target="${WAREHOUSE_TARGET:-}"
+target="${WAREHOUSE_TARGET:-k3s}"
 if [[ "${1:-}" == --target ]]; then
   target="${2:-}"
   shift 2 || true
@@ -44,7 +44,8 @@ elif [[ "${1:-}" == --target=* ]]; then
   target="${1#--target=}"
   shift
 fi
-[[ "${target}" == kind ]] && target=""
+[[ "${target}" == kind ]] && { echo "error: kind is banned (ADR 0011); every deploy targets k3s" >&2; exit 1; }
+[[ -n "${target}" ]] || target=k3s
 state_suffix=""
 target_vars=""
 if [[ -n "${target}" ]]; then
@@ -74,8 +75,8 @@ if [[ -n "${target}" ]]; then
 fi
 
 # Commands that take -state, and commands that need no state at all. Anything
-# else is refused under a target: it would read terraform.tfstate, which is the
-# kind environment's.
+# else is refused: it would read the bare terraform.tfstate, which belongs to the
+# retired kind environment.
 state_cmds=" plan apply destroy refresh import output console state "
 plain_cmds=" init validate fmt version providers "
 
@@ -91,7 +92,7 @@ run_in() {
   local extra=()
   if [[ -n "${target}" ]]; then
     if [[ "${state_cmds}" != *" ${cmd} "* && "${plain_cmds}" != *" ${cmd} "* ]]; then
-      die "'${cmd}' is not supported with --target ${target}: it would use the kind environment's state"
+      die "'${cmd}' is not supported with --target ${target}: it would use the retired kind state"
     fi
   fi
   case "${cmd}" in
@@ -111,8 +112,8 @@ run_in() {
       fi
       ;;
   esac
-  # The target's own state file. A workspace of 20-apps is a directory in the
-  # kind layout; here it is one under terraform.tfstate.d<suffix>.
+  # The target's own state file. A workspace of 20-apps is a directory
+  # under terraform.tfstate.d<suffix>.
   local state_args=()
   if [[ -n "${target}" && "${state_cmds}" == *" ${cmd} "* ]]; then
     local state_file="${dir}/terraform.tfstate${state_suffix}"

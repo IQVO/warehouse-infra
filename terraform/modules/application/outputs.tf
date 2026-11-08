@@ -1,10 +1,10 @@
 output "image_tag" {
-  description = "Content-derived tag of the API image (local-<hash12>), or null when var.image is null."
+  description = "Pinned tag of the API image, or null when var.image is null."
   value       = local.image_tag
 }
 
 output "frontend_image_tag" {
-  description = "Content-derived tag of the frontend image, or null when var.frontend is null."
+  description = "Pinned tag of the frontend image, or null when var.frontend is null."
   value       = local.frontend_image_tag
 }
 

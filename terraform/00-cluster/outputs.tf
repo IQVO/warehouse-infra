@@ -2,12 +2,11 @@
 # terraform_remote_state on the local backend.
 
 output "cluster" {
-  description = "Non-secret facts about the cluster: its name, kube context, kubeconfig path and the host/node port pairs the kind config publishes."
+  description = "Non-secret facts about the cluster: its name, kube context, kubeconfig path and the legacy host/node port pairs."
   value = {
     name            = var.cluster_name
-    provider        = var.cluster_provider
-    kube_context    = local.kube_context
-    kubeconfig_path = local.kubeconfig_path
+    kube_context    = var.kube_context
+    kubeconfig_file = var.kubeconfig_file
     ports = {
       web_gateway_node_port      = var.web_gateway_node_port
       web_gateway_host_port      = var.web_gateway_host_port
@@ -32,16 +31,10 @@ output "cluster" {
 output "connection" {
   description = "Credentials for the kubernetes, helm and kubectl providers of the layers above."
   sensitive   = true
-  value = {
-    host                   = local.existing ? local.existing_connection.host : kind_cluster.warehouse[0].endpoint
-    cluster_ca_certificate = local.existing ? local.existing_connection.cluster_ca_certificate : kind_cluster.warehouse[0].cluster_ca_certificate
-    client_certificate     = local.existing ? local.existing_connection.client_certificate : kind_cluster.warehouse[0].client_certificate
-    client_key             = local.existing ? local.existing_connection.client_key : kind_cluster.warehouse[0].client_key
-    token                  = local.existing ? local.existing_connection.token : ""
-  }
+  value       = local.connection
 }
 
 output "cluster_name" {
-  description = "Name of the cluster (the kind cluster's name, or a label for an existing cluster)."
+  description = "Label of the cluster."
   value       = var.cluster_name
 }
