@@ -78,6 +78,11 @@ resource "helm_release" "kong" {
       } : {})
     }
 
+    # The chart's Kong Manager Service is a NodePort by default. On kind that is
+    # unreachable from outside the Docker network; on a node with a LAN address
+    # (k3s) it would publish the manager UI. Nothing here uses it.
+    manager = var.expose_node_ports ? {} : { type = "ClusterIP" }
+
     ingressController = {
       enabled      = true
       ingressClass = "kong"

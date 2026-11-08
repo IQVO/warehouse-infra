@@ -564,3 +564,19 @@ variable "ghcr_token" {
   default     = ""
   sensitive   = true
 }
+
+variable "istio_injection_enabled" {
+  description = <<-EOT
+    Whether the applications namespace gets Istio sidecars (istio-injection=enabled).
+    The mesh is permissive (no PeerAuthentication/AuthorizationPolicy exists), so
+    the applications run the same without it; Kiali then has no traffic to draw.
+
+    false on k3s: every sidecar opens inotify instances on the node, and a stock
+    Ubuntu node (fs.inotify.max_user_instances=128, a host setting this repo may
+    not change, ADR 0011) runs out around 50 pods -- the sidecars then crash with
+    "couldn't initialize inotify: too many open files" and take their pods down.
+    It also removes ~100 containers from a node that is capped at 110 pods.
+  EOT
+  type        = bool
+  default     = true
+}
