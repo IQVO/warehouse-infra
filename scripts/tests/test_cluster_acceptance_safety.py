@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-import os
 import subprocess
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -11,50 +9,38 @@ SCRIPT = ROOT / "scripts" / "run-cluster-acceptance.sh"
 
 
 class ClusterAcceptanceSafetyTest(unittest.TestCase):
-    def test_provision_refuses_to_touch_a_preexisting_cluster(self):
-        with tempfile.TemporaryDirectory() as directory:
-            binary_dir = Path(directory)
-            fake_kind = binary_dir / "kind"
-            fake_kind.write_text(
-                "#!/usr/bin/env bash\n"
-                "if [[ \"$1 $2\" == \"get clusters\" ]]; then echo warehouse; exit 0; fi\n"
-                "echo unexpected-kind-call >&2; exit 91\n"
-            )
-            fake_kind.chmod(0o755)
-            env = os.environ.copy()
-            env["PATH"] = f"{binary_dir}:{env['PATH']}"
+    def test_there_is_no_provisioning_mode(self):
+        result = subprocess.run(["bash", str(SCRIPT), "--provision"], cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(2, result.returncode)
+        self.assertIn("there is no provisioning mode", result.stderr)
 
-            result = subprocess.run(
-                ["bash", str(SCRIPT), "--provision"],
-                cwd=ROOT,
-                env=env,
-                capture_output=True,
-                text=True,
-            )
-
-        self.assertNotEqual(0, result.returncode)
-        self.assertIn("refusing to modify pre-existing kind cluster", result.stderr)
-
-    def test_orchestrator_has_no_destroy_path(self):
+    def test_orchestrator_only_reads_the_cluster(self):
         source = SCRIPT.read_text()
-        self.assertNotIn("terraform destroy", source)
-        self.assertNotIn("kind delete cluster", source)
+        for forbidden in (
+            "terraform destroy",
+            "terraform apply",
+            "terraform -chdir",
+            "kind ",
+            "kubectl --context \"${CONTEXT}\" delete",
+            "scripts/up.sh",
+            "scripts/down.sh",
+            "state rm",
+        ):
+            self.assertNotIn(forbidden, source.replace("kind is banned", ""), forbidden)
         self.assertIn("fleet-shas.json", source)
         self.assertIn("collect_diagnostics", source)
-
-    def test_existing_cluster_mode_has_no_mutating_acceptance_steps(self):
-        source = SCRIPT.read_text()
-        self.assertIn('if [[ "${MODE}" == "--provision" ]]', source)
-        for command in (
-            "terraform -chdir=\"${TF_DIR}\" state rm",
-            'bash "${INFRA_DIR}/scripts/up.sh"',
-            "terraform -chdir=\"${TF_DIR}\" plan",
-        ):
-            self.assertEqual(1, source.count(command), command)
         self.assertIn('bash "${INFRA_DIR}/scripts/run-mcp-acceptance.sh"', source)
         self.assertIn('helm --kube-context "${CONTEXT}" list -A -o json', source)
         self.assertIn("EXPECTED_FLEET_SHAS", source)
         self.assertNotIn("Authorization:", source)
+
+    def test_no_workflow_provisions_a_cluster(self):
+        # kind is banned (ADR 0011): no workflow may provision a cluster.
+        self.assertFalse((ROOT / ".github" / "workflows" / "cluster-acceptance.yml").exists())
+        for workflow in (ROOT / ".github" / "workflows").glob("*.yml"):
+            source = workflow.read_text()
+            self.assertNotIn("kind-action", source, workflow.name)
+            self.assertNotIn("kind create cluster", source, workflow.name)
 
 
 if __name__ == "__main__":

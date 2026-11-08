@@ -25,14 +25,14 @@ plane:
 5. start the new images,
 6. re-seed the catalogue so the topics hold CloudEvents only.
 
-Every command below targets the local `kind` cluster
-(`--context kind-warehouse`), namespace `warehouse-systems` for workloads
+Every command below targets the k3s cluster
+(`--context k3s-multipass`; kind is banned, ADR 0011), namespace `warehouse-systems` for workloads
 and `warehouse-data` for Postgres. The Kafka commands run against the real
 in-cluster broker (`kafka-controller-0`, container `kafka`), not a
 docker-compose broker.
 
 ```bash
-export KCTX=kind-warehouse
+export KCTX=k3s-multipass
 export NS=warehouse-systems
 export DATA_NS=warehouse-data
 # The Kafka CLI tools are JVMs that run INSIDE the broker container and share
@@ -342,59 +342,32 @@ with new CloudEvents UUIDs and can be left as is.
 
 ## 7. Deploy the new images
 
-Images are NOT pulled from a registry. `terraform/modules/application`
-runs `scripts/build-and-load.sh`, which
-`docker build`s each service from its LOCAL checkout at
-`~/warehouse-systems/<repo>` (`${path.module}/../../<repo>`) and
-`kind load`s it; the image tag is a hash of that checkout's `*.go` +
-`migrations/**`. Whatever is checked out locally is what ships, including
-another branch or uncommitted work.
+Images are never built locally (kind is banned, ADR 0011). Run the
+`publish-images` workflow on the merged `develop`, pin the result with
+`scripts/k3s-pin-images.sh <run-id>`, commit `terraform/targets/k3s.images.yaml`
+through a PR, and apply with `scripts/tf.sh --target k3s apps apply`.
 
-7a. Put every service checkout on the merged `develop` HEAD, clean:
-
-```bash
-for s in $SVCS; do
-  d=~/warehouse-systems/$s
-  git -C "$d" fetch -q origin
-  if [ -n "$(git -C "$d" status --porcelain --untracked-files=no)" ]; then
-    echo "!! $s has uncommitted tracked changes -- stash/commit them first"; continue
-  fi
-  git -C "$d" checkout -q develop && git -C "$d" merge -q --ff-only origin/develop
-  printf '%-26s %s %s\n' "$s" "$(git -C "$d" branch --show-current)" \
-    "$(git -C "$d" rev-parse --short HEAD)"
-done
-```
-
-Every line must show `develop` at `origin/develop`'s sha and none may
-print `!!`. Untracked non-Go files (`.schemathesis/`, `node_modules/`) do not
-change the source hash (only `*.go` + `migrations/**` count) and are not
-compiled into the Go binary, so they can stay. An untracked `.worktrees/`
-directory inside a repo (workforce-management, fulfillment-execution have
-one) is hashed into the tag, but each worktree has its own `go.mod`, so it
-is a separate module and never compiled into the service binary. Sanity-check the CloudEvents code is really what will be built:
-
-```bash
-for s in $SVCS; do
-  printf '%-26s sdk=%s flat=%s\n' "$s" \
-    "$(grep -c cloudevents/sdk-go ~/warehouse-systems/$s/go.mod)" \
-    "$(grep -rlE 'json:"event_type"|EVENT_ENVELOPE_MODE' ~/warehouse-systems/$s/internal ~/warehouse-systems/$s/cmd 2>/dev/null | grep -v _test | wc -l | tr -d ' ')"
-done   # every line: sdk=1 flat=0
-```
-
-7b. Build, side-load and roll out:
+7a. Every service's merged `develop` must be published and pinned: the
+`publish-images` workflow ran on it, and `terraform/targets/k3s.images.yaml`
+carries its tags (`scripts/k3s-pin-images.sh <run-id>`, merged through a PR).
+Check the pinned tag of each service is the commit you expect:
 
 ```bash
 cd ~/warehouse-systems/warehouse-infra
 git checkout -q develop && git pull -q --ff-only origin develop
-scripts/tf.sh platform plan  -out=cutover.plan
-scripts/tf.sh platform apply cutover.plan
+for s in $SVCS; do grep -A2 "^  $s:" terraform/targets/k3s.images.yaml; done
 ```
 
-The apply rebuilds every service whose source hash changed (all nine do),
-side-loads the images, re-renders the ArgoCD Applications with the new
-content-hash tags (re-enabling auto-sync from step 2), and Argo rolls the
-Deployments and restores replica counts. Confirm every Deployment runs the
-new tag and rolled:
+7b. Roll out:
+
+```bash
+scripts/tf.sh --target k3s platform plan  -out=cutover.plan
+scripts/tf.sh --target k3s platform apply cutover.plan
+```
+
+The apply re-renders the ArgoCD Applications with the pinned image tags
+(re-enabling auto-sync from step 2), and Argo rolls the Deployments and
+restores replica counts. Confirm every Deployment runs the new tag and rolled:
 
 ```bash
 kubectl --context "$KCTX" -n "$NS" get deploy -o custom-columns=NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image \

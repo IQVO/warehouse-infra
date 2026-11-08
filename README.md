@@ -1,5 +1,7 @@
 # warehouse-infra
 
+> **kind is banned (ADR 0011, amended 2026-11-08).** Every deploy targets the existing k3s cluster with images built on GitHub and pinned in `terraform/targets/k3s.images.yaml`. This README still describes the retired kind environment in places (architecture sketch, ports, CPU overlay, rebuild notes); read it as history and follow `CLAUDE.md`, ADR 0011 and `.claude/skills/deploy-local-checkout` for how to deploy. The platform layer (`terraform/10-platform`) still carries kind-era defaults that `terraform/targets/k3s.tfvars.json` overrides; removing them is tracked as the follow-up to this change.
+
 A fully local Kubernetes environment for the `warehouse-systems` bounded
 contexts: a **kind** cluster running **PostgreSQL**, **Kafka**, **Istio**
 (sidecar mesh), the observability stack, **Kong** (north-south API gateway) and
@@ -1268,14 +1270,13 @@ warehouse-infra/
 │   ├── wes-work-planning.yaml
 │   ├── workforce-management.yaml
 │   ├── argocd.yaml              # ArgoCD release values (probe budgets, render parallelism limit)
-│   ├── kind-resources/          # generated per-Application CPU-request overlays (kind only)
+│   ├── kind-resources/          # generated per-Application CPU-request overlays (legacy directory name)
 │   └── fulfillment-execution.yaml
 ├── scripts/
 │   ├── up.sh                    # single entrypoint: the three layers in order + next steps
 │   ├── tf.sh                    # terraform in one layer or one application's workspace
 │   ├── migrate-state-to-layers.sh  # the recorded state mv of ADR 0007 step 2/3
-│   ├── down.sh                  # delete the cluster, drop the layers' state
-│   ├── build-and-load.sh        # docker build + kind load, called by Terraform
+│   ├── down.sh                  # destroy apps + platform on k3s, drop the layers' k3s state
 │   ├── smoke-test.sh            # curls all four /healthz through Kong
 │   └── seed-transfer-capability.py  # post-deploy: site transfer capability from role defaults
 └── terraform/

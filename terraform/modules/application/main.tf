@@ -7,9 +7,9 @@
 #     Postgres with them (modules/database, ADR 0005)
 #   - the <name>-db / <name>-analytics-db Secrets the chart reads through
 #     existingSecret, and any other Secret the root supplies (var.secrets)
-#   - the local image build(s), tagged by content so ArgoCD sees a new tag on
-#     every rebuild -- or, with var.registry set (k3s, ADR 0011), no build at
-#     all: the chart is pointed at images already published to ghcr.io
+#   - the image tags: nothing is built or loaded here (kind is banned, ADR
+#     0011); the chart is pointed at images already published to ghcr.io by the
+#     publish-images workflow, at the tags pinned in the lock file
 #   - the ArgoCD Application that installs the chart from the application's
 #     own repo with its value files from this repo (helm-values/, ADR 0002
 #     D2); its valuesObject carries only the image tags
@@ -19,48 +19,23 @@
 # ---------------------------------------------------------------------------
 
 locals {
-  source_dir = "${var.repos_root}/${var.name}"
+  # The tags are the ones the published images carry (var.registry, from the lock
+  # file). A missing pin fails the plan: see the Application's preconditions.
+  image_tag          = var.image == null ? null : var.registry.image_tag
+  frontend_image_tag = var.frontend == null ? null : var.registry.frontend_tag
 
-  # The same construction the per-service hashes used before this module
-  # existed: every file matched by each glob, in glob order and sorted within
-  # a glob, then the Dockerfile and the Go module files.
-  source_hash = var.image == null ? "" : sha256(join("", concat(
-    flatten([
-      for glob in var.image.hash_globs : [
-        for f in sort(fileset(local.source_dir, glob)) : filesha256("${local.source_dir}/${f}")
-      ]
-    ]),
-    [
-      filesha256("${local.source_dir}/Dockerfile"),
-      # Non-Go images (storefront-web's Node SSR server) have no Go module
-      # files; try() keeps their hash to the globs + Dockerfile.
-      try(filesha256("${local.source_dir}/go.mod"), ""),
-      try(filesha256("${local.source_dir}/go.sum"), ""),
-    ],
-  )))
-
-  # Registry mode (ADR 0011): the tags are the ones the published images carry.
-  from_registry = var.registry != null
-
-  image_tag = var.image == null ? null : (
-    local.from_registry ? var.registry.image_tag : "local-${substr(local.source_hash, 0, 12)}"
-  )
-  frontend_image_tag = var.frontend == null ? null : (
-    local.from_registry ? var.registry.frontend_tag : "local-${var.frontend.source_hash}"
-  )
-
-  # In registry mode the repository is set here, per target, because the value
-  # files in helm-values/ are shared with the kind environment and name the
-  # kind-local `warehouse/<name>` repositories.
-  image_repository          = local.from_registry ? { repository = "${var.registry.prefix}/${var.name}" } : {}
-  frontend_image_repository = local.from_registry ? { repository = "${var.registry.prefix}/${var.name}-frontend" } : {}
-  pull_secrets = local.from_registry && var.registry.pull_secret != "" ? {
+  # The repository is set here, not in helm-values/, whose files still name the
+  # legacy `warehouse/<name>` repositories; valuesObject wins over them.
+  image_repository          = { repository = "${var.registry.prefix}/${var.name}" }
+  frontend_image_repository = { repository = "${var.registry.prefix}/${var.name}-frontend" }
+  pull_secrets = var.registry.pull_secret != "" ? {
     imagePullSecrets = [{ name = var.registry.pull_secret }]
   } : {}
 
   # The application's configuration lives in value files in this repo
   # (ADR 0002 D2), lowest precedence first: the platform facts, the
-  # application's own file, the kind CPU overlay.
+  # application's own file, the CPU overlay (the directory is still called
+  # kind-resources/; the name is legacy, the overlay applies on k3s).
   value_files = [
     "$values/${var.values.dir}/_platform.yaml",
     "$values/${var.values.dir}/${var.name}.yaml",
@@ -184,40 +159,6 @@ resource "kubernetes_secret" "analytics_db" {
   data = { for key in var.analytics_database.secret_keys : key => local.analytics_database_url }
 }
 
-# --- images -----------------------------------------------------------------
-
-resource "null_resource" "build_and_load" {
-  count = var.deploy && var.image != null && !local.from_registry ? 1 : 0
-
-  triggers = {
-    source_hash = local.source_hash
-    image       = "warehouse/${var.name}:${local.image_tag}"
-    cluster     = var.cluster_name
-  }
-
-  provisioner "local-exec" {
-    command = "${var.scripts_dir}/build-and-load.sh '${var.name}' '${local.image_tag}' '${var.cluster_name}'"
-  }
-}
-
-# Built whenever a frontend is declared, independent of var.deploy: the root
-# only declares one while var.deploy_frontends is on, which is the switch the
-# frontend builds have always followed. A Module Federation remote builds from
-# web/; the console shell and the EventCatalog build from the repo root.
-resource "null_resource" "build_and_load_frontend" {
-  count = var.frontend == null || local.from_registry ? 0 : 1
-
-  triggers = {
-    source_hash = var.frontend.source_hash
-    image       = "warehouse/${var.name}-frontend:${local.frontend_image_tag}"
-    cluster     = var.cluster_name
-  }
-
-  provisioner "local-exec" {
-    command = "${var.scripts_dir}/build-and-load-frontend.sh '${var.name}' '${var.frontend.dir}' '${local.frontend_image_tag}' '${var.cluster_name}'"
-  }
-}
-
 # --- delivery ---------------------------------------------------------------
 
 resource "kubectl_manifest" "application" {
@@ -271,11 +212,11 @@ resource "kubectl_manifest" "application" {
       error_message = "${var.name}: platform_ready must not be an empty string."
     }
     precondition {
-      condition     = !local.from_registry || var.image == null || try(var.registry.image_tag, null) != null
+      condition     = var.image == null || var.registry.image_tag != null
       error_message = "${var.name}: no published image in the lock file (image_lock_file). Run the publish-images workflow, then scripts/k3s-pin-images.sh (ADR 0011)."
     }
     precondition {
-      condition     = !local.from_registry || var.frontend == null || try(var.registry.frontend_tag, null) != null
+      condition     = var.frontend == null || var.registry.frontend_tag != null
       error_message = "${var.name}: no published frontend image in the lock file (image_lock_file). Run the publish-images workflow, then scripts/k3s-pin-images.sh (ADR 0011)."
     }
     precondition {

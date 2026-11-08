@@ -23,7 +23,7 @@ jobs:
   # Agent-guide sensor (harness-template v3): skills load, references resolve, context budget.
   # BLOCKING: guides are clean, so a stale path or broken skill fails the PR.
   # ============================================================
-  # Acceptance-harness units: the cluster-acceptance workflow's
+  # Acceptance-harness units: the read-only acceptance script's
   # python suites and the MCP probe's go tests, on every PR.
   # ============================================================
   acceptance-units:
