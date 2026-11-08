@@ -734,8 +734,7 @@ scripts/k3s-edges.sh                                                # UI :80, AP
 
 `terraform/targets/k3s.tfvars.json` names the kubeconfig context and flips the kind assumptions off
 (`expose_node_ports`, `manage_gateway_api_crds`, `deploy_metrics_server`, `image_source = registry`). The packages
-are private: `tf.sh` takes a read token from `gh auth token` at run time (or `TF_VAR_ghcr_token`) for the `ghcr-pull`
-Secret. Nothing is published on the node, because the fleet is unauthenticated; stop any kind cluster before
+are public, so no pull Secret exists (if that changes: `TF_VAR_ghcr_token` creates one). Nothing is published on the node, because the fleet is unauthenticated; stop any kind cluster before
 `k3s-edges.sh` (same ports). Tear down: `scripts/down.sh --target k3s --yes` (destroys the releases, not the machine).
 
 ## Route table

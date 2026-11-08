@@ -5,6 +5,7 @@ One entry per image terraform/20-apps would build locally for a registry entry
 of terraform/apps.yaml -- the same three shapes modules/application knows:
 
   service   build_image != false   <repo>/Dockerfile          -> <app>
+            or publish_image: true  (an image kind does not build but k3s needs for arm64)
   frontend  frontend_remote set    <repo>/web/Dockerfile      -> <app>-frontend
   site      site: true             <repo>/Dockerfile          -> <app>-frontend
 
@@ -25,7 +26,7 @@ def entries(apps):
     out = []
     for app, a in apps.items():
         owner = a.get("repo_owner", "claudioed")
-        if a.get("build_image", True):
+        if a.get("build_image", True) or a.get("publish_image", False):
             out.append({"app": app, "owner": owner, "kind": "service", "dir": ".", "name": app})
         if a.get("site", False):
             out.append({"app": app, "owner": owner, "kind": "site", "dir": ".", "name": f"{app}-frontend"})
