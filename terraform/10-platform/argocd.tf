@@ -32,7 +32,17 @@ resource "helm_release" "argocd" {
   timeout = 1200
   wait    = true
 
-  values = [file("${path.module}/../../helm-values/argocd.yaml")]
+  values = concat(
+    [file("${path.module}/../../helm-values/argocd.yaml")],
+    # Last, so it wins over the file above.
+    var.argocd_lean ? [yamlencode({
+      dex           = { enabled = false }
+      notifications = { enabled = false }
+      applicationSet = {
+        enabled = false
+      }
+    })] : [],
+  )
 
   depends_on = [kubernetes_namespace.argocd]
 }

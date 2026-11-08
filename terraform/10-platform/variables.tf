@@ -580,3 +580,15 @@ variable "istio_injection_enabled" {
   type        = bool
   default     = true
 }
+
+variable "argocd_lean" {
+  description = <<-EOT
+    Run ArgoCD without Dex (SSO), the notifications controller and the
+    ApplicationSet controller. Nothing here uses them: auth is disabled and
+    every Application is created directly by modules/application. Three pods
+    fewer, which matters on k3s, where a node holds 110 pods and the whole
+    platform plus 41 applications needs both nodes (ADR 0011).
+  EOT
+  type        = bool
+  default     = false
+}
