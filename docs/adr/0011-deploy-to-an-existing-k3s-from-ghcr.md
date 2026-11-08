@@ -29,7 +29,7 @@ What kind gave us for free and k3s does not:
 
 The images already published to ghcr.io by each application's `docker-publish` job do not fit: they are
 `linux/amd64` only (the nodes are arm64), pushed only on a merge to `main` (ArgoCD installs the charts from
-`develop`), and 28 of the 41 applications have never published one.
+`develop`), and most of the 41 applications (31) have never published one.
 
 ## Decision
 
@@ -52,7 +52,7 @@ The images already published to ghcr.io by each application's `docker-publish` j
    cluster's v1.6.3 safe-upgrades policy, and two owners of one CRD set fight) and `deploy_metrics_server = false`.
    Traefik stays; it does not collide (nothing here uses a host port).
 5. **Images: one workflow builds, a lock file pins, Terraform pulls.**
-   - `.github/workflows/publish-images.yml` (manual) builds the 69 images of `apps.yaml` (38 services, 29 frontends,
+   - `.github/workflows/publish-images.yml` (manual) builds the 70 images of `apps.yaml` (39 services, 29 frontends,
      2 sites) from one ref of every repository, on native arm64 runners, and pushes
      `ghcr.io/iqvo/warehouse-infra/<name>:<commit>[-<ui-kit commit>]-arm64`. It is idempotent: an existing tag is
      not rebuilt. It lives here, not in 40 repositories, so the images and the charts come from one commit and
@@ -61,10 +61,12 @@ The images already published to ghcr.io by each application's `docker-publish` j
    - `image_source = "registry"` makes `modules/application` build and load nothing, set `image.repository`,
      `frontend.image.repository`, the tag and `imagePullSecrets` in the Application's `valuesObject` (which wins
      over the value files shared with kind), and fail the plan for an application with no pinned tag.
-     `warehouse-ops-agent` already publishes a multi-arch image; it is used as is.
-6. **Pull credentials stay out of the repo.** The packages are private. `tf.sh` takes a token from `gh auth token`
-   at run time (or `TF_VAR_ghcr_token`) and the platform layer creates the `ghcr-pull` Secret; nothing is written
-   to a file. If the packages are made public the Secret is simply not created.
+     
+6. **No pull credential by default.** The images are published by a workflow of this (public) repository, so the
+   packages are public and a pull needs none. `warehouse-ops-agent`, whose own package is private, is rebuilt here
+   too (`publish_image: true` in `apps.yaml`) for that reason and for its arm64 image. Should a package turn
+   private, `TF_VAR_ghcr_token` (or `WAREHOUSE_GHCR_AUTH=gh`) makes the platform layer create a `ghcr-pull` Secret
+   that every chart gets as `imagePullSecrets`; it is never written to a file.
 
 ## Consequences
 

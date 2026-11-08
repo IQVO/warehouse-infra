@@ -59,10 +59,13 @@ if [[ -n "${target}" ]]; then
   export TF_DATA_DIR=".terraform${state_suffix}"
   echo "==> target ${target} (state suffix '${state_suffix}')" >&2
 
-  # ghcr.io pull credentials for the platform layer's `ghcr-pull` Secret, taken
-  # from the GitHub CLI at run time -- never written to a file. Set
-  # TF_VAR_ghcr_token yourself (or WAREHOUSE_GHCR_AUTH=off) to override.
-  if [[ -z "${TF_VAR_ghcr_token:-}" && "${WAREHOUSE_GHCR_AUTH:-gh}" == gh ]] && command -v gh >/dev/null 2>&1; then
+  # The published images are public (the repository is), so no pull Secret is
+  # needed. If they ever turn private: WAREHOUSE_GHCR_AUTH=gh takes a read
+  # token from the GitHub CLI at run time -- never written to a file -- for the
+  # platform layer's `ghcr-pull` Secret; or set TF_VAR_ghcr_token yourself.
+  # (Mind the scopes: `gh auth token` is a broad personal token; prefer a
+  # fine-grained read:packages one.)
+  if [[ -z "${TF_VAR_ghcr_token:-}" && "${WAREHOUSE_GHCR_AUTH:-off}" == gh ]] && command -v gh >/dev/null 2>&1; then
     if token="$(gh auth token 2>/dev/null)" && [[ -n "${token}" ]]; then
       export TF_VAR_ghcr_token="${token}"
       export TF_VAR_ghcr_username="${TF_VAR_ghcr_username:-$(gh api user -q .login 2>/dev/null || true)}"

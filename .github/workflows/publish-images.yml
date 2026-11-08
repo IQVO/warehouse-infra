@@ -7,7 +7,7 @@ name: Publish images
 # Why here and not in each application's own docker-publish job:
 #   - those publish linux/amd64 only, on a push to main; the k3s nodes are
 #     linux/arm64, and ArgoCD installs the charts from develop;
-#   - one workflow builds the 69 images of apps.yaml from one ref, so the
+#   - one workflow builds the 70 images of apps.yaml from one ref, so the
 #     images and the charts they run with come from the same commit.
 #
 # The tag is <app commit>-<arch> (frontends: <app commit>-<ui-kit commit>-<arch>),
