@@ -381,7 +381,7 @@ resource "kubernetes_service" "web_gateway" {
   }
 
   spec {
-    type = "NodePort"
+    type = var.expose_node_ports ? "NodePort" : "ClusterIP"
     selector = {
       "app.kubernetes.io/name" = local.web_gateway_name
     }
@@ -389,7 +389,7 @@ resource "kubernetes_service" "web_gateway" {
       name        = "http"
       port        = 80
       target_port = "http"
-      node_port   = local.cluster.ports.web_gateway_node_port
+      node_port   = var.expose_node_ports ? local.cluster.ports.web_gateway_node_port : null
       protocol    = "TCP"
     }
   }

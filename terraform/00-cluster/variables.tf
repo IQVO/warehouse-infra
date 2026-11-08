@@ -6,8 +6,43 @@
 # Cluster
 # ---------------------------------------------------------------------------
 
+variable "cluster_provider" {
+  description = <<-EOT
+    Who owns the cluster this layer describes.
+
+      kind      (default) this layer creates and destroys a kind cluster on the
+                local Docker daemon. Every other variable below applies.
+      existing  the cluster already exists and belongs to someone else -- a
+                k3s node reached over the network. Nothing is created and
+                nothing on the machine is touched: the layer only reads the
+                credentials of kube_context out of kubeconfig_file and
+                publishes them as `connection` (ADR 0011). The kind-only
+                variables (worker_count, the *_host_port mappings,
+                service_node_port_range) are ignored.
+  EOT
+  type        = string
+  default     = "kind"
+
+  validation {
+    condition     = contains(["kind", "existing"], var.cluster_provider)
+    error_message = "cluster_provider must be \"kind\" or \"existing\"."
+  }
+}
+
+variable "kubeconfig_file" {
+  description = "cluster_provider = existing: the kubeconfig that holds kube_context. A leading ~ is expanded."
+  type        = string
+  default     = "~/.kube/config"
+}
+
+variable "kube_context" {
+  description = "cluster_provider = existing: the context of kubeconfig_file the layers above deploy to (e.g. k3s-multipass). Must authenticate with client certificates or a token; exec plugins are not supported."
+  type        = string
+  default     = ""
+}
+
 variable "cluster_name" {
-  description = "Name of the kind cluster. The kubectl context becomes kind-<cluster_name>."
+  description = "Name of the cluster. For kind it is the kind cluster's name and the kubectl context becomes kind-<cluster_name>; with cluster_provider = existing it is only a label (the context is kube_context)."
   type        = string
   default     = "warehouse"
 }

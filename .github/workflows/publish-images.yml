@@ -1,0 +1,174 @@
+name: Publish images
+
+# Builds every application image terraform/20-apps would otherwise build on a
+# workstation and pushes it to ghcr.io/iqvo/warehouse-infra/<name>:<tag>, so a
+# cluster that cannot side-load images (the k3s target, ADR 0011) pulls them.
+#
+# Why here and not in each application's own docker-publish job:
+#   - those publish linux/amd64 only, on a push to main; the k3s nodes are
+#     linux/arm64, and ArgoCD installs the charts from develop;
+#   - one workflow builds the 69 images of apps.yaml from one ref, so the
+#     images and the charts they run with come from the same commit.
+#
+# The tag is <app commit>-<arch> (frontends: <app commit>-<ui-kit commit>-<arch>),
+# so the same commit is never built twice and nothing is ever overwritten.
+# scripts/k3s-pin-images.sh turns a run into terraform/targets/k3s.images.yaml.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or SHA of every application repository"
+        required: false
+        default: develop
+        type: string
+      ui_kit_ref:
+        description: "Branch, tag or SHA of warehouse-ui-kit (frontends only)"
+        required: false
+        default: develop
+        type: string
+      apps:
+        description: "Space-separated applications of terraform/apps.yaml; empty = all"
+        required: false
+        default: ""
+        type: string
+      platform:
+        description: "Image platform; the k3s nodes are arm64"
+        required: false
+        default: linux/arm64
+        type: choice
+        options:
+          - linux/arm64
+          - linux/amd64
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-images-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.13"
+      - run: pip install pyyaml
+      - id: matrix
+        env:
+          APPS: ${{ inputs.apps }}
+        run: echo "matrix=$(python3 scripts/publish-matrix.py --apps "${APPS}")" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: matrix
+    # Native arm64 runners (free for public repositories): no QEMU, so a Go or
+    # Vite build costs what it costs on the node.
+    runs-on: ${{ inputs.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
+    name: ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ matrix.owner }}/${{ matrix.app }}
+          ref: ${{ inputs.ref }}
+          path: app
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: matrix.kind != 'service'
+        with:
+          repository: IQVO/warehouse-ui-kit
+          ref: ${{ inputs.ui_kit_ref }}
+          path: uikit
+          persist-credentials: false
+
+      - name: Compute the tag
+        id: tag
+        env:
+          KIND: ${{ matrix.kind }}
+          PLATFORM: ${{ inputs.platform }}
+          NAME: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          tag="$(git -C app rev-parse --short=7 HEAD)"
+          if [[ "${KIND}" != service ]]; then
+            tag="${tag}-$(git -C uikit rev-parse --short=7 HEAD)"
+          fi
+          tag="${tag}-${PLATFORM#linux/}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/iqvo/warehouse-infra/${NAME}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Idempotent: a tag is a commit, so an existing tag is already the image.
+      - name: Already published?
+        id: exists
+        env:
+          REF: ${{ steps.tag.outputs.image }}:${{ steps.tag.outputs.tag }}
+        run: |
+          if docker buildx imagetools inspect "${REF}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push
+        if: steps.exists.outputs.exists != 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: ${{ format('app/{0}', matrix.dir) }}
+          # @warehouse/ui-kit is a sibling checkout the frontend Dockerfiles
+          # take as a named context (scripts/build-and-load-frontend.sh).
+          build-contexts: ${{ matrix.kind != 'service' && 'uikit=./uikit' || '' }}
+          platforms: ${{ inputs.platform }}
+          push: true
+          provenance: false
+          tags: ${{ steps.tag.outputs.image }}:${{ steps.tag.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ steps.tag.outputs.tag }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Record the result
+        env:
+          APP: ${{ matrix.app }}
+          KIND: ${{ matrix.kind }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          mkdir -p result
+          printf '{"app":"%s","kind":"%s","tag":"%s"}\n' "${APP}" "${KIND}" "${TAG}" > "result/${APP}-${KIND}.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: result-${{ matrix.app }}-${{ matrix.kind }}
+          path: result/
+          retention-days: 30
+
+  summary:
+    needs: build
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: |
+          echo "Pin the result with: scripts/k3s-pin-images.sh ${GITHUB_RUN_ID}" >> "$GITHUB_STEP_SUMMARY"

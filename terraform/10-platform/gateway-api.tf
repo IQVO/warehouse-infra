@@ -60,7 +60,7 @@ locals {
 }
 
 data "kubectl_file_documents" "gateway_api_crds" {
-  count = var.deploy_gateway_api ? 1 : 0
+  count = var.deploy_gateway_api && var.manage_gateway_api_crds ? 1 : 0
 
   lifecycle {
     precondition {
@@ -83,7 +83,7 @@ data "kubectl_file_documents" "gateway_api_crds" {
 # created and the API server serving it, when the GatewayClass below would
 # otherwise fail with "no matches for kind".
 resource "kubectl_manifest" "gateway_api_crds" {
-  for_each = var.deploy_gateway_api ? data.kubectl_file_documents.gateway_api_crds[0].manifests : {}
+  for_each = var.deploy_gateway_api && var.manage_gateway_api_crds ? data.kubectl_file_documents.gateway_api_crds[0].manifests : {}
 
   yaml_body         = each.value
   server_side_apply = true

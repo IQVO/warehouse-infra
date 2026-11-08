@@ -21,6 +21,10 @@ output "platform" {
     cluster_ca_certificate     = local.connection.cluster_ca_certificate
     cluster_client_certificate = local.connection.client_certificate
     cluster_client_key         = local.connection.client_key
+    cluster_token              = local.connection.token
+
+    # Name of the ghcr.io pull Secret in apps_namespace, "" when none exists.
+    image_pull_secret = local.image_pull_secret
 
     apps_namespace   = kubernetes_namespace.apps.metadata[0].name
     data_namespace   = kubernetes_namespace.data.metadata[0].name

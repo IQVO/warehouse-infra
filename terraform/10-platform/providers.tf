@@ -12,13 +12,17 @@ data "terraform_remote_state" "cluster" {
   backend = "local"
 
   config = {
-    path = "${path.module}/../00-cluster/terraform.tfstate"
+    path = "${path.module}/../00-cluster/terraform.tfstate${var.state_suffix}"
   }
 }
 
 locals {
-  cluster    = data.terraform_remote_state.cluster.outputs.cluster
-  connection = data.terraform_remote_state.cluster.outputs.connection
+  cluster = data.terraform_remote_state.cluster.outputs.cluster
+
+  # `token` is new in 00-cluster's connection (an existing cluster may use a
+  # token instead of a client certificate); a state written before that has
+  # no such attribute, and a provider treats an empty string as unset.
+  connection = merge({ token = "" }, data.terraform_remote_state.cluster.outputs.connection)
 }
 
 provider "kubernetes" {
@@ -26,6 +30,7 @@ provider "kubernetes" {
   cluster_ca_certificate = local.connection.cluster_ca_certificate
   client_certificate     = local.connection.client_certificate
   client_key             = local.connection.client_key
+  token                  = local.connection.token
 }
 
 provider "helm" {
@@ -34,6 +39,7 @@ provider "helm" {
     cluster_ca_certificate = local.connection.cluster_ca_certificate
     client_certificate     = local.connection.client_certificate
     client_key             = local.connection.client_key
+    token                  = local.connection.token
   }
 }
 
@@ -46,6 +52,7 @@ provider "kubectl" {
   cluster_ca_certificate = local.connection.cluster_ca_certificate
   client_certificate     = local.connection.client_certificate
   client_key             = local.connection.client_key
+  token                  = local.connection.token
   load_config_file       = false
 
   # A CRD is created and a custom resource of it applied in the same run

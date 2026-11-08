@@ -145,7 +145,7 @@ resource "helm_release" "kafka" {
     # "localhost" works because kind publishes the NodePort there via
     # main.tf's extra_port_mappings.
     externalAccess = {
-      enabled = var.kafka_external_access_enabled
+      enabled = local.kafka_external_access
       controller = {
         service = {
           type      = "NodePort"
@@ -175,5 +175,11 @@ output "kafka_brokers" {
 # a local `go run` should use. Empty when the broker is cluster-internal only.
 output "kafka_brokers_host" {
   description = "Host-reachable Kafka bootstrap address for out-of-cluster clients (e2e-tests, local go run)."
-  value       = var.deploy_kafka && var.kafka_external_access_enabled ? "localhost:${local.cluster.ports.kafka_host_port}" : ""
+  value       = var.deploy_kafka && local.kafka_external_access ? "localhost:${local.cluster.ports.kafka_host_port}" : ""
+}
+
+locals {
+  # The EXTERNAL listener is a NodePort published by kind's extraPortMappings;
+  # without them (expose_node_ports = false) there is nothing to advertise.
+  kafka_external_access = var.kafka_external_access_enabled && var.expose_node_ports
 }

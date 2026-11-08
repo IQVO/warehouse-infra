@@ -711,6 +711,33 @@ kong_proxy_https_host_port = 8443
 
 ---
 
+## Running on the existing k3s cluster (ADR 0011)
+
+The same three layers can deploy to a k3s cluster this repo does not own (context `k3s-multipass`, arm64). The
+machine is never touched: Terraform only talks to its Kubernetes API, nothing is built or side-loaded, and the
+images are pulled from `ghcr.io/iqvo/warehouse-infra/`.
+
+```bash
+# 1. publish the images once per snapshot of the fleet (GitHub Actions, arm64), then pin them
+gh workflow run publish-images.yml -R IQVO/warehouse-infra          # inputs: ref, ui_kit_ref, apps, platform
+gh run watch -R IQVO/warehouse-infra
+scripts/k3s-pin-images.sh --latest                                  # writes terraform/targets/k3s.images.yaml; commit it
+
+# 2. plan, then bring it up (every command takes --target k3s; its state never mixes with kind's)
+scripts/tf.sh --target k3s cluster plan                             # no resources: reads the kubeconfig context
+scripts/tf.sh --target k3s platform plan
+scripts/up.sh --target k3s
+
+# 3. reach the edges from this machine (127.0.0.1 only; asks for sudo once for port 80)
+scripts/k3s-edges.sh                                                # UI :80, API :8000, Grafana :3000, ...
+```
+
+`terraform/targets/k3s.tfvars.json` names the kubeconfig context and flips the kind assumptions off
+(`expose_node_ports`, `manage_gateway_api_crds`, `deploy_metrics_server`, `image_source = registry`). The packages
+are private: `tf.sh` takes a read token from `gh auth token` at run time (or `TF_VAR_ghcr_token`) for the `ghcr-pull`
+Secret. Nothing is published on the node, because the fleet is unauthenticated; stop any kind cluster before
+`k3s-edges.sh` (same ports). Tear down: `scripts/down.sh --target k3s --yes` (destroys the releases, not the machine).
+
 ## Route table
 
 ### APIs — Kong, on `http://localhost:8000`

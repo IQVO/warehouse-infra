@@ -111,6 +111,20 @@ locals {
 
   helm_values = local.app_name == "warehouse-ops-agent" ? local.ops_agent_terraform_values : {}
 
+  # image_source = registry (ADR 0011): the tags come from the lock file, never
+  # from the checkouts. Absent app = not published yet: the precondition on the
+  # module's registry input says which script publishes it.
+  registry_mode = var.image_source == "registry"
+  image_lock    = jsondecode(local.registry_mode ? jsonencode(yamldecode(file("${path.module}/../${var.image_lock_file}")).images) : "{}")
+  locked        = lookup(local.image_lock, local.app_name, {})
+
+  module_registry = local.registry_mode ? {
+    prefix       = var.image_registry
+    image_tag    = try(local.locked.image, null)
+    frontend_tag = try(local.locked.frontend, null)
+    pull_secret  = try(local.platform.image_pull_secret, "")
+  } : null
+
   values_source = {
     repo_url        = "https://github.com/IQVO/warehouse-infra.git"
     target_revision = "develop"
@@ -140,6 +154,7 @@ module "application" {
   apps_namespace   = local.platform.apps_namespace
   argocd_namespace = local.platform.argocd_namespace
   cluster_name     = local.platform.cluster_name
+  registry         = local.module_registry
 
   postgres       = local.platform.postgres
   platform_ready = local.platform.gateway_ready

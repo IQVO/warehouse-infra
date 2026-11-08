@@ -494,3 +494,73 @@ variable "gateway_api_version" {
   type        = string
   default     = "v1.6.2"
 }
+
+# ---------------------------------------------------------------------------
+# Deploying onto a cluster this repo does not own (ADR 0011: k3s)
+#
+# Every default below is the kind behaviour. terraform/targets/k3s.tfvars
+# flips them.
+# ---------------------------------------------------------------------------
+
+variable "state_suffix" {
+  description = <<-EOT
+    Suffix of the Terraform state files of the layers below this one (and of
+    this one): "" is the kind environment's terraform.tfstate, ".k3s" is
+    terraform.tfstate.k3s. scripts/tf.sh --target sets it as TF_VAR_state_suffix
+    together with the matching `-state` path, so the two cannot disagree.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "expose_node_ports" {
+  description = <<-EOT
+    true (kind): the product edges (Nginx web gateway, Kong), the observability
+    UIs and Kafka's EXTERNAL listener are NodePort Services, published on
+    127.0.0.1 by kind's extraPortMappings (00-cluster/main.tf).
+
+    false (k3s): nothing is published. There are no extraPortMappings on a
+    machine this repo does not own, and a NodePort would answer on the node's
+    LAN address -- the whole fleet is unauthenticated, so that is a
+    publication to the LAN. The edges become ClusterIP Services and
+    scripts/k3s-edges.sh reaches them from the workstation with
+    `kubectl port-forward` bound to 127.0.0.1. The observability/Kiali
+    NodePort Services and Kafka's EXTERNAL listener are not created (the
+    latter also because NodePort 9092 is outside the 30000-32767 range a k3s
+    apiserver we may not reconfigure allows).
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "manage_gateway_api_crds" {
+  description = <<-EOT
+    Whether this layer installs the vendored Gateway API CRD bundle. false when
+    the cluster ships its own (k3s installs them through its
+    `gateway-api-crd` HelmChart): applying an older vendored bundle over a
+    newer one is refused by the bundle's own safe-upgrades admission policy,
+    and two owners of one CRD set would fight. The GatewayClass and Gateway
+    are installed either way (deploy_gateway_api).
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "ghcr_username" {
+  description = "GitHub user the ghcr.io pull secret authenticates as (only used when ghcr_token is set)."
+  type        = string
+  default     = ""
+}
+
+variable "ghcr_token" {
+  description = <<-EOT
+    Token with read:packages for ghcr.io. When set, this layer creates the
+    `ghcr-pull` kubernetes.io/dockerconfigjson Secret in the applications
+    namespace and every application chart gets it as imagePullSecrets (20-apps,
+    image_source = registry). Leave empty when the packages are public.
+    Pass it as TF_VAR_ghcr_token (e.g. $(gh auth token)); never in a tfvars file.
+  EOT
+  type        = string
+  default     = ""
+  sensitive   = true
+}

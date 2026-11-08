@@ -13,12 +13,15 @@ data "terraform_remote_state" "platform" {
   backend = "local"
 
   config = {
-    path = "${path.module}/../10-platform/terraform.tfstate"
+    path = "${path.module}/../10-platform/terraform.tfstate${var.state_suffix}"
   }
 }
 
 locals {
   platform = data.terraform_remote_state.platform.outputs.platform
+
+  # Absent from a platform state written before token auth existed.
+  platform_token = try(local.platform.cluster_token, "")
 }
 
 provider "kubernetes" {
@@ -26,6 +29,7 @@ provider "kubernetes" {
   cluster_ca_certificate = local.platform.cluster_ca_certificate
   client_certificate     = local.platform.cluster_client_certificate
   client_key             = local.platform.cluster_client_key
+  token                  = local.platform_token
 }
 
 provider "helm" {
@@ -34,6 +38,7 @@ provider "helm" {
     cluster_ca_certificate = local.platform.cluster_ca_certificate
     client_certificate     = local.platform.cluster_client_certificate
     client_key             = local.platform.cluster_client_key
+    token                  = local.platform_token
   }
 }
 
@@ -42,6 +47,7 @@ provider "kubectl" {
   cluster_ca_certificate = local.platform.cluster_ca_certificate
   client_certificate     = local.platform.cluster_client_certificate
   client_key             = local.platform.cluster_client_key
+  token                  = local.platform_token
   load_config_file       = false
   apply_retry_count      = 5
 }

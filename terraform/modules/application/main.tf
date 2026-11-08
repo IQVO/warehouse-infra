@@ -8,7 +8,8 @@
 #   - the <name>-db / <name>-analytics-db Secrets the chart reads through
 #     existingSecret, and any other Secret the root supplies (var.secrets)
 #   - the local image build(s), tagged by content so ArgoCD sees a new tag on
-#     every rebuild
+#     every rebuild -- or, with var.registry set (k3s, ADR 0011), no build at
+#     all: the chart is pointed at images already published to ghcr.io
 #   - the ArgoCD Application that installs the chart from the application's
 #     own repo with its value files from this repo (helm-values/, ADR 0002
 #     D2); its valuesObject carries only the image tags
@@ -38,8 +39,24 @@ locals {
     ],
   )))
 
-  image_tag          = var.image == null ? null : "local-${substr(local.source_hash, 0, 12)}"
-  frontend_image_tag = var.frontend == null ? null : "local-${var.frontend.source_hash}"
+  # Registry mode (ADR 0011): the tags are the ones the published images carry.
+  from_registry = var.registry != null
+
+  image_tag = var.image == null ? null : (
+    local.from_registry ? var.registry.image_tag : "local-${substr(local.source_hash, 0, 12)}"
+  )
+  frontend_image_tag = var.frontend == null ? null : (
+    local.from_registry ? var.registry.frontend_tag : "local-${var.frontend.source_hash}"
+  )
+
+  # In registry mode the repository is set here, per target, because the value
+  # files in helm-values/ are shared with the kind environment and name the
+  # kind-local `warehouse/<name>` repositories.
+  image_repository          = local.from_registry ? { repository = "${var.registry.prefix}/${var.name}" } : {}
+  frontend_image_repository = local.from_registry ? { repository = "${var.registry.prefix}/${var.name}-frontend" } : {}
+  pull_secrets = local.from_registry && var.registry.pull_secret != "" ? {
+    imagePullSecrets = [{ name = var.registry.pull_secret }]
+  } : {}
 
   # The application's configuration lives in value files in this repo
   # (ADR 0002 D2), lowest precedence first: the platform facts, the
@@ -56,16 +73,17 @@ locals {
   # values independent of this module's outputs.
   application_values = merge(
     var.helm_values,
+    local.pull_secrets,
     local.image_tag == null ? {} : {
-      image = merge(try(var.helm_values.image, {}), { tag = local.image_tag })
+      image = merge(try(var.helm_values.image, {}), local.image_repository, { tag = local.image_tag })
     },
     local.frontend_image_tag == null || try(var.frontend.values_key, "") != "frontend" ? {} : {
       frontend = merge(try(var.helm_values.frontend, {}), {
-        image = merge(try(var.helm_values.frontend.image, {}), { tag = local.frontend_image_tag })
+        image = merge(try(var.helm_values.frontend.image, {}), local.frontend_image_repository, { tag = local.frontend_image_tag })
       })
     },
     local.frontend_image_tag == null || try(var.frontend.values_key, "") != "image" ? {} : {
-      image = merge(try(var.helm_values.image, {}), { tag = local.frontend_image_tag })
+      image = merge(try(var.helm_values.image, {}), local.frontend_image_repository, { tag = local.frontend_image_tag })
     },
   )
 }
@@ -169,7 +187,7 @@ resource "kubernetes_secret" "analytics_db" {
 # --- images -----------------------------------------------------------------
 
 resource "null_resource" "build_and_load" {
-  count = var.deploy && var.image != null ? 1 : 0
+  count = var.deploy && var.image != null && !local.from_registry ? 1 : 0
 
   triggers = {
     source_hash = local.source_hash
@@ -187,7 +205,7 @@ resource "null_resource" "build_and_load" {
 # frontend builds have always followed. A Module Federation remote builds from
 # web/; the console shell and the EventCatalog build from the repo root.
 resource "null_resource" "build_and_load_frontend" {
-  count = var.frontend == null ? 0 : 1
+  count = var.frontend == null || local.from_registry ? 0 : 1
 
   triggers = {
     source_hash = var.frontend.source_hash
@@ -251,6 +269,14 @@ resource "kubectl_manifest" "application" {
     precondition {
       condition     = var.platform_ready == null || var.platform_ready != ""
       error_message = "${var.name}: platform_ready must not be an empty string."
+    }
+    precondition {
+      condition     = !local.from_registry || var.image == null || try(var.registry.image_tag, null) != null
+      error_message = "${var.name}: no published image in the lock file (image_lock_file). Run the publish-images workflow, then scripts/k3s-pin-images.sh (ADR 0011)."
+    }
+    precondition {
+      condition     = !local.from_registry || var.frontend == null || try(var.registry.frontend_tag, null) != null
+      error_message = "${var.name}: no published frontend image in the lock file (image_lock_file). Run the publish-images workflow, then scripts/k3s-pin-images.sh (ADR 0011)."
     }
     precondition {
       condition = alltrue([

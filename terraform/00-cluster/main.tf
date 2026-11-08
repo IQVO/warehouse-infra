@@ -14,7 +14,12 @@
 # destroying and recreating the cluster -- it is not a rolling change.
 # ---------------------------------------------------------------------------
 
+# Only with cluster_provider = kind. With cluster_provider = existing (ADR 0011)
+# the whole file is inert: nothing is created, the layer just publishes the
+# credentials of a cluster it does not own (providers.tf, outputs.tf).
 resource "kind_cluster" "warehouse" {
+  count = local.is_kind ? 1 : 0
+
   name            = var.cluster_name
   node_image      = var.kind_node_image
   kubeconfig_path = local.kubeconfig_path
@@ -136,10 +141,12 @@ resource "kind_cluster" "warehouse" {
 # stays owned by the kind_cluster resource above, so `terraform destroy` still
 # tears it down properly.
 resource "null_resource" "kubeconfig" {
+  count = local.is_kind ? 1 : 0
+
   depends_on = [kind_cluster.warehouse]
 
   triggers = {
-    cluster_id = kind_cluster.warehouse.id
+    cluster_id = kind_cluster.warehouse[0].id
   }
 
   provisioner "local-exec" {
@@ -147,5 +154,34 @@ resource "null_resource" "kubeconfig" {
       kind export kubeconfig --name ${var.cluster_name} --kubeconfig ${local.kubeconfig_path}
       kind export kubeconfig --name ${var.cluster_name}
     EOT
+  }
+}
+
+# kind_cluster and null_resource gained a count (cluster_provider). The moves
+# keep every existing state's kind cluster where it is: without them the next
+# plan would destroy the cluster and create a second one.
+moved {
+  from = kind_cluster.warehouse
+  to   = kind_cluster.warehouse[0]
+}
+
+moved {
+  from = null_resource.kubeconfig
+  to   = null_resource.kubeconfig[0]
+}
+
+# Fail the plan, naming the variable, when the context cannot be turned into
+# credentials -- instead of a "null value" error from deep inside a local.
+check "existing_cluster_credentials" {
+  assert {
+    condition = !local.existing || (
+      var.kube_context != "" &&
+      local.kc_context != null &&
+      local.kc_cluster != null &&
+      local.kc_user != null &&
+      try(local.kc_cluster["certificate-authority-data"], "") != "" &&
+      (try(local.kc_user["client-certificate-data"], "") != "" || try(local.kc_user.token, "") != "")
+    )
+    error_message = "cluster_provider = existing: kube_context \"${var.kube_context}\" must name a context of ${var.kubeconfig_file} whose cluster carries certificate-authority-data and whose user carries client-certificate-data/client-key-data or a token (exec plugins are not supported)."
   }
 }

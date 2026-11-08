@@ -19,6 +19,9 @@ terraform/*/kubeconfig
 # patterns above, one directory level deeper.
 terraform/*/.terraform/
 terraform/*/.terraform.lock.hcl
+# A non-default target (scripts/tf.sh --target k3s, ADR 0011) keeps its own
+# plugin directory next to its own state files (terraform.tfstate.k3s, ...).
+terraform/*/.terraform.*/
 !terraform/terraform.tfvars.example
 .claude/settings.local.json
 __pycache__/
