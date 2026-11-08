@@ -84,7 +84,7 @@ The images already published to ghcr.io by each application's `docker-publish` j
 - The two environments share `terraform/10-platform` code; a variable's default is the kind behaviour.
 - `kind` and `k3s` cannot both hold `localhost:80`/`:8000` at once.
 - A k3s node allows 110 pods (kubelet `maxPods`, also not ours to change). The platform plus the fleet needs more
-  than one node: with the agent down the applications that do not fit stay `Pending` until it returns.
+  than one node (ArgoCD runs without Dex, notifications and the ApplicationSet controller there: `argocd_lean`): with the agent down the applications that do not fit stay `Pending` until it returns.
 
 ## Alternatives rejected
 
