@@ -19,8 +19,29 @@ variable "argocd_namespace" {
   type        = string
 }
 
+variable "registry" {
+  description = <<-EOT
+    null (kind): the images are built from the sibling checkouts and
+    side-loaded into the kind cluster (var.image, var.frontend, cluster_name).
+
+    Set (k3s, ADR 0011): nothing is built or loaded here. The images already
+    sit in a registry and the chart is pointed at them:
+      prefix        <prefix>/<name> and <prefix>/<name>-frontend
+      image_tag     tag of <prefix>/<name>           (required when var.image is set)
+      frontend_tag  tag of <prefix>/<name>-frontend  (required when var.frontend is set)
+      pull_secret   name of a dockerconfigjson Secret in apps_namespace, "" for none
+  EOT
+  type = object({
+    prefix       = string
+    image_tag    = optional(string)
+    frontend_tag = optional(string)
+    pull_secret  = optional(string, "")
+  })
+  default = null
+}
+
 variable "cluster_name" {
-  description = "kind cluster the images are side-loaded into. Pass the kind_cluster resource's attribute so builds are ordered after the cluster exists."
+  description = "kind cluster the images are side-loaded into. Pass the kind_cluster resource's attribute so builds are ordered after the cluster exists. Unused when registry is set."
   type        = string
 }
 

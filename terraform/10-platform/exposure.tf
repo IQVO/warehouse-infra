@@ -15,7 +15,7 @@
 # ---------------------------------------------------------------------------
 
 resource "kubernetes_service" "grafana_nodeport" {
-  count = var.deploy_observability ? 1 : 0
+  count = var.deploy_observability && var.expose_node_ports ? 1 : 0
 
   depends_on = [helm_release.grafana]
 
@@ -45,7 +45,7 @@ resource "kubernetes_service" "grafana_nodeport" {
 }
 
 resource "kubernetes_service" "jaeger_nodeport" {
-  count = var.deploy_observability ? 1 : 0
+  count = var.deploy_observability && var.expose_node_ports ? 1 : 0
 
   depends_on = [helm_release.jaeger]
 
@@ -76,7 +76,7 @@ resource "kubernetes_service" "jaeger_nodeport" {
 }
 
 resource "kubernetes_service" "prometheus_nodeport" {
-  count = var.deploy_observability ? 1 : 0
+  count = var.deploy_observability && var.expose_node_ports ? 1 : 0
 
   depends_on = [helm_release.prometheus]
 
@@ -107,7 +107,7 @@ resource "kubernetes_service" "prometheus_nodeport" {
 }
 
 resource "kubernetes_service" "kiali_nodeport" {
-  count = var.deploy_kiali && var.deploy_observability ? 1 : 0
+  count = var.deploy_kiali && var.deploy_observability && var.expose_node_ports ? 1 : 0
 
   depends_on = [helm_release.kiali]
 

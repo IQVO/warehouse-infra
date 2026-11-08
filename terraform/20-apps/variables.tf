@@ -34,3 +34,41 @@ variable "ops_agent_image_tag" {
   type        = string
   default     = ""
 }
+
+# ---------------------------------------------------------------------------
+# Where the images come from (ADR 0011)
+# ---------------------------------------------------------------------------
+
+variable "state_suffix" {
+  description = "Suffix of the platform layer's state file (terraform.tfstate<suffix>); scripts/tf.sh --target sets it. See 10-platform/variables.tf."
+  type        = string
+  default     = ""
+}
+
+variable "image_source" {
+  description = <<-EOT
+    local     (kind) build every image from the sibling checkouts and side-load
+              it into the kind cluster.
+    registry  (k3s) build nothing: point every chart at the image already
+              published to ghcr.io, at the tag pinned in image_lock_file.
+  EOT
+  type        = string
+  default     = "local"
+
+  validation {
+    condition     = contains(["local", "registry"], var.image_source)
+    error_message = "image_source must be \"local\" or \"registry\"."
+  }
+}
+
+variable "image_registry" {
+  description = "image_source = registry: the repository prefix of the published images (<prefix>/<app>, <prefix>/<app>-frontend). Written by .github/workflows/publish-images.yml."
+  type        = string
+  default     = "ghcr.io/iqvo/warehouse-infra"
+}
+
+variable "image_lock_file" {
+  description = "image_source = registry: YAML pinning the tag of every published image (terraform/targets/k3s.images.yaml). `scripts/k3s-pin-images.sh` rewrites it from a publish-images run."
+  type        = string
+  default     = "targets/k3s.images.yaml"
+}

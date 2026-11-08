@@ -10,6 +10,16 @@
 #   scripts/tf.sh apps apply -auto-approve
 #   scripts/tf.sh platform output -raw kong_proxy_url
 #
+# Which environment (ADR 0011):
+#
+#   scripts/tf.sh [--target <name>] <layer> ...    or   WAREHOUSE_TARGET=<name>
+#
+#   no target / kind   the local kind cluster: terraform.tfstate, as always.
+#   k3s                the existing k3s cluster of terraform/targets/k3s.tfvars.json.
+#                      Own state files (terraform.tfstate.k3s, terraform.tfstate.d.k3s/)
+#                      and own plugin directory (.terraform.k3s), so a k3s command can
+#                      never read or write the kind environment's state.
+#
 # What it adds to a bare `terraform`:
 #  - terraform/terraform.tfvars is passed to plan/apply/destroy/refresh as
 #    -var-file, so every layer sees the same values;
@@ -25,6 +35,47 @@ set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tf_dir="${repo}/terraform"
 
+# --- target (ADR 0011) -------------------------------------------------------
+target="${WAREHOUSE_TARGET:-}"
+if [[ "${1:-}" == --target ]]; then
+  target="${2:-}"
+  shift 2 || true
+elif [[ "${1:-}" == --target=* ]]; then
+  target="${1#--target=}"
+  shift
+fi
+[[ "${target}" == kind ]] && target=""
+state_suffix=""
+target_vars=""
+if [[ -n "${target}" ]]; then
+  [[ "${target}" =~ ^[a-z0-9-]+$ ]] || { echo "error: invalid target '${target}'" >&2; exit 1; }
+  target_vars="${tf_dir}/targets/${target}.tfvars.json"
+  [[ -f "${target_vars}" ]] || { echo "error: no ${target_vars}" >&2; exit 1; }
+  state_suffix=".${target}"
+  # The layers read each other's state at <layer>/terraform.tfstate<suffix>.
+  export TF_VAR_state_suffix="${state_suffix}"
+  # A private plugin/working directory per target: `init -reconfigure` of one
+  # target must not rewrite the other's.
+  export TF_DATA_DIR=".terraform${state_suffix}"
+  echo "==> target ${target} (state suffix '${state_suffix}')" >&2
+
+  # ghcr.io pull credentials for the platform layer's `ghcr-pull` Secret, taken
+  # from the GitHub CLI at run time -- never written to a file. Set
+  # TF_VAR_ghcr_token yourself (or WAREHOUSE_GHCR_AUTH=off) to override.
+  if [[ -z "${TF_VAR_ghcr_token:-}" && "${WAREHOUSE_GHCR_AUTH:-gh}" == gh ]] && command -v gh >/dev/null 2>&1; then
+    if token="$(gh auth token 2>/dev/null)" && [[ -n "${token}" ]]; then
+      export TF_VAR_ghcr_token="${token}"
+      export TF_VAR_ghcr_username="${TF_VAR_ghcr_username:-$(gh api user -q .login 2>/dev/null || true)}"
+    fi
+  fi
+fi
+
+# Commands that take -state, and commands that need no state at all. Anything
+# else is refused under a target: it would read terraform.tfstate, which is the
+# kind environment's.
+state_cmds=" plan apply destroy refresh import output console state "
+plain_cmds=" init validate fmt version providers "
+
 usage() { sed -n '2,/^set -/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//' >&2; exit 2; }
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -35,6 +86,11 @@ run_in() {
   local dir="$1"; shift
   local cmd="${1:-}"
   local extra=()
+  if [[ -n "${target}" ]]; then
+    if [[ "${state_cmds}" != *" ${cmd} "* && "${plain_cmds}" != *" ${cmd} "* ]]; then
+      die "'${cmd}' is not supported with --target ${target}: it would use the kind environment's state"
+    fi
+  fi
   case "${cmd}" in
     plan | apply | destroy | refresh | import)
       extra+=(-lock-timeout=300s)
@@ -46,13 +102,33 @@ run_in() {
       if [[ "${saved_plan}" -eq 0 && -f "${tf_dir}/terraform.tfvars" ]]; then
         extra+=("-var-file=${tf_dir}/terraform.tfvars")
       fi
+      # The target's values come last: a later -var-file wins.
+      if [[ "${saved_plan}" -eq 0 && -n "${target_vars}" ]]; then
+        extra+=("-var-file=${target_vars}")
+      fi
       ;;
   esac
+  # The target's own state file. A workspace of 20-apps is a directory in the
+  # kind layout; here it is one under terraform.tfstate.d<suffix>.
+  local state_args=()
+  if [[ -n "${target}" && "${state_cmds}" == *" ${cmd} "* ]]; then
+    local state_file="${dir}/terraform.tfstate${state_suffix}"
+    if [[ -n "${TF_WORKSPACE:-}" ]]; then
+      state_file="${dir}/terraform.tfstate.d${state_suffix}/${TF_WORKSPACE}/terraform.tfstate"
+      mkdir -p "$(dirname "${state_file}")"
+    fi
+    state_args=("-state=${state_file}")
+  fi
   # -reconfigure: `make tf-validate` initialises every layer with -backend=false,
   # and a plain init after that asks to migrate state (and fails without a tty).
   # The backend is always the local file, so there is nothing to migrate.
   (cd "${dir}" && terraform init -input=false -reconfigure >/dev/null)
-  (cd "${dir}" && terraform "${cmd}" ${extra[@]+"${extra[@]}"} "${@:2}")
+  if [[ "${cmd}" == state ]]; then
+    # `terraform state <sub> [-state=...] args`
+    (cd "${dir}" && terraform state "${2:-}" ${state_args[@]+"${state_args[@]}"} "${@:3}")
+  else
+    (cd "${dir}" && terraform "${cmd}" ${extra[@]+"${extra[@]}"} ${state_args[@]+"${state_args[@]}"} "${@:2}")
+  fi
 }
 
 # run_app <name> <terraform args...>

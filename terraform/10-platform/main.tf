@@ -38,3 +38,38 @@ resource "kubernetes_namespace" "apps" {
     }
   }
 }
+
+# ---------------------------------------------------------------------------
+# ghcr.io pull secret (20-apps image_source = registry).
+#
+# The application charts take `imagePullSecrets`; 20-apps puts this Secret's
+# name there. Created only when a token is supplied: a public package needs
+# none. The credential lives in this layer's state, like every other generated
+# secret of the platform, and never in a file of the repository.
+# ---------------------------------------------------------------------------
+locals {
+  image_pull_secret = var.ghcr_token != "" ? "ghcr-pull" : ""
+}
+
+resource "kubernetes_secret" "ghcr_pull" {
+  count = var.ghcr_token != "" ? 1 : 0
+
+  metadata {
+    name      = local.image_pull_secret
+    namespace = kubernetes_namespace.apps.metadata[0].name
+  }
+
+  type = "kubernetes.io/dockerconfigjson"
+
+  data = {
+    ".dockerconfigjson" = jsonencode({
+      auths = {
+        "ghcr.io" = {
+          username = var.ghcr_username
+          password = var.ghcr_token
+          auth     = base64encode("${var.ghcr_username}:${var.ghcr_token}")
+        }
+      }
+    })
+  }
+}

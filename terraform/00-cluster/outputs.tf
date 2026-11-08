@@ -4,7 +4,8 @@
 output "cluster" {
   description = "Non-secret facts about the cluster: its name, kube context, kubeconfig path and the host/node port pairs the kind config publishes."
   value = {
-    name            = kind_cluster.warehouse.name
+    name            = var.cluster_name
+    provider        = var.cluster_provider
     kube_context    = local.kube_context
     kubeconfig_path = local.kubeconfig_path
     ports = {
@@ -32,14 +33,15 @@ output "connection" {
   description = "Credentials for the kubernetes, helm and kubectl providers of the layers above."
   sensitive   = true
   value = {
-    host                   = kind_cluster.warehouse.endpoint
-    cluster_ca_certificate = kind_cluster.warehouse.cluster_ca_certificate
-    client_certificate     = kind_cluster.warehouse.client_certificate
-    client_key             = kind_cluster.warehouse.client_key
+    host                   = local.existing ? local.existing_connection.host : kind_cluster.warehouse[0].endpoint
+    cluster_ca_certificate = local.existing ? local.existing_connection.cluster_ca_certificate : kind_cluster.warehouse[0].cluster_ca_certificate
+    client_certificate     = local.existing ? local.existing_connection.client_certificate : kind_cluster.warehouse[0].client_certificate
+    client_key             = local.existing ? local.existing_connection.client_key : kind_cluster.warehouse[0].client_key
+    token                  = local.existing ? local.existing_connection.token : ""
   }
 }
 
 output "cluster_name" {
-  description = "Name of the kind cluster."
-  value       = kind_cluster.warehouse.name
+  description = "Name of the cluster (the kind cluster's name, or a label for an existing cluster)."
+  value       = var.cluster_name
 }

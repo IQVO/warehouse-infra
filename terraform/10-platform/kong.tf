@@ -61,19 +61,21 @@ resource "helm_release" "kong" {
 
     proxy = {
       enabled = true
-      type    = "NodePort"
-      http = {
+      type    = var.expose_node_ports ? "NodePort" : "ClusterIP"
+      http = merge({
         enabled       = true
         servicePort   = 80
         containerPort = 8000
-        nodePort      = local.cluster.ports.kong_proxy_http_node_port
-      }
-      tls = {
+        }, var.expose_node_ports ? {
+        nodePort = local.cluster.ports.kong_proxy_http_node_port
+      } : {})
+      tls = merge({
         enabled       = true
         servicePort   = 443
         containerPort = 8443
-        nodePort      = local.cluster.ports.kong_proxy_https_node_port
-      }
+        }, var.expose_node_ports ? {
+        nodePort = local.cluster.ports.kong_proxy_https_node_port
+      } : {})
     }
 
     ingressController = {
