@@ -75,6 +75,17 @@ applications:
     analytics: true
     frontend_remote: delivery_promise_mfe
 
+  # dock-scheduling: dock appointment scheduling (api + inline outbox relay +
+  # four Kafka consumers, a no-show sweep CronJob, a read-only MCP server and
+  # the analytics projector/reports). The chart reads both analytics keys
+  # (ANALYTICS_DATABASE_URL for the projector, ANALYTICS_READER_DATABASE_URL
+  # for the reports), so `analytics: true` is the default pair. No web part.
+  dock-scheduling:
+    kind: service
+    repo_owner: IQVO
+    database: true
+    analytics: true
+
   ecosystem:
     kind: other
     repo_owner: IQVO
@@ -369,3 +380,15 @@ applications:
     database: true
     analytics: true
     frontend_remote: workforce_mfe
+
+  # yard-management: yard and trailer operations (api + outbox relay + three
+  # Kafka consumers, the dwell and move-lease sweep CronJobs, a read-only MCP
+  # server and the analytics projector/reports). The chart reads both
+  # analytics keys (ANALYTICS_DATABASE_URL for the projector,
+  # ANALYTICS_READER_DATABASE_URL for the reports and the api), so
+  # `analytics: true` is the default pair. No web part.
+  yard-management:
+    kind: service
+    repo_owner: IQVO
+    database: true
+    analytics: true

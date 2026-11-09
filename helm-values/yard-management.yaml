@@ -1,0 +1,155 @@
+# yard-management -- the yard management bounded context (WMS, yard domain:
+# everything physically on site outside the four walls -- gate visits, which
+# trailer is at which spot or door, its load, seal and hold state, hostler and
+# driver moves, door work and yard checks; the source of dwell, door occupancy
+# and yard truck productivity facts). OLTP REST on :8080 plus, in the SAME process, three
+# Kafka consumers (yard-management ADR 0009); the transactional-outbox relay
+# runs as its own Deployment (cmd/relay, ADR 0005):
+#   - consumes warehouse.dock-scheduling.events (appointment facts), group
+#     yard-management-dock-scheduling
+#   - consumes warehouse.facility.events (yard and door layout copy), group
+#     yard-management-facility
+#   - consumes warehouse.inbound-receiving.events (ASN copy), group
+#     yard-management-inbound-receiving
+#   - produces warehouse.yard-management.events and
+#     warehouse.yard-management.analytics (CloudEvents) through the outbox.
+#     dock-scheduling consumes the integration topic
+#     (helm-values/dock-scheduling.yaml).
+#
+# Real Postgres and real Kafka only (the chart refuses a render without a
+# database source, the brokers and the three groups); the service has no *_MODE
+# switch, so nothing is wired to roll back. Every key below is a DEDICATED
+# chart value (charts/yard-management/values.yaml renders each one to its env
+# var), so none of this belongs in extraEnv (a duplicate env entry breaks
+# ArgoCD's diff).
+#
+# Topics are auto-created by the first writer (the fleet norm -- kafka.tf has
+# no topic resources), BUT a kafka-go group consumer started before its topic
+# exists is never handed the partition. The api consumes the three topics
+# above and the projector consumes warehouse.yard-management.analytics, so
+# before the first sync these are pre-created with `kafka-topics.sh --create
+# --if-not-exists` (docs/kafka-topics-yard-dock.md): the two topics this
+# service writes (warehouse.yard-management.events and .analytics) and the
+# ones it reads from the other contexts, since a producer that has not written
+# yet leaves the topic missing. The .dlq topics are created on the first dead
+# letter and need nothing.
+#
+# The brokers (KAFKA_BROKERS), the Gateway parentRefs, the CORS origin and the
+# OTLP endpoint come from _platform.yaml; the image tag from Terraform (the
+# Application's valuesObject); the CPU request from kind-resources/ (the
+# overlay is applied on k3s too). Startup runs golang-migrate over
+# MIGRATIONS_DATABASE_URL (the direct DSN Terraform puts in the
+# yard-management-db Secret); DATABASE_URL goes through PgBouncer. The role and
+# database are created by modules/application's provisioning Job (ADR 0005)
+# before the first sync.
+#
+# Optional components (all switched on below):
+#   - MCP server (cmd/mcp, ADR 0007): mcp.enabled plus the Kong route
+#     /api/mcp/yard-management.
+#   - Outbox relay (cmd/relay): required, not optional -- cmd/api and cmd/mcp
+#     only enqueue, so without it no event leaves the service. The chart turns
+#     it on by default; stated here so it is visible.
+#   - Analytics read side (ADR 0006): yard-projector (the only writer of the
+#     SEPARATE yard_management_analytics database, fed by
+#     warehouse.yard-management.analytics) and yard-reports (read-only,
+#     Service yard-management-reports:80, HTTPRoute
+#     /api/yard-management/reports -> /reports). modules/application writes
+#     both DSNs (ANALYTICS_DATABASE_URL and ANALYTICS_READER_DATABASE_URL,
+#     apps.yaml `analytics: true`) into the yard-management-analytics-db Secret,
+#     which analytics.existingSecret names.
+#   - Sweep CronJobs (sweeps.enabled, on by default in the chart): POST
+#     /dwell-sweeps every 5 minutes and /move-lease-sweeps every minute
+#     against the in-cluster api Service (http://yard-management:80/..., derived
+#     by the chart from the release name and service.port), so no URL is set
+#     here.
+#   - No A2A component: the chart has none, so there is no a2a block.
+#   - No web part: no frontend remote, no frontend block.
+
+replicaCount: 1
+
+config:
+  httpAddr: ":8080"
+  logLevel: "info"
+  # Fixed, stable group ids: a rescheduled pod resumes from its committed
+  # offsets; a brand-new group re-reads the topic from the start. All three are
+  # required (cmd/api exits at boot without them).
+  # Consumes warehouse.dock-scheduling.events.
+  dockSchedulingConsumerGroup: "yard-management-dock-scheduling"
+  # Consumes warehouse.facility.events.
+  facilityConsumerGroup: "yard-management-facility"
+  # Consumes warehouse.inbound-receiving.events.
+  inboundReceivingConsumerGroup: "yard-management-inbound-receiving"
+
+database:
+  existingSecret: yard-management-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+
+extraEnv: []
+
+# Kong exposure of the OLTP API (the chart's httproute.yaml):
+# /api/yard-management, prefix stripped. The parentRefs come from
+# helm-values/_platform.yaml (the shared warehouse-gateway), never per-app.
+# The reports route /api/yard-management/reports is a longer prefix, which
+# Gateway API matches first, so it needs no priority handling.
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/yard-management
+      pathType: PathPrefix
+  stripPath: true
+
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/yard-management
+
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+
+# Read-only MCP server (cmd/mcp), Service yard-management-mcp:8090: Kong
+# exposure /api/mcp/yard-management, prefix rewritten to /mcp (the chart's
+# mcp-route.yaml). No auth (the in-cluster ClusterIP boundary is the access
+# control). The route's parentRefs come from _platform.yaml.
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/yard-management
+
+# The outbox relay Deployment (cmd/relay): see the header.
+relay:
+  enabled: true
+
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP
+
+# Analytics read side (ADR 0006): the projector and the reports binaries of
+# the SAME image, over a separate analytical Postgres database. The
+# projector's consumer group is a FIXED, stable id (`<ctx>-analytics`): a
+# restarted pod resumes from its committed offsets, and a brand-new group
+# rebuilds the model from the topic's history. Equal to the chart's default,
+# pinned here so a rename in code cannot silently orphan the committed offsets.
+# MANDATORY when enabled. The reports HTTPRoute is chart-rendered
+# (/api/yard-management/reports -> /reports); its parentRefs come from
+# _platform.yaml.
+analytics:
+  enabled: true
+  consumerGroup: "yard-management-analytics"
+  existingSecret: yard-management-analytics-db
+  reports:
+    route:
+      enabled: true
+      path: /api/yard-management/reports
+
+# Dwell and move-lease sweeps (POST /dwell-sweeps every 5 minutes,
+# POST /move-lease-sweeps every minute, by CronJob): the chart's defaults
+# apply, the target URL is the release's own api Service.
+sweeps:
+  enabled: true
