@@ -10,7 +10,9 @@ class LiveScriptContractTest(unittest.TestCase):
     def test_smoke_uses_source_inventory_and_api_prefix(self):
         source = (ROOT / "scripts" / "smoke-test.sh").read_text()
         self.assertIn("exposure_inventory.py --kind apis", source)
-        self.assertIn("/api/${ctx}/healthz", source)
+        # the route is the one the context's own values file declares
+        self.assertIn("${route}/healthz", source)
+        self.assertIn("gatewayApi", source)
         self.assertNotIn("for svc in inventory-storage", source)
 
     def test_policy_uses_source_inventory_and_resolves_every_remote_chunk(self):
