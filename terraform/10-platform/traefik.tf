@@ -28,3 +28,9 @@ resource "kubectl_manifest" "traefik_cluster_ip" {
     }
   })
 }
+
+# It had a count while the k3s toggles existed.
+moved {
+  from = kubectl_manifest.traefik_cluster_ip[0]
+  to   = kubectl_manifest.traefik_cluster_ip
+}
