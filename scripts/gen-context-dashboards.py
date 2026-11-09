@@ -780,6 +780,40 @@ CONTEXTS = [
         "business_metrics": [],
     },
     {
+        "key": "dock-scheduling",
+        "title": "Dock Scheduling",
+        "uid": "warehouse-dock-scheduling",
+        # service_regex follows the fleet prefix convention (api, mcp, projector,
+        # reports and sweep pods all start with `dock-scheduling`). The service
+        # registers two business counters in its telemetry adapter
+        # (dock_scheduling_ignored_facts_total{reason} and
+        # dock_scheduling_implicit_arrivals_total on origin/develop), but they sit
+        # on a private Prometheus registry served at GET /metrics and the
+        # scrape of that endpoint is not verified on this cluster yet, so
+        # business_metrics stays empty (never invent a series) and there is no
+        # outbox-lag gauge. The Kong rows are live (kongPlugins.prometheus in
+        # helm-values/dock-scheduling.yaml) and pod-restart alerts are live from
+        # day one.
+        "service_regex": "dock-scheduling.*",
+        "loki_app": "dock-scheduling",
+        "business_metrics": [],
+    },
+    {
+        "key": "yard-management",
+        "title": "Yard Management",
+        "uid": "warehouse-yard-management",
+        # Same state as dock-scheduling above: no business metric is verified on
+        # origin/develop (no meter in the repo), no outbox-lag gauge, so
+        # business_metrics stays empty. service_regex follows the fleet prefix
+        # convention (api, mcp, relay, yard-projector, yard-reports and the sweep
+        # pods all start with `yard-management`). The Kong rows are live
+        # (kongPlugins.prometheus in helm-values/yard-management.yaml) and
+        # pod-restart alerts are live from day one.
+        "service_regex": "yard-management.*",
+        "loki_app": "yard-management",
+        "business_metrics": [],
+    },
+    {
         "key": "warehouse-ops-agent",
         "title": "Warehouse Ops Agent",
         "uid": "warehouse-warehouse-ops-agent",
