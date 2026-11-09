@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Prove the whole path works: host -> kind port mapping -> Kong NodePort ->
-# Kong route -> Istio sidecar -> Go service -> GET /healthz.
+# Prove the whole path works: host -> kubectl port-forward (scripts/k3s-edges.sh)
+# -> Kong -> Kong route -> Go service -> GET /healthz. Run k3s-edges.sh first.
 set -uo pipefail
 
 INFRA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -10,13 +10,16 @@ TF="${INFRA_DIR}/scripts/tf.sh"
 BASE="$("${TF}" platform output -raw kong_proxy_url)"
 NAMESPACE="$("${TF}" platform output -raw apps_namespace 2>/dev/null || echo warehouse-systems)"
 
-# Use the kubeconfig Terraform owns rather than whatever context happens to be
-# current in the caller's default kubeconfig. Self-contained and always right.
-export KUBECONFIG="${INFRA_DIR}/terraform/00-cluster/kubeconfig"
+# Always the target's context (ADR 0011), never whatever happens to be current
+# in the caller's kubeconfig: a stale one (a retired kind cluster) silently shows
+# the wrong cluster, or none.
+TARGET="${WAREHOUSE_TARGET:-k3s}"
+CONTEXT="${KUBE_CONTEXT:-$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["kube_context"])' "${INFRA_DIR}/terraform/targets/${TARGET}.tfvars.json")}"
+kubectl() { command kubectl --context "${CONTEXT}" "$@"; }
 
 fail=0
 
-echo "=== pods (expect 2/2 — app + istio-proxy) ==="
+echo "=== pods (expect every container ready; no Istio sidecars on k3s) ==="
 kubectl -n "${NAMESPACE}" get pods -o wide
 echo
 
@@ -27,12 +30,19 @@ echo
 echo "=== GET /healthz through Kong ==="
 # Every exposed API context, straight from the source inventory -- never a
 # hardcoded service list that drifts the moment a context is registered.
-mapfile -t APIS < <(python3 scripts/exposure_inventory.py --kind apis)
+# (while-read, not mapfile: macOS ships bash 3.2.)
+APIS=()
+while IFS= read -r ctx; do APIS+=("${ctx}"); done < <(python3 scripts/exposure_inventory.py --kind apis)
 for ctx in "${APIS[@]}"; do
-  url="${BASE}/api/${ctx}/healthz"
+  # The route is the one the context's own values file declares: it is
+  # /api/<ctx> for all but storefront-bff, which is /api/storefront.
+  route="$(python3 -c 'import sys,yaml; print(yaml.safe_load(open(sys.argv[1]))["gatewayApi"]["hosts"][0]["path"])' "helm-values/${ctx}.yaml" 2>/dev/null || echo "/api/${ctx}")"
+  url="${BASE}${route}/healthz"
   code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${url}")"
   body="$(curl -s --max-time 10 "${url}")"
-  if [ "${code}" = "200" ] && [ "${body}" = '{"status":"ok"}' ]; then
+  # Healthy is 200 {"status":"ok"}; fulfillment-execution answers 200 with an
+  # empty body and network-inventory-planning 204, both by their own contract.
+  if { [ "${code}" = "200" ] && { [ "${body}" = '{"status":"ok"}' ] || [ -z "${body}" ]; }; } || [ "${code}" = "204" ]; then
     echo "ok   ${ctx}: ${code} ${body}"
   else
     echo "FAIL ${ctx}: ${code} ${body}"

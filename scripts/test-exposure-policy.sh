@@ -8,7 +8,13 @@ cd "${INFRA_DIR}" || exit 1
 WEB_URL="${1:-${WEB_URL:-http://localhost}}"
 API_URL="${2:-${API_URL:-http://localhost:8000}}"
 NAMESPACE="${NAMESPACE:-warehouse-systems}"
-CONTEXT="${KUBE_CONTEXT:-kind-warehouse}"
+TARGET="${WAREHOUSE_TARGET:-k3s}"
+CONTEXT="${KUBE_CONTEXT:-$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["kube_context"])' "${INFRA_DIR}/terraform/targets/${TARGET}.tfvars.json")}"
+# The public route of a context is the one its own values file declares: /api/<ctx>
+# for all but storefront-bff (/api/storefront).
+api_route() {
+  python3 -c 'import sys,yaml; print(yaml.safe_load(open(sys.argv[1]))["gatewayApi"]["hosts"][0]["path"])' "helm-values/$1.yaml" 2>/dev/null || echo "/api/$1"
+}
 KUBECTL=(kubectl --context "${CONTEXT}")
 PROPERTIES="${INFRA_DIR}/scripts/exposure_properties.py"
 
@@ -116,8 +122,9 @@ echo "==> 5. Every source-derived API answers through Kong"
 for ctx in "${APIS[@]}"; do
   body="${scratch}/${ctx}-api.body"
   headers="${body}.headers"
-  read -r code ctype <<<"$(fetch "${API_URL}/api/${ctx}/healthz" "${body}" "${headers}")"
-  if [[ "${code}" == "200" ]]; then
+  read -r code ctype <<<"$(fetch "${API_URL}$(api_route "${ctx}")/healthz" "${body}" "${headers}")"
+  # 204 is network-inventory-planning's own healthy answer.
+  if [[ "${code}" == "200" || "${code}" == "204" ]]; then
     pass "${ctx} /healthz -> 200 ${ctype}"
   else
     fail "${ctx} /healthz -> ${code} ${ctype}"
@@ -128,7 +135,7 @@ echo "==> 6. Web origin never serves an API response"
 for ctx in "${APIS[@]}"; do
   body="${scratch}/${ctx}-web-api.body"
   headers="${body}.headers"
-  read -r code ctype <<<"$(fetch "${WEB_URL}/api/${ctx}/healthz" "${body}" "${headers}")"
+  read -r code ctype <<<"$(fetch "${WEB_URL}$(api_route "${ctx}")/healthz" "${body}" "${headers}")"
   if [[ "${ctype}" == *html* ]] && ! grep -qi '"status"[[:space:]]*:' "${body}"; then
     pass "web origin returns SPA HTML, not ${ctx} API (${code} ${ctype})"
   else
