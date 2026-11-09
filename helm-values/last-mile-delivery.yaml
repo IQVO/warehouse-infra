@@ -1,7 +1,7 @@
 # last-mile-delivery -- retail-network reference service (a domain-driven design
 # study, not associated with any company). Single api Deployment: OLTP
 # REST on :8080 plus, in the SAME process, a transactional-outbox relay
-# and the local-copy consumers below. Still no analytics read side, but
+# and the local-copy consumers below. Analytics read side switched on below (ADR 0012), but
 # a read-only MCP server (cmd/mcp) and a console remote (web/, last_mile_mfe)
 # now exist and are switched on below.
 #
@@ -87,3 +87,20 @@ service:
   port: 80
   targetPort: 8080
   type: ClusterIP
+
+# Analytics read side (last-mile-delivery ADR 0012): the projector and the reports binaries of
+# the SAME image, over a separate analytical Postgres database. The
+# last-mile-delivery-analytics-db Secret (ANALYTICS_DATABASE_URL and
+# ANALYTICS_READER_DATABASE_URL, the same DIRECT DSN: the projector runs the
+# analytical migrations under a session advisory lock PgBouncer cannot honour) is
+# created by modules/application from apps.yaml `analytics: true`. The reports
+# HTTPRoute is chart-rendered (/api/last-mile-delivery/reports -> /reports); its parentRefs
+# come from _platform.yaml.
+analytics:
+  enabled: true
+  database:
+    existingSecret: last-mile-delivery-analytics-db
+  reports:
+    route:
+      enabled: true
+      path: /api/last-mile-delivery/reports
