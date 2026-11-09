@@ -72,6 +72,7 @@ applications:
     kind: service
     repo_owner: IQVO
     database: true
+    analytics: true
     frontend_remote: delivery_promise_mfe
 
   ecosystem:
@@ -132,6 +133,7 @@ applications:
     kind: service
     repo_owner: IQVO
     database: true
+    analytics: true
     frontend_remote: last_mile_mfe
   # linehaul-transportation: retail-network reference service (single api Deployment:
   # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
@@ -199,6 +201,7 @@ applications:
     kind: service
     repo_owner: IQVO
     database: true
+    analytics: true
     frontend_remote: order_sourcing_mfe
   # pick-face-replenishment: the chart's analytics projector/reports read only
   # ANALYTICS_DATABASE_URL (no reader DSN), hence the one-key secret_keys. Its
@@ -273,6 +276,7 @@ applications:
     kind: service
     repo_owner: IQVO
     database: true
+    analytics: true
     frontend_remote: shipping_mfe
 
   # shopping-cart: storefront domain carts (api + outbox relay +
