@@ -1,9 +1,9 @@
 # ---------------------------------------------------------------------------
 # Kong north-south exposure
 #
-# There is no cloud load balancer here, so Kong's proxy Service is a NodePort
-# and kind's extraPortMappings publish that NodePort on a host port. This is
-# the only ingress path into the cluster from the host.
+# Kong's proxy Service is ClusterIP (ADR 0011): nothing is published on the node,
+# and scripts/k3s-edges.sh port-forwards it to 127.0.0.1. That is the only way in
+# from the workstation.
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
@@ -231,40 +231,8 @@ variable "kafka_persistence_enabled" {
   default     = true
 }
 
-# ---------------------------------------------------------------------------
-# Kafka host exposure — ONE broker for the whole platform.
-#
-# Before this existed, the fleet ran TWO Kafkas: this in-cluster release for
-# pods, and a separate docker-compose broker (container "warehouse-kafka",
-# ~/warehouse-systems/docker-compose.kafka.yml) on host port 9092 for the
-# out-of-cluster consumers — `go run` local development and the e2e-tests
-# harness (its env.sh pins KAFKA_BROKERS=localhost:9092). Two brokers with
-# the same name and no relationship is a topology, not a convenience: an
-# event published in-cluster was invisible to a host consumer and vice
-# versa, so which broker you were on silently changed the behaviour.
-#
-# The Bitnami chart's externalAccess gives the single in-cluster broker a
-# SECOND advertised listener. Kafka clients bootstrap by asking the broker
-# for its advertised address and then reconnect to whatever it answers, so
-# a broker serving both audiences must advertise a different address to
-# each: in-cluster pods keep the pod's headless DNS name on the CLIENT
-# listener, while host clients get EXTERNAL://localhost:9092. That is why
-# this is externalAccess and not simply another NodePort Service like
-# exposure.tf's UIs — a plain Service would route the TCP connection
-# correctly and then hand the host client an unreachable in-cluster
-# address on the very next round trip.
-# ---------------------------------------------------------------------------
-
-variable "kafka_external_access_enabled" {
-  description = <<-EOT
-    Whether the in-cluster Kafka broker also advertises a host-reachable
-    EXTERNAL listener on localhost:<kafka_host_port>. Set false to make the
-    broker cluster-internal only (nothing on the host can reach it).
-  EOT
-  type        = bool
-  default     = true
-}
-
+# Kafka has no host-reachable listener (ADR 0011): see kafka.tf. Host-side clients
+# use `kubectl port-forward`.
 
 # ---------------------------------------------------------------------------
 # Observability
@@ -344,39 +312,6 @@ variable "grafana_admin_password" {
   type        = string
   default     = "admin"
   sensitive   = true
-}
-
-# ---------------------------------------------------------------------------
-# metrics-server — resource-metrics API (metrics.k8s.io) that every service
-# chart's HPA template needs. See metrics-server.tf for why kind specifically
-# needs --kubelet-insecure-tls.
-# ---------------------------------------------------------------------------
-
-variable "deploy_metrics_server" {
-  description = <<-EOT
-    Whether to install metrics-server (metrics-server.tf). Every service
-    chart in this fleet already ships an HPA template wired to CPU/memory
-    utilization, but with no metrics.k8s.io API server in the cluster those
-    HPAs sit permanently at `<unknown>`/`FailedGetResourceMetrics` and never
-    scale -- this is the component that makes them actually work. Defaults
-    to true, following this repo's deploy_* flag convention (added
-    2026-09-26 alongside turning persistence on by default).
-  EOT
-  type        = bool
-  default     = true
-}
-
-variable "metrics_server_chart_version" {
-  description = <<-EOT
-    kubernetes-sigs/metrics-server chart version, from the upstream repo
-    https://kubernetes-sigs.github.io/metrics-server/ (the project's own
-    chart repo, not a Bitnami OCI mirror -- chosen to mirror this fleet's
-    existing pattern of pulling platform charts straight from each
-    project's own canonical repo, e.g. istio.tf/kong.tf/observability.tf,
-    rather than a third-party packaging).
-  EOT
-  type        = string
-  default     = "3.14.0"
 }
 
 # ---------------------------------------------------------------------------
@@ -482,68 +417,22 @@ variable "deploy_gateway_api" {
   default     = true
 }
 
-variable "gateway_api_version" {
-  description = <<-EOT
-    kubernetes-sigs/gateway-api release tag of the standard-channel bundle
-    (CRDs plus the upstream safe-upgrades admission policy). The bundle is
-    vendored: terraform/gateway-api/standard-install-<tag>.yaml must exist,
-    and scripts/vendor-gateway-api.sh <tag> adds it. Before moving to a new
-    tag, read the diff for removed documents: Terraform deletes a CRD that
-    the bundle no longer carries, and the cluster deletes every route of it.
-  EOT
-  type        = string
-  default     = "v1.6.2"
-}
-
 # ---------------------------------------------------------------------------
 # Deploying onto a cluster this repo does not own (ADR 0011: k3s)
 #
-# Every default below is the kind behaviour. terraform/targets/k3s.tfvars
-# flips them.
+# kind is banned: k3s is the only target, so the toggles that used to flip
+# between kind and k3s are gone and their k3s values are built in.
 # ---------------------------------------------------------------------------
 
 variable "state_suffix" {
   description = <<-EOT
     Suffix of the Terraform state files of the layers below this one (and of
-    this one): "" is the kind environment's terraform.tfstate, ".k3s" is
-    terraform.tfstate.k3s. scripts/tf.sh --target sets it as TF_VAR_state_suffix
-    together with the matching `-state` path, so the two cannot disagree.
+    this one): ".k3s" is terraform.tfstate.k3s. scripts/tf.sh sets it as
+    TF_VAR_state_suffix together with the matching `-state` path, so the two
+    cannot disagree.
   EOT
   type        = string
-  default     = ""
-}
-
-variable "expose_node_ports" {
-  description = <<-EOT
-    true (kind): the product edges (Nginx web gateway, Kong), the observability
-    UIs and Kafka's EXTERNAL listener are NodePort Services, published on
-    127.0.0.1 by kind's extraPortMappings (00-cluster/main.tf).
-
-    false (k3s): nothing is published. There are no extraPortMappings on a
-    machine this repo does not own, and a NodePort would answer on the node's
-    LAN address -- the whole fleet is unauthenticated, so that is a
-    publication to the LAN. The edges become ClusterIP Services and
-    scripts/k3s-edges.sh reaches them from the workstation with
-    `kubectl port-forward` bound to 127.0.0.1. The observability/Kiali
-    NodePort Services and Kafka's EXTERNAL listener are not created (the
-    latter also because NodePort 9092 is outside the 30000-32767 range a k3s
-    apiserver we may not reconfigure allows).
-  EOT
-  type        = bool
-  default     = true
-}
-
-variable "manage_gateway_api_crds" {
-  description = <<-EOT
-    Whether this layer installs the vendored Gateway API CRD bundle. false when
-    the cluster ships its own (k3s installs them through its
-    `gateway-api-crd` HelmChart): applying an older vendored bundle over a
-    newer one is refused by the bundle's own safe-upgrades admission policy,
-    and two owners of one CRD set would fight. The GatewayClass and Gateway
-    are installed either way (deploy_gateway_api).
-  EOT
-  type        = bool
-  default     = true
+  default     = ".k3s"
 }
 
 variable "ghcr_username" {
@@ -557,7 +446,7 @@ variable "ghcr_token" {
     Token with read:packages for ghcr.io. When set, this layer creates the
     `ghcr-pull` kubernetes.io/dockerconfigjson Secret in the applications
     namespace and every application chart gets it as imagePullSecrets (20-apps,
-    image_source = registry). Leave empty when the packages are public.
+    ADR 0011). Leave empty when the packages are public.
     Pass it as TF_VAR_ghcr_token (e.g. $(gh auth token)); never in a tfvars file.
   EOT
   type        = string
@@ -565,30 +454,3 @@ variable "ghcr_token" {
   sensitive   = true
 }
 
-variable "istio_injection_enabled" {
-  description = <<-EOT
-    Whether the applications namespace gets Istio sidecars (istio-injection=enabled).
-    The mesh is permissive (no PeerAuthentication/AuthorizationPolicy exists), so
-    the applications run the same without it; Kiali then has no traffic to draw.
-
-    false on k3s: every sidecar opens inotify instances on the node, and a stock
-    Ubuntu node (fs.inotify.max_user_instances=128, a host setting this repo may
-    not change, ADR 0011) runs out around 50 pods -- the sidecars then crash with
-    "couldn't initialize inotify: too many open files" and take their pods down.
-    It also removes ~100 containers from a node that is capped at 110 pods.
-  EOT
-  type        = bool
-  default     = true
-}
-
-variable "argocd_lean" {
-  description = <<-EOT
-    Run ArgoCD without Dex (SSO), the notifications controller and the
-    ApplicationSet controller. Nothing here uses them: auth is disabled and
-    every Application is created directly by modules/application. Three pods
-    fewer, which matters on k3s, where a node holds 110 pods and the whole
-    platform plus 41 applications needs both nodes (ADR 0011).
-  EOT
-  type        = bool
-  default     = false
-}

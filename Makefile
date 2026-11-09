@@ -88,7 +88,7 @@ help:
 	@echo "  check           FAST bundle: tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test mcp-conformance-test"
 	@echo "  check-all       alias for check — no deeper local gate exists yet"
 	@echo "                  (see scripts/test-exposure-policy.sh and smoke-test.sh for"
-	@echo "                  cluster-dependent checks that need a live kind cluster —"
+	@echo "                  cluster-dependent checks that need a live k3s cluster —"
 	@echo "                  run those by hand after 'up.sh', not part of this gate)"
 
 tf-fmt-check:

@@ -12,7 +12,7 @@
 # second Terraform process to read.
 # ---------------------------------------------------------------------------
 output "platform" {
-  description = "Everything terraform/20-apps needs from this state: cluster credentials, namespaces, Postgres/PgBouncer endpoints, Gateway readiness and the frontend image-hash inputs. Read via terraform_remote_state, never by resource address."
+  description = "Everything terraform/20-apps needs from this state: cluster credentials, namespaces, Postgres/PgBouncer endpoints, Gateway readiness and the names of the applications that have a frontend image. Read via terraform_remote_state, never by resource address."
   value = {
     cluster_name = local.cluster.name
     kube_context = local.cluster.kube_context
@@ -36,14 +36,9 @@ output "platform" {
 
     gateway_ready = local.gateway_ready
 
-    # Frontend build inputs computed here because they are content hashes
-    # over sibling-repo sources, not platform resources; ADR 0007's context
-    # flags this as a layer the eventual cleanup (step 4) still owes a home.
-    frontend_source_hash = local.frontend_source_hash
-    site_source_hash = {
-      "warehouse-console" = local.console_source_hash
-      "ecosystem"         = local.ecosystem_source_hash
-    }
+    # The applications that have a Module Federation frontend image (apps.yaml
+    # frontend_remote); their tags come from the lock file (ADR 0011).
+    frontend_apps = sort(keys(local.frontend_remotes))
   }
   sensitive = true
 }
@@ -133,7 +128,7 @@ output "observability_namespace" {
 }
 
 output "observability_urls" {
-  description = "Fixed localhost URLs for the observability UIs, reachable via kind's extraPortMappings (main.tf) -- no port-forward needed. Empty when deploy_observability = false."
+  description = "Fixed localhost URLs for the observability UIs, reachable once scripts/k3s-edges.sh is running. Empty when deploy_observability = false."
   value = var.deploy_observability ? {
     jaeger     = "http://localhost:${local.cluster.ports.jaeger_host_port}"
     prometheus = "http://localhost:${local.cluster.ports.prometheus_host_port}"
@@ -141,16 +136,7 @@ output "observability_urls" {
   } : {}
 }
 
-# ---------------------------------------------------------------------------
-# Platform components
-# ---------------------------------------------------------------------------
-
-output "metrics_server_enabled" {
-  description = "Whether metrics-server (metrics.k8s.io, required for every service chart's HPA to report real utilization instead of <unknown>) is deployed. See metrics-server.tf."
-  value       = var.deploy_metrics_server
-}
-
 output "kiali_url" {
-  description = "Fixed localhost URL for the Kiali service-mesh UI, reachable via kind's extraPortMappings (main.tf). Empty when deploy_kiali or deploy_observability is false."
+  description = "Fixed localhost URL for the Kiali service-mesh UI, reachable once scripts/k3s-edges.sh is running. Empty when deploy_kiali or deploy_observability is false."
   value       = var.deploy_kiali && var.deploy_observability ? "http://localhost:${local.cluster.ports.kiali_host_port}" : ""
 }

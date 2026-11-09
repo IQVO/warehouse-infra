@@ -13,8 +13,8 @@
 # Each bounded context owns its remote under <repo>/web and ships the frontend
 # Deployment/Service in its OWN chart behind `frontend.enabled` (default
 # false). warehouse-infra only decides that this environment wants them on,
-# (helm-values/<context>.yaml: frontend.enabled) and supplies the locally
-# built image tag (modules/application).
+# (helm-values/<context>.yaml: frontend.enabled) and supplies the pinned
+# image tag (modules/application, from terraform/targets/k3s.images.yaml).
 #
 # warehouse-console is its own Helm release (it has no backend chart to ride
 # along in) and additionally gets the runtime /config.json carrying
@@ -32,80 +32,10 @@ locals {
     for name, a in local.registry : name => { remote_name = a.frontend_remote } if try(a.frontend_remote, null) != null
   } : {}
 
-  # Content-addressed image tags, NOT the fixed "local" tag the Go services
-  # use. That fixed tag is a known defect over there: a rebuilt image leaves
-  # the pod template byte-identical, so Kubernetes sees no reason to roll and
-  # `IfNotPresent` stops the kubelet re-pulling -- the OLD bundle keeps being
-  # served until something else changes the pod spec. Hashing the sources into
-  # the tag makes the Deployment's image field change whenever the bundle
-  # does, so a rollout happens by itself. Do not "simplify" this back to a
-  # fixed tag.
-  #
-  # The hash deliberately spans the ui-kit too: it is compiled INTO every
-  # remote's bundle, so a ui-kit change with an unchanged remote still
-  # produces different bytes.
-  uikit_source_hash = sha256(join("", concat(
-    [for f in sort(fileset("${path.module}/../../../warehouse-ui-kit/src", "**")) : filesha256("${path.module}/../../../warehouse-ui-kit/src/${f}")],
-    [
-      filesha256("${path.module}/../../../warehouse-ui-kit/package.json"),
-    ],
-  )))
-
-  frontend_source_hash = {
-    for name, fe in local.frontend_remotes :
-    name => substr(sha256(join("", concat(
-      [for f in sort(fileset("${path.module}/../../../${name}/web/src", "**")) : filesha256("${path.module}/../../../${name}/web/src/${f}")],
-      [
-        filesha256("${path.module}/../../../${name}/web/package.json"),
-        filesha256("${path.module}/../../../${name}/web/vite.config.ts"),
-        filesha256("${path.module}/../../../${name}/web/index.html"),
-        filesha256("${path.module}/../../../${name}/web/Dockerfile"),
-        filesha256("${path.module}/../../../${name}/web/nginx.conf"),
-        local.uikit_source_hash,
-      ],
-    ))), 0, 12)
-  }
-
-  console_source_hash = var.deploy_frontends ? substr(sha256(join("", concat(
-    [for f in sort(fileset("${path.module}/../../../warehouse-console/src", "**")) : filesha256("${path.module}/../../../warehouse-console/src/${f}")],
-    [
-      filesha256("${path.module}/../../../warehouse-console/package.json"),
-      filesha256("${path.module}/../../../warehouse-console/vite.config.ts"),
-      filesha256("${path.module}/../../../warehouse-console/index.html"),
-      filesha256("${path.module}/../../../warehouse-console/Dockerfile"),
-      filesha256("${path.module}/../../../warehouse-console/nginx.conf"),
-      local.uikit_source_hash,
-    ],
-  ))), 0, 12) : ""
-
-  # The EventCatalog catalog (IQVO/ecosystem): a static Astro SSG like the
-  # console, but rebuilt from specs/ + generators rather than Vite. Hash covers
-  # every build input: contracts, generated pages, generator scripts, config,
-  # packaging and public assets.
-  ecosystem_source_hash = var.deploy_frontends ? substr(sha256(join("", concat(
-    [for f in sort(fileset("${path.module}/../../../ecosystem/specs", "**")) : filesha256("${path.module}/../../../ecosystem/specs/${f}")],
-    [for f in sort(fileset("${path.module}/../../../ecosystem/domains", "**")) : filesha256("${path.module}/../../../ecosystem/domains/${f}")],
-    [for f in sort(fileset("${path.module}/../../../ecosystem/channels", "**")) : filesha256("${path.module}/../../../ecosystem/channels/${f}")],
-    [for f in sort(fileset("${path.module}/../../../ecosystem/users", "**")) : filesha256("${path.module}/../../../ecosystem/users/${f}")],
-    [for f in sort(fileset("${path.module}/../../../ecosystem/public", "**")) : filesha256("${path.module}/../../../ecosystem/public/${f}")],
-    [for f in sort(fileset("${path.module}/../../../ecosystem/scripts", "**")) : filesha256("${path.module}/../../../ecosystem/scripts/${f}")],
-    [
-      filesha256("${path.module}/../../../ecosystem/package.json"),
-      filesha256("${path.module}/../../../ecosystem/package-lock.json"),
-      filesha256("${path.module}/../../../ecosystem/Dockerfile"),
-      filesha256("${path.module}/../../../ecosystem/nginx.conf"),
-      filesha256("${path.module}/../../../ecosystem/eventcatalog.config.js"),
-      filesha256("${path.module}/../../../ecosystem/eventcatalog.styles.css"),
-      filesha256("${path.module}/../../../ecosystem/catalog.contexts.mjs"),
-      filesha256("${path.module}/../../../ecosystem/catalog.markdown.mjs"),
-      filesha256("${path.module}/../../../ecosystem/.dockerignore"),
-    ],
-  ))), 0, 12) : ""
-
   console_release_name = "warehouse-console"
 
   # Service DNS the web gateway proxies to. Every one of these is ClusterIP:
-  # the gateway is the only frontend workload with a NodePort.
+  # the gateway included (ClusterIP, reached through scripts/k3s-edges.sh).
   #
   # The frontend Service name comes from each chart's own frontendFullname
   # helper, which is "<release>-frontend"; the release name is the context
@@ -362,9 +292,9 @@ resource "kubernetes_deployment" "web_gateway" {
   }
 }
 
-# The gateway's NodePort: one of exactly two host-facing product ports (the
-# other is Kong's). kind's extraPortMappings (main.tf) publish this on
-# 127.0.0.1:<web_gateway_host_port>.
+# The gateway's Service: ClusterIP, one of exactly two product edges (the other
+# is Kong's). Nothing is published on the node (ADR 0011): scripts/k3s-edges.sh
+# port-forwards it to 127.0.0.1:<web_gateway_host_port>.
 resource "kubernetes_service" "web_gateway" {
   count = var.deploy_frontends ? 1 : 0
 
@@ -381,7 +311,7 @@ resource "kubernetes_service" "web_gateway" {
   }
 
   spec {
-    type = var.expose_node_ports ? "NodePort" : "ClusterIP"
+    type = "ClusterIP"
     selector = {
       "app.kubernetes.io/name" = local.web_gateway_name
     }
@@ -389,7 +319,6 @@ resource "kubernetes_service" "web_gateway" {
       name        = "http"
       port        = 80
       target_port = "http"
-      node_port   = var.expose_node_ports ? local.cluster.ports.web_gateway_node_port : null
       protocol    = "TCP"
     }
   }

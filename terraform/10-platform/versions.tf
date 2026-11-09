@@ -1,7 +1,7 @@
 # Provider + Terraform version pins.
 #
-# Every version here was resolved and applied for real against Docker
-# 29.7.2 / kind 0.32.0 on darwin/arm64 — see README.md "Verified versions".
+# Every version here was resolved and applied for real on darwin/arm64 against
+# the k3s cluster — see README.md "Prerequisites".
 terraform {
   required_version = ">= 1.5.0"
 

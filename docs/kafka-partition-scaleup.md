@@ -70,7 +70,7 @@ silently drift from (or fight) the live cluster: a future `terraform
 apply` must not revert a fresh auto-created topic back to Kafka's own
 default of 1. `terraform plan` after this change shows **zero**
 Kafka/topic-related diff beyond applying that one Helm value — confirmed
-against the live `kind` cluster.
+against the live cluster (kind at the time; k3s since ADR 0011).
 
 ## Verification
 

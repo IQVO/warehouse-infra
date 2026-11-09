@@ -37,11 +37,11 @@ Nothing is auto-discovered.
 - Every `*_MODE` env var defaults to permissive (no network) when unset. A new sync edge needs its `MODE` and `BASE_URL` both in the consumer's values file, in the same PR as the integration. After the sync, grep the pod's startup log for `mode":"http"` (or `kafka-cache`) to confirm what the binary chose.
 - Rollback switches (edges built but off) are listed with their exact flip in `docs/rollback-switches.md`.
 
-## 4. Images and rollout (the "local" tag trap, as it is today)
+## 4. Images and rollout (pinned GitHub images, never built here)
 
-- Images are content-tagged `local-<first 12 of the source hash>` (computed in `terraform/modules/application`, `pullPolicy: IfNotPresent`). The hash covers every file the Dockerfile copies in: Go files, migrations, the Dockerfile, go.mod and go.sum of the LOCAL sibling checkout, so a Go change makes the tag change and the pod rolls. Never replace it with a fixed `local` tag (frontends are content-tagged the same way, `local.frontend_source_hash` in `terraform/10-platform/frontends.tf`).
-- The hash does NOT cover chart templates, and Terraform installs no releases. ArgoCD (the module's `Application`, chart from the service repo's GitHub `develop`) owns each release with automated prune and selfHeal. A chart template change reaches the cluster only after it is merged to that repo's `develop` and ArgoCD syncs; `terraform apply` will say `0 changed`. Check with `kubectl -n argocd get applications` and `argocd app diff <svc>`.
-- If a pod still runs old code, compare `module.application["<svc>"].image_tag` (`TF_WORKSPACE=<svc> terraform -chdir=terraform/20-apps console`) with the live image, and only then `kubectl rollout restart deployment/<name> -n warehouse-systems`.
+- Images are built on GitHub by the `publish-images` workflow and pinned in `terraform/targets/k3s.images.yaml` (`scripts/k3s-pin-images.sh <run-id>`); `modules/application` writes the registry, repository and tag into the Application's `valuesObject`. Nothing is built or side-loaded locally (kind is banned, ADR 0011) and an app with no pinned tag fails the plan. To ship a merged code change: run `publish-images` on `develop`, pin the run, merge the lock-file PR, apply that app (`scripts/tf.sh --target k3s app <name> apply`, with the user's go-ahead). Never use a floating tag.
+- The pinned tag does NOT cover chart templates, and Terraform installs no releases. ArgoCD (the module's `Application`, chart from the service repo's GitHub `develop`) owns each release with automated prune and selfHeal. A chart template change reaches the cluster only after it is merged to that repo's `develop` and ArgoCD syncs; `terraform apply` will say `0 changed`. Check with `kubectl -n argocd get applications` and `argocd app diff <svc>`.
+- If a pod still runs old code, compare the app's tag in `terraform/targets/k3s.images.yaml` with the live image, and only then `kubectl rollout restart deployment/<name> -n warehouse-systems`.
 
 ## 5. A new database or analytics database
 

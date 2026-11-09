@@ -67,6 +67,10 @@ config:
   # as the two groups above — a rescheduled pod resumes from its committed
   # offsets; the chart refuses an empty one.
   packagingConsumerGroup: "inbound-receiving-packaging"
+  # ADR 0019: the appointments local copy, fed from dock-scheduling's
+  # DockAppointmentBooked / Cancelled (warehouse.dock-scheduling.events). The chart
+  # refuses an empty group; stable id, same reasoning as the groups above.
+  dockAppointmentConsumerGroup: "inbound-receiving-dock-appointments"
 
 kafka:
   enabled: true

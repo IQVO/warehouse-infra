@@ -21,26 +21,27 @@ resource "kubernetes_namespace" "kong" {
   }
 }
 
-# The ONLY thing required to put the four Go services into the Istio mesh.
-# No application code, port, or env-var change is needed: istiod's mutating
-# admission webhook rewrites the pod spec at admission time to add the
-# istio-proxy sidecar and an init container that installs the iptables
-# redirect. The apps keep listening on :8080 and keep serving GET /healthz
-# exactly as they do under docker-compose.
+# Sidecar injection is OFF (ADR 0011): every sidecar opens inotify instances on
+# the node, and a stock k3s node (fs.inotify.max_user_instances=128, a host
+# setting this repo may not change) runs out around 50 pods; the sidecars then
+# crash with "couldn't initialize inotify: too many open files". It also removes
+# ~100 containers from a node that is capped at 110 pods. The mesh is permissive
+# (no PeerAuthentication/AuthorizationPolicy), so the applications run the same
+# without it; Kiali just has no traffic to draw.
 resource "kubernetes_namespace" "apps" {
   depends_on = [helm_release.istiod]
 
   metadata {
     name = var.apps_namespace
     labels = {
-      "istio-injection"      = var.istio_injection_enabled ? "enabled" : "disabled"
+      "istio-injection"      = "disabled"
       "warehouse.local/tier" = "application"
     }
   }
 }
 
 # ---------------------------------------------------------------------------
-# ghcr.io pull secret (20-apps image_source = registry).
+# ghcr.io pull secret (20-apps, ADR 0011).
 #
 # The application charts take `imagePullSecrets`; 20-apps puts this Secret's
 # name there. Created only when a token is supplied: a public package needs

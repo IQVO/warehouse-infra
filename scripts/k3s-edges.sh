@@ -3,20 +3,18 @@
 #
 #     scripts/k3s-edges.sh            # forwards until Ctrl-C
 #
-# The kind environment publishes the product edges with extraPortMappings on
-# 127.0.0.1. A k3s node we may not reconfigure has none, and a NodePort would
+# A k3s node we may not reconfigure has no port mappings, and a NodePort would
 # answer on the node's LAN address while every REST/MCP endpoint of this fleet
-# is unauthenticated. So the Services are ClusterIP (expose_node_ports = false)
-# and this script bridges them with `kubectl port-forward`, bound to 127.0.0.1
-# only, on the SAME ports the kind environment uses -- every URL, the console's
-# apiOrigin and Kong's CORS origin stay valid:
+# is unauthenticated. So the Services are ClusterIP and this script bridges
+# them with `kubectl port-forward`, bound to 127.0.0.1 only, on fixed ports --
+# every URL, the console's apiOrigin and Kong's CORS origin stay valid:
 #
 #     UI          http://localhost:80      Nginx web gateway
 #     API         http://localhost:8000    Kong
 #     Grafana     http://localhost:3000    Jaeger  http://localhost:16686
 #     Prometheus  http://localhost:9090    Kiali   http://localhost:20001
 #
-# Stop whatever else holds those ports first (a kind cluster, `docker ps`).
+# Stop whatever else holds those ports first (`lsof -iTCP -sTCP:LISTEN -n -P`).
 #
 # Port 80 is privileged: macOS lets a normal user bind it on 0.0.0.0 but not on
 # 127.0.0.1, and 0.0.0.0 would publish the UI to the LAN. So when any port is
