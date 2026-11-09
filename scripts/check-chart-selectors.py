@@ -383,6 +383,32 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.receiptConsumerGroup": "seller-inbound-receipt",
         "config.ssccCompanyPrefix": "0614141",
     },
+    # dock-scheduling and yard-management: OLTP api + the optional mcp, relay,
+    # analytics (projector/reports) components and the sweep CronJob(s); no
+    # frontend. Both charts refuse to render without a database source and the
+    # Kafka brokers (real Postgres and real Kafka are the only runtime), their
+    # always-on consumers each need a stable group id, and analytics needs a DSN
+    # source (dock-scheduling: analytics.database.projectorUrl; yard-management:
+    # analytics.url), so give them dummies (no password).
+    "../../dock-scheduling/charts/dock-scheduling": {
+        "mcp.enabled": "true", "relay.enabled": "true", "analytics.enabled": "true",
+        "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.yardConsumerGroup": "dock-scheduling-yard",
+        "config.facilityConsumerGroup": "dock-scheduling-facility",
+        "config.asnConsumerGroup": "dock-scheduling-asn",
+        "config.cptConsumerGroup": "dock-scheduling-cpt",
+    },
+    "../../yard-management/charts/yard-management": {
+        "mcp.enabled": "true", "relay.enabled": "true", "analytics.enabled": "true",
+        "analytics.url": "postgres://u@example.invalid:5432/analytics",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.dockSchedulingConsumerGroup": "yard-management-dock-scheduling",
+        "config.facilityConsumerGroup": "yard-management-facility",
+        "config.inboundReceivingConsumerGroup": "yard-management-inbound-receiving",
+    },
     # Single Deployment/Service each, no optional-component toggles that
     # add another pair -- included for completeness/regression coverage,
     # not because they're currently at risk of this specific bug shape.

@@ -41,6 +41,8 @@ CHARTS := \
 	../shipping-and-tracking/charts/shipping-and-tracking \
 	../vendor-connectivity/charts/vendor-connectivity \
 	../seller-inbound/charts/seller-inbound \
+	../dock-scheduling/charts/dock-scheduling \
+	../yard-management/charts/yard-management \
 	../checkout/charts/checkout \
 	../customer-payments/charts/customer-payments \
 	../pricing/charts/pricing \
