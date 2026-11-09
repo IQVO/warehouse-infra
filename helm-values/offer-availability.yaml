@@ -29,6 +29,9 @@ config:
   # committed offsets; a brand-new group would re-read the topic
   # from the start. MANDATORY (the binary exits at boot without it).
   nodeTopologyConsumerGroup: "offer-availability-node-topology"
+  # seller-inbound events (SellerSuspended / SellerReinstated, offer-availability
+  # ADR 0013). MANDATORY once that chart lands; unknown to older charts (ignored).
+  sellerInboundConsumerGroup: "offer-availability-seller-inbound"
 
 database:
   existingSecret: offer-availability-db
