@@ -51,8 +51,8 @@ instance of `terraform/modules/application`.
 
 ## Non-negotiables (short form; detail loads from `.claude/rules/` when you touch the files)
 
-1. **`terraform apply` does NOT pick up chart-template changes.** The source
-   hash covers Go source, migrations, Dockerfile and go.mod/go.sum only.
+1. **`terraform apply` does NOT pick up chart-template changes.** The pinned
+   image tags (`k3s.images.yaml`) cover built images only, never chart templates.
    ArgoCD (an Application per instance of `terraform/modules/application`) installs each chart from the service
    repo's GitHub `develop`. NOTE: the older recipe here (`terraform taint
    helm_release.service[...]`) is obsolete; that resource no longer exists.

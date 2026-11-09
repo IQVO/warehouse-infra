@@ -34,7 +34,7 @@
 # already makes for Postgres (one instance, several logical databases) and
 # Jaeger (in-memory, no Elasticsearch/Cassandra). SimpleScalable or
 # microservices mode would buy horizontal scale nobody needs on a laptop
-# kind cluster at the cost of running 6+ extra Deployments.
+# cluster at the cost of running 6+ extra Deployments.
 # ---------------------------------------------------------------------------
 
 resource "helm_release" "loki" {

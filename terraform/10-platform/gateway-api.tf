@@ -50,45 +50,11 @@
 # OpenAPI schema at PLAN time, which does not exist yet on an apply that
 # installs a CRD and a custom resource of it in the same run.
 #
-# The CRD bundle is vendored under terraform/gateway-api/ (one file per
-# release; scripts/vendor-gateway-api.sh adds one), so a plan needs no network
-# and an upgrade is a reviewable diff.
+# The Gateway API CRDs are NOT installed here (ADR 0011): k3s ships them through
+# its own `gateway-api-crd` HelmChart, and an older vendored bundle applied over
+# the cluster's newer one is refused by the bundle's safe-upgrades admission
+# policy. This layer installs the GatewayClass and the Gateway only.
 # ---------------------------------------------------------------------------
-
-locals {
-  gateway_api_bundle = "${path.module}/../gateway-api/standard-install-${var.gateway_api_version}.yaml"
-}
-
-data "kubectl_file_documents" "gateway_api_crds" {
-  count = var.deploy_gateway_api && var.manage_gateway_api_crds ? 1 : 0
-
-  lifecycle {
-    precondition {
-      condition     = fileexists(local.gateway_api_bundle)
-      error_message = "No vendored Gateway API bundle for ${var.gateway_api_version}. Run scripts/vendor-gateway-api.sh ${var.gateway_api_version} and commit the file under terraform/gateway-api/."
-    }
-  }
-
-  content = try(file(local.gateway_api_bundle), "")
-}
-
-# The standard-channel bundle: the CRDs, plus the upstream safe-upgrades
-# ValidatingAdmissionPolicy and its binding. One resource per document, keyed
-# by the object's API path.
-#
-# Server-side apply with forced conflicts: the HTTPRoute CRD alone is about
-# 250 KB, at the edge of the annotation `kubectl apply` would add, and the
-# first apply adopts objects that `kubectl apply` created. The provider's
-# apply_retry_count (providers.tf) covers the moment between a CRD being
-# created and the API server serving it, when the GatewayClass below would
-# otherwise fail with "no matches for kind".
-resource "kubectl_manifest" "gateway_api_crds" {
-  for_each = var.deploy_gateway_api && var.manage_gateway_api_crds ? data.kubectl_file_documents.gateway_api_crds[0].manifests : {}
-
-  yaml_body         = each.value
-  server_side_apply = true
-  force_conflicts   = true
-}
 
 # The GatewayClass: a cluster-scoped "which controller implements this"
 # declaration. controllerName is Kong KIC's own default
@@ -117,10 +83,7 @@ resource "kubectl_manifest" "gateway_api_crds" {
 resource "kubectl_manifest" "gateway_class" {
   count = var.deploy_gateway_api ? 1 : 0
 
-  depends_on = [
-    kubectl_manifest.gateway_api_crds,
-    helm_release.kong,
-  ]
+  depends_on = [helm_release.kong]
 
   yaml_body = yamlencode({
     apiVersion = "gateway.networking.k8s.io/v1"

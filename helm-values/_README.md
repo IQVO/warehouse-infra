@@ -1,6 +1,6 @@
 # Application values
 
-Every application's complete Helm configuration for the local kind cluster lives
+Every application's complete Helm configuration for the k3s cluster lives
 here (ADR 0002 D2, `docs/adr/0002-application-delivery-boundary.md`). Each
 application's ArgoCD Application has two sources: the chart, from the
 application's own repo (`charts/<app>`, `develop`), and this repo
@@ -12,7 +12,7 @@ application's own repo (`charts/<app>`, `develop`), and this repo
    installs disagrees (`terraform/locals.tf`'s `local.platform`).
 2. `<app>.yaml`: the application's whole configuration: routes, MCP,
    analytics, consumers, sync-edge env, feature switches.
-3. `kind-resources/<app>.yaml`: the kind CPU-request overlay.
+3. `kind-resources/<app>.yaml`: the CPU-request overlay (the directory name is a legacy of the retired kind environment).
 
 The Application's `valuesObject`, which wins over all three, carries only what
 Terraform computes: the content-derived image tags (and the ops agent's image,

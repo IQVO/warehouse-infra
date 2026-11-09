@@ -51,7 +51,7 @@ proportionate" call this module already makes elsewhere — one Postgres
 instance with several logical databases instead of per-service clusters,
 Jaeger's in-memory storage instead of Elasticsearch/Cassandra.
 SimpleScalable or microservices mode would buy horizontal scale nobody
-needs on a laptop kind cluster at the cost of several more Deployments.
+needs on a small cluster at the cost of several more Deployments.
 
 **Alloy, not Promtail.** Promtail is Grafana Labs' older log-only agent and
 is now in long-term support without new features; Alloy is the current
@@ -92,6 +92,6 @@ trace both land in the same two-way navigation.
   false`, same as Prometheus/Jaeger) — acceptable for local dev, would need
   a PVC or object storage backend before this pattern could be reused for
   a real environment.
-- One more DaemonSet pod per kind node and one more StatefulSet pod in
+- One more DaemonSet pod per node and one more StatefulSet pod in
   `observability` — modest, bounded resource cost consistent with
   everything else already running there.

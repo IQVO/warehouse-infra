@@ -11,7 +11,7 @@
 # this chart's own appVersion exactly (verified present in bitnamilegacy).
 #
 # controller+broker combined (KRaft `combined` process role) — the simplest
-# viable single-node topology for a laptop kind cluster; this is explicitly
+# viable single-node topology for a small cluster; this is explicitly
 # NOT a production Kafka topology (no replication, ephemeral storage).
 # ---------------------------------------------------------------------------
 
@@ -62,7 +62,7 @@ resource "helm_release" "kafka" {
         # Chart default is 8Gi; this single-broker/no-replication topology
         # only ever holds a handful of demo/e2e topics with short retention,
         # so 3Gi (same rationale/size as postgres.tf's PVC) is plenty for a
-        # laptop kind cluster and avoids reserving 8Gi of host disk per PVC.
+        # small cluster and avoids reserving 8Gi of host disk per PVC.
         size = "3Gi"
       }
       # 2Gi limit (was 1Gi). The broker runs with KAFKA_HEAP_OPTS
@@ -83,7 +83,7 @@ resource "helm_release" "kafka" {
     # listeners.client.protocol=PLAINTEXT: no SASL/TLS. This cluster has no
     # network policy isolating warehouse-systems from other namespaces
     # either, so this mirrors Postgres's "fine for a laptop, not prod"
-    # stance rather than under- or over-building auth for a local kind
+    # stance rather than under- or over-building auth for a local
     # cluster no one else can reach.
     listeners = {
       client = {
@@ -136,23 +136,12 @@ resource "helm_release" "kafka" {
       "num.partitions"                           = "8"
     }
 
-    # The EXTERNAL listener + its per-pod NodePort Service. This is what
-    # makes this the ONLY broker the platform needs: host-side clients
-    # (e2e-tests, local `go run`) reach the same broker the pods use,
-    # instead of a separate docker-compose container that shared nothing
-    # but a port number. `domain` is what the broker advertises to those
-    # host clients, and it must be an address resolvable ON THE HOST —
-    # "localhost" works because kind publishes the NodePort there via
-    # main.tf's extra_port_mappings.
+    # No EXTERNAL listener (ADR 0011): a NodePort would answer on the node's LAN
+    # address, NodePort 9092 is outside the 30000-32767 range a k3s apiserver we
+    # may not reconfigure allows, and the fleet is unauthenticated. Host-side
+    # clients reach the broker with `kubectl port-forward`.
     externalAccess = {
-      enabled = local.kafka_external_access
-      controller = {
-        service = {
-          type      = "NodePort"
-          domain    = "localhost"
-          nodePorts = [local.cluster.ports.kafka_node_port]
-        }
-      }
+      enabled = false
     }
 
     metrics = {
@@ -169,17 +158,4 @@ resource "helm_release" "kafka" {
 output "kafka_brokers" {
   description = "In-cluster Kafka bootstrap address (PLAINTEXT), or empty if deploy_kafka=false."
   value       = var.deploy_kafka ? "kafka.${var.apps_namespace}.svc.cluster.local:9092" : ""
-}
-
-# Host-side bootstrap address for the SAME broker: what e2e-tests/env.sh and
-# a local `go run` should use. Empty when the broker is cluster-internal only.
-output "kafka_brokers_host" {
-  description = "Host-reachable Kafka bootstrap address for out-of-cluster clients (e2e-tests, local go run)."
-  value       = var.deploy_kafka && local.kafka_external_access ? "localhost:${local.cluster.ports.kafka_host_port}" : ""
-}
-
-locals {
-  # The EXTERNAL listener is a NodePort published by kind's extraPortMappings;
-  # without them (expose_node_ports = false) there is nothing to advertise.
-  kafka_external_access = var.kafka_external_access_enabled && var.expose_node_ports
 }
