@@ -1,6 +1,6 @@
 # Written by scripts/k3s-pin-images.sh from a publish-images run (ADR 0011).
 # image: tag of ghcr.io/iqvo/warehouse-infra/<app>; frontend: tag of <app>-frontend.
-run: 42646744432
+run: 42649721902
 images:
   checkout:
     image: 1332afc-arm64
@@ -12,6 +12,8 @@ images:
   delivery-promise:
     frontend: 73cf0c0-8de41e9-arm64
     image: 73cf0c0-arm64
+  dock-scheduling:
+    image: 7f20813-arm64
   ecosystem:
     frontend: fed578e-308f597-arm64
   exception-management:
@@ -113,3 +115,5 @@ images:
   workforce-management:
     frontend: 4811e77-308f597-arm64
     image: 4811e77-arm64
+  yard-management:
+    image: b106934-arm64
