@@ -1,10 +1,9 @@
 ---
 paths:
-  - "terraform/kong*.tf"
-  - "terraform/10-platform/exposure.tf"
+  - "terraform/10-platform/kong.tf"
   - "terraform/10-platform/gateway-api.tf"
   - "terraform/templates/web-gateway.conf.tftpl"
-  - "terraform/frontends.tf"
+  - "terraform/10-platform/frontends.tf"
   - "scripts/test-exposure-policy.sh"
   - "scripts/check-chart-selectors.py"
   - "docs/exposure/**"
