@@ -2,7 +2,7 @@
 # exception case ledger fed by every sibling context's failure signals, their
 # triage/assignment/escalation/resolution and the SLA sweeper). OLTP REST on
 # :8080 plus, in the SAME process, a transactional-outbox relay, the SLA
-# sweeper and six Kafka consumers (exception-management ADR 0001):
+# sweeper and ten Kafka consumers (exception-management ADR 0001):
 #   - consumes warehouse.fulfillment.events, group
 #     exception-management-fulfillment
 #   - consumes warehouse.work-planning.events, group
@@ -15,6 +15,14 @@
 #     exception-management-inventory
 #   - consumes warehouse.returns-processing.events, group
 #     exception-management-returns
+#   - consumes warehouse.inbound-receiving.events (carton discrepancies),
+#     group exception-management-carton-discrepancy
+#   - consumes warehouse.yard-management.events (yard-check discrepancies),
+#     group exception-management-yard-management
+#   - consumes warehouse.dock-scheduling.events (DockAppointmentNoShow only),
+#     group exception-management-dock-scheduling
+#   - consumes warehouse.outbound-shipping.events, group
+#     exception-management-outbound-shipping
 #   - produces warehouse.exception-management.events and
 #     warehouse.exception-management.analytics (CloudEvents) through the
 #     outbox.
@@ -72,13 +80,17 @@ config:
   # Fixed, stable group ids (the chart's own defaults, stated here so the
   # deployed names are visible in this repo): a rescheduled pod resumes from
   # its committed offsets; a brand-new group re-reads the topic from the
-  # start. All six are required (the binary exits at boot without them).
+  # start. All ten are required (the binary exits at boot without them).
   fulfillmentExceptionsConsumerGroup: "exception-management-fulfillment"
   workPlanningExceptionsConsumerGroup: "exception-management-work-planning"
   networkFulfillmentExceptionsConsumerGroup: "exception-management-network-fulfillment"
   orderCorrelationConsumerGroup: "exception-management-order-correlation"
   inventoryExceptionsConsumerGroup: "exception-management-inventory"
   returnsExceptionsConsumerGroup: "exception-management-returns"
+  cartonDiscrepancyConsumerGroup: "exception-management-carton-discrepancy"
+  yardManagementExceptionsConsumerGroup: "exception-management-yard-management"
+  dockSchedulingExceptionsConsumerGroup: "exception-management-dock-scheduling"
+  outboundShippingExceptionsConsumerGroup: "exception-management-outbound-shipping"
 
 # Analytics read side. The projector's consumer group is a FIXED, stable id
 # (fleet charter naming `<ctx>-analytics`): a restarted pod resumes from its
