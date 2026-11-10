@@ -71,6 +71,13 @@ config:
   # DockAppointmentBooked / Cancelled (warehouse.dock-scheduling.events). The chart
   # refuses an empty group; stable id, same reasoning as the groups above.
   dockAppointmentConsumerGroup: "inbound-receiving-dock-appointments"
+  # ADR 0021 (dock-to-stock KPI): two more local copies feed ReceiptStowCompleted.
+  # The gate arrival (yard-management VisitCheckedIn, warehouse.yard-management.events)
+  # and the carton stow (inventory-storage ContainerStowed, warehouse.inventory.events).
+  # The chart refuses an empty group; stable ids, same reasoning as the groups above.
+  # Set ahead of the image that reads them (v2.0.5 ignores both env vars).
+  visitArrivalConsumerGroup: "inbound-receiving-visit-arrivals"
+  cartonStowConsumerGroup: "inbound-receiving-carton-stows"
 
 kafka:
   enabled: true
