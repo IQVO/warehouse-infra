@@ -1,3 +1,8 @@
+# REDUCED FOOTPRINT (2026-11-09): the k3s cluster has ~3 free pod slots and ~40m free CPU
+# on the agent, so only the pods that move events run now: api only (it relays the outbox inline).
+# Switched off until capacity is freed: MCP, analytics projector + reports (their DB, Secret and
+# Kong routes stay declared), the sweep CronJobs (run the sweeps by hand with POST /...-sweeps until
+# then). Re-enable by flipping the three switches below back to true in one PR.
 # dock-scheduling -- the dock scheduling bounded context (WMS, yard domain:
 # the door calendar of every site -- booked time windows on every dock door,
 # inbound and outbound, the no-double-booking rule, door hours and closures,
@@ -124,7 +129,7 @@ kongPlugins:
 # mcp-route.yaml). No auth (the in-cluster ClusterIP boundary is the access
 # control). The route's parentRefs come from _platform.yaml.
 mcp:
-  enabled: true
+  enabled: false
   route:
     enabled: true
     path: /api/mcp/dock-scheduling
@@ -132,7 +137,7 @@ mcp:
 # Dedicated outbox relay (cmd/relay): redundant beside the api's inline relay,
 # safe to run (see the header).
 relay:
-  enabled: true
+  enabled: false   # the api relays the outbox inline (ADR 0008 A22): the dedicated relay Deployment is redundant
 
 service:
   port: 80
@@ -148,7 +153,7 @@ service:
 # The reports HTTPRoute is chart-rendered (/api/dock-scheduling/reports ->
 # /reports); its parentRefs come from _platform.yaml.
 analytics:
-  enabled: true
+  enabled: false
   database:
     existingSecret: dock-scheduling-analytics-db
   projector:
@@ -161,4 +166,4 @@ analytics:
 # No-show sweep (POST /no-show-sweeps every 5 minutes by CronJob): the chart's
 # defaults apply, the target URL is the release's own api Service.
 sweeps:
-  enabled: true
+  enabled: false
