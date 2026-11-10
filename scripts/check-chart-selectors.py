@@ -149,6 +149,9 @@ CHARTS: dict[str, dict[str, str]] = {
         # mandatory too now -- same dummy treatment as the two above.
         "config.packagingConsumerGroup": "inbound-receiving-packaging",
         "config.dockAppointmentConsumerGroup": "inbound-receiving-dock-appointments",
+        # ADR 0021 (dock-to-stock KPI): two more mandatory consumers, same dummy treatment.
+        "config.visitArrivalConsumerGroup": "inbound-receiving-visit-arrivals",
+        "config.cartonStowConsumerGroup": "inbound-receiving-carton-stows",
     },
     # slotting-optimization: OLTP api + the optional mcp, analytics
     # (projector/reports) and frontend (slotting_mfe) components, all of which
