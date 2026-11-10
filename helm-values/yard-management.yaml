@@ -1,3 +1,8 @@
+# REDUCED FOOTPRINT (2026-11-09): the k3s cluster has ~3 free pod slots and ~40m free CPU
+# on the agent, so only the pods that move events run now: api + relay.
+# Switched off until capacity is freed: MCP, analytics projector + reports (their DB, Secret and
+# Kong routes stay declared), the sweep CronJobs (run the sweeps by hand with POST /...-sweeps until
+# then). Re-enable by flipping the three switches below back to true in one PR.
 # yard-management -- the yard management bounded context (WMS, yard domain:
 # everything physically on site outside the four walls -- gate visits, which
 # trailer is at which spot or door, its load, seal and hold state, hostler and
@@ -116,7 +121,7 @@ kongPlugins:
 # mcp-route.yaml). No auth (the in-cluster ClusterIP boundary is the access
 # control). The route's parentRefs come from _platform.yaml.
 mcp:
-  enabled: true
+  enabled: false
   route:
     enabled: true
     path: /api/mcp/yard-management
@@ -140,7 +145,7 @@ service:
 # (/api/yard-management/reports -> /reports); its parentRefs come from
 # _platform.yaml.
 analytics:
-  enabled: true
+  enabled: false
   consumerGroup: "yard-management-analytics"
   existingSecret: yard-management-analytics-db
   reports:
@@ -152,4 +157,4 @@ analytics:
 # POST /move-lease-sweeps every minute, by CronJob): the chart's defaults
 # apply, the target URL is the release's own api Service.
 sweeps:
-  enabled: true
+  enabled: false
