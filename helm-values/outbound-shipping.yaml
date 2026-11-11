@@ -43,7 +43,7 @@
 #
 # The brokers (KAFKA_BROKERS), the Gateway parentRefs, the CORS origin and the
 # OTLP endpoint come from _platform.yaml; the image tag from Terraform (the
-# Application's valuesObject -- NOT pinned yet, see terraform/targets/k3s.images.yaml);
+# Application's valuesObject -- pinned at v0.1.0 in terraform/targets/k3s.images.yaml);
 # the CPU request from kind-resources/ (the overlay is applied on k3s too).
 # Startup runs golang-migrate over MIGRATIONS_DATABASE_URL (the direct DSN
 # Terraform puts in the outbound-shipping-db Secret); DATABASE_URL goes
