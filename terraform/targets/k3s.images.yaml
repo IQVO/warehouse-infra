@@ -1,17 +1,17 @@
 # Written by scripts/k3s-pin-images.sh from a publish-images run (ADR 0011).
 # image: tag of ghcr.io/iqvo/warehouse-infra/<app>; frontend: tag of <app>-frontend.
-run: 42752399279
+run: 42939982304
 images:
   checkout:
     image: 1332afc-arm64
   customer-ordering:
-    frontend: 3368834-308f597-arm64
-    image: 3368834-arm64
+    frontend: dda6d70-e238bf7-arm64
+    image: dda6d70-arm64
   customer-payments:
     image: a18d5dd-arm64
   delivery-promise:
-    frontend: 73cf0c0-8de41e9-arm64
-    image: 73cf0c0-arm64
+    frontend: 5e00862-e238bf7-arm64
+    image: 5e00862-arm64
   dock-scheduling:
     image: d5db895-arm64
   ecosystem:
@@ -38,8 +38,8 @@ images:
     frontend: 3119f63-308f597-arm64
     image: 3119f63-arm64
   linehaul-transportation:
-    frontend: ad849b4-308f597-arm64
-    image: ad849b4-arm64
+    frontend: 6298b25-e238bf7-arm64
+    image: 6298b25-arm64
   network-fulfillment:
     frontend: 49587d0-308f597-arm64
     image: 49587d0-arm64
@@ -59,8 +59,8 @@ images:
     frontend: 303c107-308f597-arm64
     image: 303c107-arm64
   order-sourcing:
-    frontend: bedf1c7-308f597-arm64
-    image: bedf1c7-arm64
+    frontend: 27145d4-e238bf7-arm64
+    image: 27145d4-arm64
   payment-provider-simulator:
     image: 2ef4afa-arm64
   pick-face-replenishment:
@@ -100,8 +100,8 @@ images:
     frontend: 2d2d4b3-308f597-arm64
     image: 2d2d4b3-arm64
   vendor-connectivity:
-    frontend: a98807c-308f597-arm64
-    image: a98807c-arm64
+    frontend: da9ca3b-e238bf7-arm64
+    image: da9ca3b-arm64
   warehouse-console:
     frontend: 298ec71-308f597-arm64
   warehouse-ops-agent:
