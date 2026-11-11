@@ -412,6 +412,17 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.facilityConsumerGroup": "yard-management-facility",
         "config.inboundReceivingConsumerGroup": "yard-management-inbound-receiving",
     },
+    # outbound-shipping: OLTP api (REST + inline outbox relay + six Kafka
+    # consumers) + the optional mcp component; no analytics projector/reports,
+    # no relay Deployment, no sweep, no frontend. The chart refuses to render
+    # without a database source and the Kafka brokers (real Postgres and real
+    # Kafka are the only runtime), so give it dummies (no password). Its six
+    # consumer groups have non-empty chart defaults, so none needs a --set.
+    "../../outbound-shipping/charts/outbound-shipping": {
+        "mcp.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+    },
     # Single Deployment/Service each, no optional-component toggles that
     # add another pair -- included for completeness/regression coverage,
     # not because they're currently at risk of this specific bug shape.

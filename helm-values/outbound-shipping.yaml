@@ -1,0 +1,132 @@
+# REDUCED FOOTPRINT: the k3s nodes are at 108/110 and 98/110 pods, so only the pod that moves events
+# runs: api only (it relays the outbox inline; the chart has no relay Deployment).
+# Switched off until capacity is freed: the MCP server (its Kong route flag stays declared). Re-enable
+# by flipping mcp.enabled back to true in one PR. replicaCount stays 1.
+# outbound-shipping -- the outbound shipping bounded context (WMS: outbound
+# loads, package staging and loading against the dock door, bill of lading,
+# ship confirmation, the missed-load sweep and the load board). OLTP REST on
+# :8080 plus, in the SAME process, a transactional-outbox relay and six Kafka
+# consumers (outbound-shipping charts/outbound-shipping/values.yaml):
+#   - consumes warehouse.fulfillment.events (PackageManifested,
+#     PackageDiverted), group outbound-shipping-fulfillment
+#   - consumes warehouse.dock-scheduling.events (DockAppointmentBooked), group
+#     outbound-shipping-dock
+#   - consumes warehouse.yard-management.events (TrailerDocked,
+#     DoorWorkCompleted, TrailerDeparted), group outbound-shipping-yard
+#   - consumes warehouse.process-path-management.events (CPTScheduleChanged),
+#     group outbound-shipping-cpt
+#   - consumes warehouse.facility.events (ZoneRegistered,
+#     LocationSlotRegistered), group outbound-shipping-layout
+#   - consumes its own warehouse.outbound-shipping.analytics stream for the
+#     in-process LoadBoardView projector, group outbound-shipping-analytics
+#   - produces warehouse.outbound-shipping.events and
+#     warehouse.outbound-shipping.analytics (CloudEvents) through the outbox.
+#     exception-management consumes the integration topic
+#     (helm-values/exception-management.yaml).
+#
+# Real Postgres and real Kafka only (the chart refuses a render without a
+# database source, the brokers and the six groups); the service has no *_MODE
+# switch, so nothing is wired to roll back. Every key below is a DEDICATED
+# chart value (charts/outbound-shipping/values.yaml renders each one to its
+# env var), so none of this belongs in extraEnv (a duplicate env entry breaks
+# ArgoCD's diff).
+#
+# Topics are auto-created by the first writer (the fleet norm -- kafka.tf has
+# no topic resources), BUT a kafka-go group consumer started before its topic
+# exists is never handed the partition, and the service never creates topics
+# itself. The api consumes the six topics above (its own .analytics one
+# included), so before the first sync they are pre-created with
+# `kafka-topics.sh --create --if-not-exists` (docs/kafka-topics-outbound-shipping.md):
+# the two topics this service writes and the four it reads from the other
+# contexts. The .dlq topics are created on the first dead letter and need
+# nothing.
+#
+# The brokers (KAFKA_BROKERS), the Gateway parentRefs, the CORS origin and the
+# OTLP endpoint come from _platform.yaml; the image tag from Terraform (the
+# Application's valuesObject -- NOT pinned yet, see terraform/targets/k3s.images.yaml);
+# the CPU request from kind-resources/ (the overlay is applied on k3s too).
+# Startup runs golang-migrate over MIGRATIONS_DATABASE_URL (the direct DSN
+# Terraform puts in the outbound-shipping-db Secret); DATABASE_URL goes
+# through PgBouncer. The role and database are created by modules/application's
+# provisioning Job (ADR 0005) before the first sync.
+#
+# Components of the chart:
+#   - api (cmd/api): always on (REST + inline outbox relay + six consumers).
+#   - MCP server (cmd/mcp, read-only): mcp.enabled is OFF (capacity). With
+#     it on, Service outbound-shipping-mcp:8090 and the Kong route
+#     /api/mcp/outbound-shipping (rewritten to /mcp).
+#   - No dedicated relay Deployment: the chart has none, the api relays inline.
+#   - No analytics read side: no projector, no reports binary, no analytics
+#     database (apps.yaml leaves `analytics` off); the LoadBoardView is fed
+#     in-process by the analytics consumer above.
+#   - No sweep CronJob: the missed-load sweep is an API route
+#     (POST /missed-load-sweeps), run by hand or by the caller.
+#   - No A2A component, no web part: no frontend remote, no frontend block.
+
+replicaCount: 1
+
+config:
+  httpAddr: ":8080"
+  logLevel: "info"
+  # Fixed, stable group ids (the chart's own defaults, stated here so the
+  # deployed names are visible in this repo and a rename in code cannot
+  # silently orphan the committed offsets): a rescheduled pod resumes from its
+  # committed offsets; a brand-new group re-reads the topic from the start.
+  # All six are required (cmd/api exits at boot without them).
+  # Consumes warehouse.fulfillment.events.
+  fulfillmentConsumerGroup: "outbound-shipping-fulfillment"
+  # Consumes warehouse.dock-scheduling.events.
+  dockConsumerGroup: "outbound-shipping-dock"
+  # Consumes warehouse.yard-management.events.
+  yardConsumerGroup: "outbound-shipping-yard"
+  # Consumes warehouse.process-path-management.events (CPT).
+  cptConsumerGroup: "outbound-shipping-cpt"
+  # Consumes warehouse.facility.events (zone / location layout copy).
+  layoutConsumerGroup: "outbound-shipping-layout"
+  # Consumes warehouse.outbound-shipping.analytics (LoadBoardView projector).
+  analyticsConsumerGroup: "outbound-shipping-analytics"
+
+database:
+  existingSecret: outbound-shipping-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+
+extraEnv: []
+
+# Kong exposure of the OLTP API (the chart's httproute.yaml):
+# /api/outbound-shipping, prefix stripped. The parentRefs come from
+# helm-values/_platform.yaml (the shared warehouse-gateway), never per-app.
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/outbound-shipping
+      pathType: PathPrefix
+  stripPath: true
+
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/outbound-shipping
+
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+
+# Read-only MCP server (cmd/mcp), Service outbound-shipping-mcp:8090: Kong
+# exposure /api/mcp/outbound-shipping, prefix rewritten to /mcp (the chart's
+# mcp-route.yaml, rendered only while mcp.enabled is true). No auth (the
+# in-cluster ClusterIP boundary is the access control). The route's
+# parentRefs come from _platform.yaml.
+mcp:
+  enabled: false
+  route:
+    enabled: true
+    path: /api/mcp/outbound-shipping
+
+service:
+  port: 80
+  targetPort: 8080
+  type: ClusterIP

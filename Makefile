@@ -43,6 +43,7 @@ CHARTS := \
 	../seller-inbound/charts/seller-inbound \
 	../dock-scheduling/charts/dock-scheduling \
 	../yard-management/charts/yard-management \
+	../outbound-shipping/charts/outbound-shipping \
 	../checkout/charts/checkout \
 	../customer-payments/charts/customer-payments \
 	../pricing/charts/pricing \
