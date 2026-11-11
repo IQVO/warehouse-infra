@@ -814,6 +814,26 @@ CONTEXTS = [
         "business_metrics": [],
     },
     {
+        "key": "outbound-shipping",
+        "title": "Outbound Shipping",
+        "uid": "warehouse-outbound-shipping",
+        # The service registers NO OTel instrument and wires no otelchi/SDK (its
+        # observability page on origin/develop: no meter, no span, no /metrics,
+        # no OTEL_* variable read; the only OTel call is the propagator inject
+        # into outbox headers), so business_metrics stays empty (never invent a
+        # series), there is no outbox-lag gauge, and the HTTP RED and Go-runtime
+        # rows stay empty until it instruments itself. Its signals today are
+        # JSON logs (the Loki rows), probes and SQL. The Kong rows are live once
+        # the route exists (kongPlugins.prometheus in
+        # helm-values/outbound-shipping.yaml; the MCP route, when switched on,
+        # is `outbound-shipping-mcp`) and pod-restart alerts are live from day
+        # one. service_regex follows the fleet prefix convention (api and mcp
+        # pods start with `outbound-shipping`).
+        "service_regex": "outbound-shipping.*",
+        "loki_app": "outbound-shipping",
+        "business_metrics": [],
+    },
+    {
         "key": "warehouse-ops-agent",
         "title": "Warehouse Ops Agent",
         "uid": "warehouse-warehouse-ops-agent",

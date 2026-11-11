@@ -214,6 +214,18 @@ applications:
     database: true
     analytics: true
     frontend_remote: order_sourcing_mfe
+  # outbound-shipping: outbound load planning, staging, loading and ship
+  # confirmation (api + inline outbox relay + six Kafka consumers, plus an
+  # optional read-only MCP server). The service has NO analytics read side
+  # (no projector, no reports binary: its LoadBoardView is fed in-process from
+  # its own analytics topic), so no analytics database is provisioned
+  # (`analytics` stays at its default, false). No sweep CronJob, no A2A, no
+  # web part. The image is NOT pinned yet: the plan fails until
+  # scripts/k3s-pin-images.sh pins it from a publish-images run.
+  outbound-shipping:
+    kind: service
+    repo_owner: IQVO
+    database: true
   # pick-face-replenishment: the chart's analytics projector/reports read only
   # ANALYTICS_DATABASE_URL (no reader DSN), hence the one-key secret_keys. Its
   # web remote is replenishment_mfe (web/vite.config.ts), served at
