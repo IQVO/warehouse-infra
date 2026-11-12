@@ -1,12 +1,12 @@
 # Written by scripts/k3s-pin-images.sh from a publish-images run (ADR 0011).
 # image: tag of ghcr.io/iqvo/warehouse-infra/<app>; frontend: tag of <app>-frontend.
-run: 43001089814
+run: 43147742975
 images:
   checkout:
     image: 1332afc-arm64
   customer-ordering:
-    frontend: dda6d70-e238bf7-arm64
-    image: dda6d70-arm64
+    frontend: 7575957-e238bf7-arm64
+    image: 7575957-arm64
   customer-payments:
     image: a18d5dd-arm64
   delivery-promise:
@@ -35,8 +35,8 @@ images:
     frontend: 5e48894-308f597-arm64
     image: 5e48894-arm64
   last-mile-delivery:
-    frontend: 3119f63-308f597-arm64
-    image: 3119f63-arm64
+    frontend: 6c426e8-e238bf7-arm64
+    image: 6c426e8-arm64
   linehaul-transportation:
     frontend: 6298b25-e238bf7-arm64
     image: 6298b25-arm64
@@ -87,8 +87,8 @@ images:
     frontend: b570041-308f597-arm64
     image: b570041-arm64
   shipping-and-tracking:
-    frontend: 03969f7-308f597-arm64
-    image: 03969f7-arm64
+    frontend: 17b66e5-e238bf7-arm64
+    image: 17b66e5-arm64
   shopping-cart:
     image: b8a6348-arm64
   slotting-optimization:
