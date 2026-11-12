@@ -1,6 +1,6 @@
 # Written by scripts/k3s-pin-images.sh from a publish-images run (ADR 0011).
 # image: tag of ghcr.io/iqvo/warehouse-infra/<app>; frontend: tag of <app>-frontend.
-run: 43158182269
+run: 43213606673
 images:
   checkout:
     image: 1332afc-arm64
@@ -50,11 +50,11 @@ images:
     frontend: 4596553-8de41e9-arm64
     image: 4596553-arm64
   node-topology:
-    frontend: 52eef93-308f597-arm64
+    frontend: 52eef93-e238bf7-arm64
     image: 52eef93-arm64
   offer-availability:
-    frontend: 3adf554-308f597-arm64
-    image: 3adf554-arm64
+    frontend: 6eb75de-e238bf7-arm64
+    image: 6eb75de-arm64
   order-management:
     frontend: 303c107-308f597-arm64
     image: 303c107-arm64
@@ -84,8 +84,8 @@ images:
     frontend: a7d363f-308f597-arm64
     image: a7d363f-arm64
   seller-inbound:
-    frontend: b570041-308f597-arm64
-    image: b570041-arm64
+    frontend: 1f7587b-e238bf7-arm64
+    image: 1f7587b-arm64
   shipping-and-tracking:
     frontend: 17b66e5-e238bf7-arm64
     image: 17b66e5-arm64
