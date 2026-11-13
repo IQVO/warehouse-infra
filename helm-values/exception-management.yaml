@@ -86,6 +86,7 @@ config:
   networkFulfillmentExceptionsConsumerGroup: "exception-management-network-fulfillment"
   orderCorrelationConsumerGroup: "exception-management-order-correlation"
   inventoryExceptionsConsumerGroup: "exception-management-inventory"
+  heldStockExceptionsConsumerGroup: "exception-management-held-stock"   # second group on warehouse.inventory.events, one case per held unit (ADR 0012)
   returnsExceptionsConsumerGroup: "exception-management-returns"
   cartonDiscrepancyConsumerGroup: "exception-management-carton-discrepancy"
   yardManagementExceptionsConsumerGroup: "exception-management-yard-management"
