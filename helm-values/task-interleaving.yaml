@@ -36,8 +36,9 @@
 #   - Analytics read side (ADR 0008): ti-projector (the only writer of the
 #     SEPARATE task_interleaving_analytics database, fed by
 #     warehouse.task-interleaving.analytics) and ti-reports (read-only, Service
-#     task-interleaving-analytics-reports:80 -- the chart has no Kong route for
-#     reports). The DSN never appears here: modules/application writes it into
+#     task-interleaving-analytics-reports:80, behind the Kong route
+#     /api/task-interleaving/reports since chart v2.0.4 - analytics.reports.route
+#     below). The DSN never appears here: modules/application writes it into
 #     the task-interleaving-analytics-db Secret (the chart reads only
 #     ANALYTICS_DATABASE_URL, apps.yaml analytics.secret_keys), which
 #     analytics.existingSecret names.
@@ -67,6 +68,12 @@ analytics:
   enabled: true
   consumerGroup: "task-interleaving-analytics"
   existingSecret: task-interleaving-analytics-db
+  reports:
+    # Kong route for ti-reports (chart v2.0.4, PR 63): /api/task-interleaving/reports
+    # -> /reports on the analytics-reports Service, regex-priority 10 so it wins over
+    # the api route's /api/task-interleaving prefix (Kong 3.9 traditional router).
+    route:
+      enabled: true
 
 # Platform facts (Gateway parentRefs, Kafka brokers, OTLP endpoint, CORS origin) come from
 # _platform.yaml; image tags from Terraform (the Application's valuesObject).
