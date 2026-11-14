@@ -37,6 +37,11 @@ config:
   catalogConsumerGroup: "seller-inbound-catalog-packaging"
   # Same rule. Consumes retailnetwork.vendor-connectivity.events (receipts).
   receiptConsumerGroup: "seller-inbound-vendor-receipts"
+  # Same rule. Consumes retailnetwork.order-sourcing.events (the demand half
+  # of the placement advisory's DemandHeatView, seller-inbound ADR 0012).
+  # Read by the chart only once seller-inbound renders it: a chart that does
+  # not know the key ignores it, so this line is safe to merge first.
+  sourcingConsumerGroup: "seller-inbound-order-sourcing"
   # The network's GS1 company prefix the SSCCs it issues are built from
   # (6 to 11 digits; MANDATORY, validated at boot). LOCAL-CLUSTER-ONLY
   # FICTIONAL value: 9-digit, not a real GS1 company prefix, so it must never
