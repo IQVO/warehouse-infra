@@ -384,6 +384,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.nodeConsumerGroup": "seller-inbound-node",
         "config.catalogConsumerGroup": "seller-inbound-catalog",
         "config.receiptConsumerGroup": "seller-inbound-receipt",
+        "config.sourcingConsumerGroup": "seller-inbound-sourcing",
         "config.ssccCompanyPrefix": "0614141",
     },
     # dock-scheduling and yard-management: OLTP api + the optional mcp, relay,
