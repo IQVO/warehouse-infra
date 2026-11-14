@@ -1,0 +1,71 @@
+# customer-returns -- retail-network service (a domain-driven design study,
+# not associated with any company). Single api Deployment: OLTP REST on
+# :8080 plus, in the SAME process, a transactional-outbox relay and the
+# four local-copy consumers below, plus a read-only MCP server (cmd/mcp)
+# and a read-only A2A agent (cmd/a2a). No analytics read side, no console
+# remote (no web part).
+#
+# customer-returns -- the shopper-facing return authorization of the retail
+# network (RN-0012): ReturnAuthorization with its disposition decided at
+# authorization, the reverse-label route of shipping-and-tracking, the
+# return-advices poller of returns-processing and the restock consumer of
+# offer-availability downstream. Produces
+# retailnetwork.customer-returns.events through the outbox; consumes
+# customer-ordering, node-topology, order-sourcing and vendor-connectivity
+# through the four groups below.
+#
+# Real Postgres and real Kafka only (the chart refuses a render without
+# a database source, the brokers and the four consumer groups); topics are
+# auto-created by the first writer (the fleet norm -- kafka.tf has no topic
+# resources), so a consumed topic whose producer has not written yet shows
+# as consumer retry logs, not as unreadiness. The brokers (KAFKA_BROKERS),
+# the Gateway parentRefs, the CORS origin and the OTLP endpoint come from
+# _platform.yaml; the image tag from Terraform (the Application's
+# valuesObject). Startup runs golang-migrate over MIGRATIONS_DATABASE_URL
+# (the direct DSN Terraform puts in the customer-returns-db Secret);
+# DATABASE_URL goes through PgBouncer. The role and database are created
+# by modules/application's provisioning Job (ADR 0005) before the first
+# sync.
+
+database:
+  existingSecret: customer-returns-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+
+config:
+  # The four local-copy consumers (ADR 0003), each under a STABLE
+  # service-prefixed group id.
+  orderConsumerGroup: "customer-returns-order"
+  topologyConsumerGroup: "customer-returns-topology"
+  sourcingConsumerGroup: "customer-returns-sourcing"
+  vendorConsumerGroup: "customer-returns-vendor"
+
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/customer-returns
+      pathType: PathPrefix
+  stripPath: true
+
+# Read-only MCP server (cmd/mcp), Service customer-returns-mcp:8090:
+# Kong exposure /api/mcp/customer-returns, prefix rewritten to /mcp
+# (the chart's mcp-route.yaml). The route's parentRefs come from
+# _platform.yaml exactly like the OLTP route above.
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/customer-returns
+
+# Read-only A2A agent (cmd/a2a), Service customer-returns-a2a:8093:
+# Kong exposure /api/a2a/customer-returns, prefix rewritten to /
+# (the chart's a2a-route.yaml).
+a2a:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/a2a/customer-returns
+
+service:
+  port: 80
+  targetPort: 8080
