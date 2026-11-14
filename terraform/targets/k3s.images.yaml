@@ -1,17 +1,17 @@
 # Written by scripts/k3s-pin-images.sh from a publish-images run (ADR 0011).
 # image: tag of ghcr.io/iqvo/warehouse-infra/<app>; frontend: tag of <app>-frontend.
-run: 43534362860
+run: 43567771842
 images:
   checkout:
     image: 1332afc-arm64
   customer-ordering:
-    frontend: 7575957-e238bf7-arm64
-    image: 7575957-arm64
+    frontend: 9fd12dc-99062e8-arm64
+    image: 9fd12dc-arm64
   customer-payments:
     image: a18d5dd-arm64
   delivery-promise:
-    frontend: 5e00862-e238bf7-arm64
-    image: 5e00862-arm64
+    frontend: b433c4f-99062e8-arm64
+    image: b433c4f-arm64
   dock-scheduling:
     image: d5db895-arm64
   ecosystem:
@@ -35,8 +35,8 @@ images:
     frontend: 5e48894-308f597-arm64
     image: 5e48894-arm64
   last-mile-delivery:
-    frontend: 6c426e8-e238bf7-arm64
-    image: 6c426e8-arm64
+    frontend: 3256d4f-99062e8-arm64
+    image: 3256d4f-arm64
   linehaul-transportation:
     frontend: 6298b25-e238bf7-arm64
     image: 6298b25-arm64
@@ -50,8 +50,8 @@ images:
     frontend: 4596553-8de41e9-arm64
     image: 4596553-arm64
   node-topology:
-    frontend: 5b31500-e238bf7-arm64
-    image: 5b31500-arm64
+    frontend: e959df9-99062e8-arm64
+    image: e959df9-arm64
   offer-availability:
     frontend: 6eb75de-e238bf7-arm64
     image: 6eb75de-arm64
@@ -87,8 +87,8 @@ images:
     frontend: 1f7587b-e238bf7-arm64
     image: 1f7587b-arm64
   shipping-and-tracking:
-    frontend: 17b66e5-e238bf7-arm64
-    image: 17b66e5-arm64
+    frontend: 0e789d1-99062e8-arm64
+    image: 0e789d1-arm64
   shopping-cart:
     image: b8a6348-arm64
   slotting-optimization:
