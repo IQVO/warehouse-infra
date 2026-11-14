@@ -744,10 +744,12 @@ CONTEXTS = [
         "key": "task-interleaving",
         "title": "Task Interleaving",
         "uid": "warehouse-task-interleaving",
-        # Same state as pick-face-replenishment: its observability page on
-        # origin/develop registers 0 OTel instruments and wires no otelchi, so
-        # business_metrics stays empty and there is no outbox-lag gauge; the
-        # Kong rows are live (kongPlugins.prometheus in its values file).
+        # Unlike pick-face-replenishment: task-interleaving DOES declare five
+        # OTel instruments (internal/telemetry/metrics.go: taskinterleaving.hints.{issued,consumed,expired},
+        # taskinterleaving.recommender.time, taskinterleaving.consumer.lag; Prometheus
+        # reader, no OTLP export) and wires no otelchi; it exposes no outbox-lag
+        # gauge. business_metrics is still empty (a deliberate follow-up: those five
+        # dotted names could be listed); the Kong rows are live (kongPlugins.prometheus).
         "service_regex": "task-interleaving.*",
         "loki_app": "task-interleaving",
         "business_metrics": [],
