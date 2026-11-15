@@ -8,3 +8,10 @@
 resources:
   requests:
     cpu: 25m
+# The analytics read side (reports) gets the same treatment: its chart default
+# requests 100m while real use is a fraction; the packed lab worker could not
+# schedule it otherwise.
+reports:
+  resources:
+    requests:
+      cpu: 25m
