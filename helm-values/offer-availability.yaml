@@ -35,6 +35,9 @@ config:
   # seller-inbound events (SellerSuspended / SellerReinstated, offer-availability
   # ADR 0013). MANDATORY once that chart lands; unknown to older charts (ignored).
   sellerInboundConsumerGroup: "offer-availability-seller-inbound"
+  # customer-returns events (retailnetwork.customer-returns.events, offer-availability
+  # ADR 0015). MANDATORY: the chart on develop refuses to render without it.
+  customerReturnsConsumerGroup: "offer-availability-customer-returns"
 
 database:
   existingSecret: offer-availability-db
