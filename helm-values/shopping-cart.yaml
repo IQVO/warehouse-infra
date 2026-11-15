@@ -35,6 +35,14 @@ service:
   port: 80
   targetPort: 8080
   type: ClusterIP
+mcp:
+  # Read-only L1 MCP server (cmd/mcp, the service's MCP ADR). No auth, by the fleet decision.
+  # The route is /api/mcp/shopping-cart; Kong rewrites it to /mcp. Requests are sized in
+  # helm-values/kind-resources/shopping-cart.yaml (the cluster has no spare CPU or pod slot at the chart default).
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/shopping-cart
 a2a:
   enabled: true
   # A2A inbound adapter (see the repo's A2A ADR): delegation only; facts still travel as
