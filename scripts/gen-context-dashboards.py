@@ -570,6 +570,26 @@ CONTEXTS = [
         ],
     },
     {
+        "key": "customer-returns",
+        "title": "Customer Returns",
+        "uid": "warehouse-customer-returns",
+        # Retail-network service on the fleet observability standard: Go-runtime and otelchi RED
+        # metrics plus the business counter customer_returns.return.authorized
+        # (Prometheus: customer_returns_return_authorized_total).
+        # The Kong route /api/customer-returns is live but the chart attaches no Kong prometheus plugin, so the
+        # Kong rows (including the 5xx panels and alert) stay empty until it does; the pod-restart
+        # alerts are live.
+        "service_regex": "customer-returns.*",
+        "loki_app": "customer-returns",
+        "business_metrics": [
+            (
+                "customer_returns_return_authorized_total",
+                "outcome",
+                "Authorize attempts by outcome (authorized - the disposition label says which was decided: KEEP returnless, NEAREST_RETURNS_CENTER or ORIGIN_NODE - or rejected, the reason being the problem slug such as group-not-shipped, no-return-destination or validation-failed). A rising group-not-shipped means the OrderGroupView lags the shopper; a rising no-return-destination means regions lack returns centres; a rising KEEP share near the value threshold is expected returnless behaviour.",
+            ),
+        ],
+    },
+    {
         "key": "offer-availability",
         "title": "Offer & Availability",
         "uid": "warehouse-offer-availability",
