@@ -8,3 +8,14 @@
 resources:
   requests:
     cpu: 25m
+# The optional components (mcp, a2a) get the same treatment as the api: their
+# chart defaults request 100m while real use is a fraction; the packed lab
+# worker could not schedule them otherwise.
+mcp:
+  resources:
+    requests:
+      cpu: 25m
+a2a:
+  resources:
+    requests:
+      cpu: 25m
