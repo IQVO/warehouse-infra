@@ -188,14 +188,9 @@ applications:
     repo_owner: IQVO
     database: true
     frontend_remote: node_topology_mfe
-  # customer-returns: retail-network service (single api Deployment: OLTP
-  # REST :8080 + transactional-outbox relay + four local-copy consumers,
-  # plus a read-only MCP server (cmd/mcp) and a read-only A2A agent
-  # (cmd/a2a); no analytics read side, no console remote (RN-0012).
-  customer-returns:
-    kind: service
-    repo_owner: IQVO
-    database: true
+  # customer-returns joins in the second step of this wave (its app entry +
+  # image pin land with helm-values/customer-returns.yaml once the first
+  # publish-images run of the new context exists).
 
   # offer-availability: retail-network reference service (single api Deployment:
   # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
