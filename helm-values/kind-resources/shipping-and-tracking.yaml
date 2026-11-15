@@ -8,18 +8,14 @@
 resources:
   requests:
     cpu: 25m
-# The analytics read side (reports) gets the same treatment: its chart default
-# requests 100m while real use is a fraction; the packed lab worker could not
-# schedule it otherwise.
+
+# The analytics read side (reports, projector) gets the same treatment as the
+# api: chart defaults request 100m while real use is a fraction.
 analytics:
   reports:
     resources:
       requests:
         cpu: 25m
-
-# The analytics projector gets the same treatment: its chart default requests
-# 100m while real use is a fraction; the packed lab worker needs the room.
-analytics:
   projector:
     resources:
       requests:
