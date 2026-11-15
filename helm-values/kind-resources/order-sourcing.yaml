@@ -8,3 +8,9 @@
 resources:
   requests:
     cpu: 25m
+# The analytics read side (projector, reports) gets the same treatment: chart
+# defaults request 100m while real use is a fraction.
+reports:
+  resources:
+    requests:
+      cpu: 25m
