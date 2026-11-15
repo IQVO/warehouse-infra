@@ -337,6 +337,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.nodeTopologyConsumerGroup": "offer-availability-node-topology",
         "config.sellerInboundConsumerGroup": "offer-availability-seller-inbound",
+        "config.customerReturnsConsumerGroup": "offer-availability-customer-returns",
     },
     "../../order-sourcing/charts/order-sourcing": {
         "mcp.enabled": "true", "frontend.enabled": "true",
