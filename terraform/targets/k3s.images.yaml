@@ -1,17 +1,17 @@
 # Written by scripts/k3s-pin-images.sh from a publish-images run (ADR 0011).
 # image: tag of ghcr.io/iqvo/warehouse-infra/<app>; frontend: tag of <app>-frontend.
-run: 43655420581
+run: 43671459443
 images:
   checkout:
     image: 1332afc-arm64
   customer-ordering:
-    frontend: 9fd12dc-99062e8-arm64
-    image: 9fd12dc-arm64
+    frontend: 32ed1a0-99062e8-arm64
+    image: 32ed1a0-arm64
   customer-payments:
     image: a18d5dd-arm64
   delivery-promise:
-    frontend: b433c4f-99062e8-arm64
-    image: b433c4f-arm64
+    frontend: e855ccd-99062e8-arm64
+    image: e855ccd-arm64
   dock-scheduling:
     image: d5db895-arm64
   ecosystem:
@@ -35,8 +35,8 @@ images:
     frontend: 5e48894-308f597-arm64
     image: 5e48894-arm64
   last-mile-delivery:
-    frontend: 3256d4f-99062e8-arm64
-    image: 3256d4f-arm64
+    frontend: a19c58a-99062e8-arm64
+    image: a19c58a-arm64
   linehaul-transportation:
     frontend: 6298b25-e238bf7-arm64
     image: 6298b25-arm64
@@ -50,17 +50,17 @@ images:
     frontend: 4596553-8de41e9-arm64
     image: 4596553-arm64
   node-topology:
-    frontend: e959df9-99062e8-arm64
-    image: e959df9-arm64
+    frontend: ff5a4a6-99062e8-arm64
+    image: ff5a4a6-arm64
   offer-availability:
-    frontend: 6eb75de-e238bf7-arm64
-    image: 6eb75de-arm64
+    frontend: 5dbe313-99062e8-arm64
+    image: 5dbe313-arm64
   order-management:
     frontend: 303c107-308f597-arm64
     image: 303c107-arm64
   order-sourcing:
-    frontend: 27145d4-e238bf7-arm64
-    image: 27145d4-arm64
+    frontend: bcaf730-99062e8-arm64
+    image: bcaf730-arm64
   outbound-shipping:
     image: 857edfd-arm64
   payment-provider-simulator:
@@ -81,14 +81,14 @@ images:
     frontend: c298ee4-308f597-arm64
     image: c298ee4-arm64
   returns-processing:
-    frontend: a7d363f-308f597-arm64
-    image: a7d363f-arm64
+    frontend: dbbe3d5-99062e8-arm64
+    image: dbbe3d5-arm64
   seller-inbound:
-    frontend: 3e39d83-99062e8-arm64
-    image: 3e39d83-arm64
+    frontend: 1548013-99062e8-arm64
+    image: 1548013-arm64
   shipping-and-tracking:
-    frontend: 0e789d1-99062e8-arm64
-    image: 0e789d1-arm64
+    frontend: 7274e3e-99062e8-arm64
+    image: 7274e3e-arm64
   shopping-cart:
     image: 10747ea-arm64
   slotting-optimization:
@@ -102,8 +102,8 @@ images:
     frontend: 5913fc8-99062e8-arm64
     image: 5913fc8-arm64
   vendor-connectivity:
-    frontend: da9ca3b-e238bf7-arm64
-    image: da9ca3b-arm64
+    frontend: 7aef347-99062e8-arm64
+    image: 7aef347-arm64
   warehouse-console:
     frontend: 298ec71-308f597-arm64
   warehouse-ops-agent:

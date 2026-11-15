@@ -188,6 +188,10 @@ applications:
     repo_owner: IQVO
     database: true
     frontend_remote: node_topology_mfe
+  # customer-returns joins in the second step of this wave (its app entry +
+  # image pin land with helm-values/customer-returns.yaml once the first
+  # publish-images run of the new context exists).
+
   # offer-availability: retail-network reference service (single api Deployment:
   # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
   # plus a read-only MCP server (cmd/mcp); still no analytics read side).

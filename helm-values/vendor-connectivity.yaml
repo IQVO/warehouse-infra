@@ -43,6 +43,9 @@ config:
   inboundConsumerGroup: "vendor-connectivity-inbound"
   # offer-availability packaging events -> CatalogPackagingView (ADR 0005). MANDATORY.
   packagingConsumerGroup: "vendor-connectivity-packaging"
+  # The return outcomes of the customer-returns topic (ADR 0014): the
+  # authorization's graded outcome, consumed as the vendor-facing fact.
+  customerReturnsConsumerGroup: "vendor-connectivity-customer-returns"
   # synchronous REST call into the sibling; MANDATORY.
   nodeTopologyUrl: "http://node-topology.warehouse-systems.svc.cluster.local:80"
   # synchronous REST call into the sibling; MANDATORY.
