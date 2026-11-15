@@ -5,3 +5,13 @@
 resources:
   requests:
     cpu: 25m
+# The MCP server is a read-only L1 process that idles at 1-10m CPU and under 10Mi of memory
+# (measured on the running customer-ordering, delivery-promise and inbound-receiving MCP pods), while the
+# chart default requests 100m / 128Mi. The agent node has about 40m CPU and 0.5Gi of requests left and the
+# server node has no pod slot, so the default would leave the pod Pending. Requests only; the limits
+# (500m / 256Mi) keep the chart defaults, so a burst is still served.
+mcp:
+  resources:
+    requests:
+      cpu: 5m
+      memory: 32Mi
