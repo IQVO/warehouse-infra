@@ -749,22 +749,27 @@ CONTEXTS = [
         "key": "pick-face-replenishment",
         "title": "Pick-Face Replenishment",
         "uid": "warehouse-pick-face-replenishment",
-        # The service exports NO metric today (its observability page on
-        # origin/develop: no meter, no OTel SDK, no /metrics, no otelchi), so
-        # business_metrics stays empty (never invent a metric), there is no
-        # outbox-lag gauge and the HTTP RED and Go-runtime rows stay empty
-        # until it instruments itself. The Kong rows are live: the chart
-        # renders the Kong prometheus plugin (helm-values/pick-face-replenishment.yaml).
-        # service_regex follows the fleet prefix convention.
+        # Fleet observability standard on origin/develop: all five binaries set up OpenTelemetry (otelchi spans, otelchimetric RED
+        # metrics) and the service registers one business counter, replenishment.request.raised (Prometheus:
+        # replenishment_request_raised_total, legend by outcome: created or failed; reason is the problem slug on a failure).
+        # Consumer lag and outbox depth are not instrumented yet, so there is no outbox-lag gauge. The Kong rows are live: the chart
+        # renders the Kong prometheus plugin (helm-values/pick-face-replenishment.yaml). service_regex follows the fleet prefix
+        # convention.
         "service_regex": "pick-face-replenishment.*",
         "loki_app": "pick-face-replenishment",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "replenishment_request_raised_total",
+                "outcome",
+                "Attempts to raise a replenishment request, by outcome (created, failed) and, on failure, the problem slug as reason.",
+            ),
+        ],
     },
     {
         "key": "task-interleaving",
         "title": "Task Interleaving",
         "uid": "warehouse-task-interleaving",
-        # Unlike pick-face-replenishment: task-interleaving DOES declare five
+        # Task-interleaving declares five
         # OTel instruments (internal/telemetry/metrics.go: taskinterleaving.hints.{issued,consumed,expired},
         # taskinterleaving.recommender.time, taskinterleaving.consumer.lag; Prometheus
         # reader, no OTLP export) and wires no otelchi; it exposes no outbox-lag
@@ -778,28 +783,37 @@ CONTEXTS = [
         "key": "returns-processing",
         "title": "Returns Processing",
         "uid": "warehouse-returns-processing",
-        # Same state as task-interleaving when it was registered: 0 OTel
-        # instruments, no otelchi, no outbox-lag gauge, business_metrics
-        # empty. One difference, deliberate and temporary: its chart ships no
-        # gatewayApi HTTPRoute yet, so the Kong rows (5xx, SLO burn) stay
-        # empty until that template lands in IQVO/returns-processing and the
-        # route /api/returns-processing exists; pod-restart alerts are live
-        # from day one.
+        # Fleet observability standard on origin/develop: otelchi spans plus the otelchimetric RED metrics, and one business counter,
+        # returns.authorizations.decided (Prometheus: returns_authorizations_decided_total, legend by outcome: authorized or
+        # rejected; reason says why a rejection happened). The relay, the consumers and the poller are not instrumented, so there is
+        # no outbox-lag gauge. Kong rows follow the route /api/returns-processing; pod-restart alerts are live from day one.
         "service_regex": "returns-processing.*",
         "loki_app": "returns-processing",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "returns_authorizations_decided_total",
+                "outcome",
+                "Return authorization decisions by outcome (authorized or rejected; reason says why a rejection happened, as a problem slug such as return-not-authorizable or open-rma-exists). A rising return-not-authorizable or open-rma-exists means clients ask for returns the rules refuse, not that the service is failing; a rising internal-error or concurrent-modification means the service itself is.",
+            ),
+        ],
     },
     {
         "key": "exception-management",
         "title": "Exception Management",
         "uid": "warehouse-exception-management",
-        # Same state as returns-processing above: 0 OTel instruments, no
-        # gauge, empty business_metrics, and no gatewayApi HTTPRoute in its
-        # chart yet — the Kong rows light up when /api/exception-management
-        # is routed; pod-restart alerts are live from day one.
+        # Fleet observability standard on origin/develop: otelchi spans plus the otelchimetric RED metrics on the api, a2a and mcp
+        # binaries and one business counter, exception.cases.opened (Prometheus: exception_cases_opened_total, legend by outcome:
+        # opened, touched, replayed or rejected; exception.severity labels an opened case).
+        # No outbox-lag gauge. Kong rows light up with the route /api/exception-management; pod-restart alerts are live from day one.
         "service_regex": "exception-management.*",
         "loki_app": "exception-management",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "exception_cases_opened_total",
+                "outcome",
+                "Consumed facts handled by the open-or-touch decision, by outcome: opened (a new case), touched (an existing case's occurrence went up), replayed (the opening event again, a no-op) or rejected (reason is the problem slug: policy-undeclared, invalid-fact, concurrent-modification, open-case-exists, internal-error). A rising touched share means one condition keeps recurring on the same subject; a rising policy-undeclared means a producer emits a source type nobody declared a policy for (a configuration gap); a rising internal-error or concurrent-modification means the service itself is failing to take facts in.",
+            ),
+        ],
     },
     {
         "key": "dock-scheduling",
@@ -824,36 +838,42 @@ CONTEXTS = [
         "key": "yard-management",
         "title": "Yard Management",
         "uid": "warehouse-yard-management",
-        # Same state as dock-scheduling above: no business metric is verified on
-        # origin/develop (no meter in the repo), no outbox-lag gauge, so
-        # business_metrics stays empty. service_regex follows the fleet prefix
-        # convention (api, mcp, relay, yard-projector, yard-reports and the sweep
-        # pods all start with `yard-management`). The Kong rows are live
-        # (kongPlugins.prometheus in helm-values/yard-management.yaml) and
-        # pod-restart alerts are live from day one.
+        # Fleet observability standard (yard-management ADR 0017): otelchi spans plus the otelchimetric RED metrics on the api and mcp
+        # binaries and one business counter, yard.visits.checked_in (Prometheus: yard_visits_checked_in_total, legend by
+        # outcome: admitted, rejected or refused; reason says why). The consumers and the relay are not instrumented, so there is no
+        # outbox-lag gauge. service_regex follows the fleet prefix convention (api, mcp, relay, yard-projector, yard-reports and the
+        # sweep pods all start with `yard-management`). The Kong rows are live (kongPlugins.prometheus in
+        # helm-values/yard-management.yaml) and pod-restart alerts are live from day one.
         "service_regex": "yard-management.*",
         "loki_app": "yard-management",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "yard_visits_checked_in_total",
+                "outcome",
+                "Gate check-ins by outcome: admitted (a CHECKED_IN visit), rejected (a REJECTED visit: the gate turned the truck away; reason is seal-mismatch or carrier-suspended) or refused (nothing persisted; reason is the problem slug of the failure, such as visit-already-open or appointment-required). A rising rejected rate means the site policy is turning trucks away; a rising refused rate with a client reason (visit-already-open, trailer-already-on-site, validation) means the gate clients send check-ins the rules refuse, not that the service is failing; a rising internal-error or concurrent-modification means the service itself is.",
+            ),
+        ],
     },
     {
         "key": "outbound-shipping",
         "title": "Outbound Shipping",
         "uid": "warehouse-outbound-shipping",
-        # The service registers NO OTel instrument and wires no otelchi/SDK (its
-        # observability page on origin/develop: no meter, no span, no /metrics,
-        # no OTEL_* variable read; the only OTel call is the propagator inject
-        # into outbox headers), so business_metrics stays empty (never invent a
-        # series), there is no outbox-lag gauge, and the HTTP RED and Go-runtime
-        # rows stay empty until it instruments itself. Its signals today are
-        # JSON logs (the Loki rows), probes and SQL. The Kong rows are live once
-        # the route exists (kongPlugins.prometheus in
-        # helm-values/outbound-shipping.yaml; the MCP route, when switched on,
-        # is `outbound-shipping-mcp`) and pod-restart alerts are live from day
-        # one. service_regex follows the fleet prefix convention (api and mcp
-        # pods start with `outbound-shipping`).
+        # Fleet observability standard on origin/develop: otelchi spans plus the otelchimetric RED metrics, and one business counter,
+        # outbound.loads.closures (Prometheus: outbound_loads_closures_total, legend by outcome: closed or failed; reason is the
+        # problem slug). There is no outbox-lag gauge. The image deployed before this was written predates the OTel setup, so the
+        # series appears after the next release is rolled; until then the business row is empty. The Kong rows are live once the
+        # route exists (kongPlugins.prometheus in helm-values/outbound-shipping.yaml; the MCP route is `outbound-shipping-mcp`) and
+        # pod-restart alerts are live from day one. service_regex follows the fleet prefix convention (api and mcp pods start with
+        # `outbound-shipping`).
         "service_regex": "outbound-shipping.*",
         "loki_app": "outbound-shipping",
-        "business_metrics": [],
+        "business_metrics": [
+            (
+                "outbound_loads_closures_total",
+                "outcome",
+                "Attempts to close an outbound load, by outcome (closed or failed); failures carry the problem slug as reason.",
+            ),
+        ],
     },
     {
         "key": "warehouse-ops-agent",
