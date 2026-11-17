@@ -31,6 +31,7 @@ config:
   inboundReceivingUrl: http://inbound-receiving.warehouse-systems.svc.cluster.local:80
   networkBaseUrl: http://vendor-connectivity.warehouse-systems.svc.cluster.local:80
   networkMode: live
+  networkSiteMap: site-1=AUS3
   networkVendorId: V-WS
   orderManagementUrl: http://order-management.warehouse-systems.svc.cluster.local:80
   pollInterval: 1m
