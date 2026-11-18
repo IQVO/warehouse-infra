@@ -15,3 +15,20 @@ mcp:
 resources:
   requests:
     cpu: 25m
+
+# Same treatment for the optional components that still requested the chart default of
+# 100m while using 1-10m: the agent node has no CPU requests left and the server node no pod slot,
+# so rollouts and new replicas stayed Pending. Requests only; limits and memory keep the chart defaults.
+a2a:
+  resources:
+    requests:
+      cpu: 25m
+analytics:
+  projector:
+    resources:
+      requests:
+        cpu: 25m
+  reports:
+    resources:
+      requests:
+        cpu: 25m
