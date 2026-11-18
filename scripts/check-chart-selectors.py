@@ -374,6 +374,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.packagingConsumerGroup": "vendor-connectivity-packaging",
         "config.listingConsumerGroup": "vendor-connectivity-listing",
         "config.sourcingConsumerGroup": "vendor-connectivity-sourcing",
+        "config.customerReturnsConsumerGroup": "vendor-connectivity-customer-returns",
         "config.nodeTopologyUrl": "http://node-topology.example.invalid",
         "config.offerAvailabilityUrl": "http://offer-availability.example.invalid",
         "config.shippingAndTrackingUrl": "http://shipping-and-tracking.example.invalid",
