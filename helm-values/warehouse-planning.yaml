@@ -69,6 +69,11 @@ observed:
 # (a new group would replay from the earliest retained message and rebuild the model).
 dockAppointments:
   consumerGroup: "warehouse-planning-dock-appointments"
+# Required by warehouse-planning's chart from its ADR 0022 on: the labour-standard consumer's
+# STABLE group id (warehouse.labor-performance.events: LaborStandardDefined/Revised). Landed
+# before the chart needs it; an unknown values key is ignored by the current chart.
+laborStandard:
+  consumerGroup: "warehouse-planning-labor-standards"
 
 # Analytics read side (ADR 0005). The projector's consumer group is a FIXED, stable id (fleet charter naming
 # `<ctx>-analytics`): a restarted pod resumes from its committed offsets, and a
