@@ -21,6 +21,14 @@ config:
 
 kafka:
   enabled: true
+
+# Labour-plan copy (ADR 0043): LABOUR_PLAN_CONSUMER_GROUP, the consumer of warehouse-planning's
+# LabourPlanCommitted on warehouse.warehouse-planning.events. A STABLE, shared group id (a durable
+# Postgres copy, not a per-process replay cache). Landed before the chart reads it; an unknown
+# values key is ignored by the current chart, and the chart default carries the same value.
+labourPlan:
+  consumerGroup: "workforce-management-labour-plans"
+
 analytics:
   enabled: true
 
