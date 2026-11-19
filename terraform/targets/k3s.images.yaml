@@ -1,6 +1,6 @@
 # Written by scripts/k3s-pin-images.sh from a publish-images run (ADR 0011).
 # image: tag of ghcr.io/iqvo/warehouse-infra/<app>; frontend: tag of <app>-frontend.
-run: 44409669495
+run: 44438696401
 images:
   checkout:
     image: 1332afc-arm64
@@ -120,4 +120,4 @@ images:
     frontend: 4811e77-308f597-arm64
     image: 4811e77-arm64
   yard-management:
-    image: 36f42bd-arm64
+    image: 44d605e-arm64
