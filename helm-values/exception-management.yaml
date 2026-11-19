@@ -101,6 +101,10 @@ config:
 # (the chart refuses an empty one).
 analytics:
   enabled: true
+  reports:
+    route:
+      enabled: true
+      path: /api/exception-management/reports
   consumerGroup: "exception-management-analytics"
   existingSecret: exception-management-analytics-db
 

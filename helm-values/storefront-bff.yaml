@@ -31,3 +31,14 @@ service:
   port: 80
   targetPort: 8080
   type: ClusterIP
+
+# Kong plugins (cors, prometheus, opentelemetry) rendered by the chart's kong-plugins.yaml and attached to
+# every route by annotation (fleet decision 2026-10-13). The CORS origin and the OTLP endpoint come from
+# _platform.yaml.
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true

@@ -83,6 +83,10 @@ kafka:
   enabled: true
 analytics:
   enabled: true
+  reports:
+    route:
+      enabled: true
+      path: /api/slotting-optimization/reports
   consumerGroup: "slotting-optimization-analytics"
   existingSecret: slotting-optimization-analytics-db
 

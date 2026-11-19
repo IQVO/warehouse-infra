@@ -71,6 +71,10 @@ config:
 # chart refuses an empty one).
 analytics:
   enabled: true
+  reports:
+    route:
+      enabled: true
+      path: /api/pick-face-replenishment/reports
   consumerGroup: "pick-face-replenishment-analytics"
   existingSecret: pick-face-replenishment-analytics-db
 
