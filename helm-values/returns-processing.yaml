@@ -79,6 +79,10 @@ config:
 # (the chart refuses an empty one).
 analytics:
   enabled: true
+  reports:
+    route:
+      enabled: true
+      path: /api/returns-processing/reports
   consumerGroup: "returns-processing-analytics"
   existingSecret: returns-processing-analytics-db
 
