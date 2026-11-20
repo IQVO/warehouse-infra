@@ -195,6 +195,18 @@ variable "deploy_kafka" {
   default     = true
 }
 
+variable "deploy_mosquitto" {
+  description = "Whether to run the Eclipse Mosquitto MQTT broker for the WCS tier (mosquitto.tf)."
+  type        = bool
+  default     = true
+}
+
+variable "mosquitto_image" {
+  description = "Eclipse Mosquitto image for the MQTT broker (mosquitto.tf)."
+  type        = string
+  default     = "eclipse-mosquitto:2.0.20"
+}
+
 variable "kafka_chart_version" {
   description = <<-EOT
     Bitnami kafka chart version, pulled from the OCI registry

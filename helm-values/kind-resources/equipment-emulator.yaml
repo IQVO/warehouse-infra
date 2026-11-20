@@ -1,0 +1,5 @@
+# CPU-request overlay for equipment-emulator (the repo's convention; see the other files in this directory).
+# Only requests.cpu is lowered; limits and memory keep the chart defaults.
+resources:
+  requests:
+    cpu: 25m
