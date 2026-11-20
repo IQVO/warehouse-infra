@@ -86,6 +86,14 @@ applications:
     database: true
     analytics: true
 
+  # equipment-emulator: simulated AMR robots (VDA 5050) and AS/RS (telegrams)
+  # for the WCS; speaks MQTT to the Mosquitto broker (10-platform/mosquitto.tf).
+  # `other`, not `service`: no database and no /api/<name> route (HTTP is only
+  # /healthz, /readyz and the fault-injection API, cluster-internal).
+  equipment-emulator:
+    kind: other
+    repo_owner: IQVO
+
   ecosystem:
     kind: other
     repo_owner: IQVO
