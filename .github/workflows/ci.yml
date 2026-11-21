@@ -228,6 +228,11 @@ jobs:
           path: equipment-emulator
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/customer-returns
+          ref: develop
+          path: customer-returns
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/delivery-promise
           ref: develop
           path: delivery-promise
@@ -556,6 +561,11 @@ jobs:
           path: equipment-emulator
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/customer-returns
+          ref: develop
+          path: customer-returns
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/delivery-promise
           ref: develop
           path: delivery-promise
@@ -806,6 +816,11 @@ jobs:
           repository: IQVO/equipment-emulator
           ref: develop
           path: equipment-emulator
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/customer-returns
+          ref: develop
+          path: customer-returns
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: IQVO/delivery-promise
