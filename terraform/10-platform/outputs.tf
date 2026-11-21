@@ -137,6 +137,6 @@ output "observability_urls" {
 }
 
 output "kiali_url" {
-  description = "Fixed localhost URL for the Kiali service-mesh UI, reachable once scripts/k3s-edges.sh is running. Empty when deploy_kiali or deploy_observability is false."
-  value       = var.deploy_kiali && var.deploy_observability ? "http://localhost:${local.cluster.ports.kiali_host_port}" : ""
+  description = "Fixed localhost URL for the Kiali service-mesh UI, reachable once scripts/k3s-edges.sh is running. Empty when deploy_kiali, deploy_istio or deploy_observability is false."
+  value       = var.deploy_kiali && var.deploy_istio && var.deploy_observability ? "http://localhost:${local.cluster.ports.kiali_host_port}" : ""
 }

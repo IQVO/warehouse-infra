@@ -37,7 +37,11 @@ resource "helm_release" "istio_base" {
   })]
 }
 
+# Gated on deploy_istio (default false): there are no sidecars, so istiod has
+# nothing to configure (ADR 0011). Removing the release also removes its HPA,
+# PDB and the sidecar-injector webhook; istio-base above keeps the CRDs.
 resource "helm_release" "istiod" {
+  count      = var.deploy_istio ? 1 : 0
   depends_on = [helm_release.istio_base]
 
   name       = "istiod"
@@ -67,4 +71,10 @@ resource "helm_release" "istiod" {
       }
     }
   })]
+}
+
+# It had no count before deploy_istio existed.
+moved {
+  from = helm_release.istiod
+  to   = helm_release.istiod[0]
 }

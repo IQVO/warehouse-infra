@@ -134,6 +134,19 @@ variable "pgbouncer_image_tag" {
   default     = "1.24.1-debian-12-r10"
 }
 
+variable "deploy_istio" {
+  description = <<-EOT
+    Whether to run istiod (istio.tf). Off: no workload has an istio-proxy sidecar
+    (the apps namespace is istio-injection=disabled, ADR 0011) and there is no
+    PeerAuthentication, AuthorizationPolicy, VirtualService, DestinationRule or
+    Istio Gateway, so istiod serves nothing while it holds a pod slot (and its
+    HPA may scale it to 5) on a 110-pod node. istio-base (the CRDs, no pods)
+    stays installed. Set true to bring the control plane back.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "istio_version" {
   description = "Istio chart version for istio/base and istio/istiod (must match each other)."
   type        = string
@@ -331,9 +344,9 @@ variable "grafana_admin_password" {
 # ---------------------------------------------------------------------------
 
 variable "deploy_kiali" {
-  description = "Whether to install Kiali (kiali.tf). Depends on Istio and Prometheus; has no effect if either is off."
+  description = "Whether to install Kiali (kiali.tf). Depends on Istio (deploy_istio) and Prometheus; has no effect if either is off. Off by default: with no sidecars there is no mesh traffic to draw, and the pod takes a slot on a 110-pod node."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "kiali_chart_version" {
@@ -466,3 +479,18 @@ variable "ghcr_token" {
   sensitive   = true
 }
 
+# ---------------------------------------------------------------------------
+# ArgoCD
+# ---------------------------------------------------------------------------
+
+variable "argocd_applicationset_enabled" {
+  description = <<-EOT
+    Whether the ArgoCD ApplicationSet controller runs (argocd.tf). Off: every
+    Application is created directly by modules/application and no
+    ApplicationSet object exists. argo-cd chart 7.7.11 has no
+    applicationSet.enabled key, so the switch is applicationSet.replicas
+    (0 when false, 1 when true).
+  EOT
+  type        = bool
+  default     = false
+}
