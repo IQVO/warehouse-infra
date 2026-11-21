@@ -42,8 +42,10 @@ resource "helm_release" "argocd" {
     yamlencode({
       dex           = { enabled = false }
       notifications = { enabled = false }
+      # chart 7.7.11 has no applicationSet.enabled key (it was silently
+      # ignored and the controller kept running): replicas is the switch.
       applicationSet = {
-        enabled = false
+        replicas = var.argocd_applicationset_enabled ? 1 : 0
       }
     }),
   ]
