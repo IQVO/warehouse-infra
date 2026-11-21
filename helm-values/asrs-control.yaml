@@ -41,3 +41,21 @@ image:
 
 service:
   type: ClusterIP
+
+# Read-only MCP server (cmd/mcp) and A2A agent (cmd/a2a), the repo's ADR 0005
+# (agentic standard v2): both read the asrs-control database only, no auth by
+# the fleet decision. Kong routes /api/mcp/asrs-control (rewritten to /mcp) and
+# /api/a2a/asrs-control (rewritten to /, so the Agent Card stays reachable
+# under the prefix); parentRefs come from _platform.yaml. The chart's requests
+# (20m CPU, 32Mi) are already below the kind-resources 25m convention, so
+# kind-resources/asrs-control.yaml needs no mcp/a2a block.
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/asrs-control
+a2a:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/a2a/asrs-control
