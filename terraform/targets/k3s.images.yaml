@@ -1,6 +1,6 @@
 # Written by scripts/k3s-pin-images.sh from a publish-images run (ADR 0011).
 # image: tag of ghcr.io/iqvo/warehouse-infra/<app>; frontend: tag of <app>-frontend.
-run: 44891643644
+run: 44893139151
 images:
   asrs-control:
     image: 963e335-arm64
@@ -20,6 +20,8 @@ images:
     image: a1a029c-arm64
   ecosystem:
     frontend: 482cec3-99062e8-arm64
+  equipment-emulator:
+    image: b58201e-arm64
   exception-management:
     frontend: 594aa1e-99062e8-arm64
     image: 594aa1e-arm64
