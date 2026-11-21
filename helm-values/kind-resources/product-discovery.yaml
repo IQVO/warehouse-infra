@@ -1,10 +1,14 @@
 # kind CPU-request overlay for product-discovery (see customer-ordering for the rationale:
 # one kind worker, chart defaults request 50-100m per container, real use is a
-# fraction of that). Only requests.cpu is lowered; limits and memory keep the
+# fraction of that). Only requests.cpu is lowered; limits keep the
 # chart defaults. The Application's last value file (ADR 0002 D2).
+# Memory (capacity step 2, 2026-11-21): requests.memory = max(32Mi, 1.5 x the 24 h max working set
+# measured on k3s, rounded up to 16Mi); limits keep the chart defaults unless noted. Values-only:
+# ArgoCD rolls each touched Deployment when this file lands on develop.
 resources:
   requests:
     cpu: 25m
+    memory: 32Mi
 # The MCP server is a read-only L1 process that idles at 1-10m CPU and under 10Mi of memory
 # (measured on the running customer-ordering, delivery-promise and inbound-receiving MCP pods), while the
 # chart default requests 100m / 128Mi. The agent node has about 40m CPU and 0.5Gi of requests left and the
@@ -18,8 +22,9 @@ mcp:
 
 # Same treatment for the optional components that still requested the chart default of
 # 100m while using 1-10m: the agent node has no CPU requests left and the server node no pod slot,
-# so rollouts and new replicas stayed Pending. Requests only; limits and memory keep the chart defaults.
+# so rollouts and new replicas stayed Pending. Requests only; limits keep the chart defaults.
 a2a:
   resources:
     requests:
       cpu: 25m
+      memory: 32Mi
