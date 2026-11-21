@@ -1,0 +1,5 @@
+# CPU-request overlay for asrs-control (see checkout's file for the rationale).
+# Only requests.cpu is lowered; limits and memory keep the chart defaults.
+resources:
+  requests:
+    cpu: 25m

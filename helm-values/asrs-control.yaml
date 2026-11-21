@@ -1,0 +1,43 @@
+# asrs-control -- the WCS AS/RS controller (WCS tier, Generic; plan WCS-02,
+# first release v0.1.0): rack position assignment with velocity and double-deep
+# depth rules, exactly one storage job per aisle at a time (single scheduler,
+# the chart refuses replicaCount other than 1 -- its ADR 0002), port
+# presentation in request order, invisible reshuffles and PackML equipment
+# state, speaking telegram protocol v1 over MQTT to the AS/RS simulated by
+# equipment-emulator (helm-values/equipment-emulator.yaml: the chart's default
+# layout IS that world's asrs block, so nothing is overridden here). Publishes
+# CloudEvents on warehouse.asrs-control.events and .analytics through the
+# transactional outbox; topics auto-create on first write (the fleet norm,
+# kafka.tf has no topic resources), and asrs-control consumes nothing.
+#
+# No consumers yet: material-flow-control (plan WCS-04) is the designed caller
+# of this REST interface in-cluster; until then the Kong route below is
+# ops/debug surface only. Real Postgres and real Kafka and real MQTT only
+# (missing mandatory env is a boot error naming it). Brokers, the Gateway
+# parentRefs, the CORS origin and the OTLP endpoint come from _platform.yaml;
+# the MQTT broker URL and the layout from the chart defaults (both match this
+# cluster); the image tag from Terraform (the Application's valuesObject); the
+# CPU request from kind-resources/.
+
+database:
+  existingSecret: asrs-control-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+
+gatewayApi:
+  enabled: true
+
+kongPlugins:
+  cors:
+    enabled: true
+  prometheus:
+    enabled: true
+  opentelemetry:
+    enabled: true
+
+image:
+  pullPolicy: IfNotPresent
+  repository: warehouse/asrs-control
+
+service:
+  type: ClusterIP

@@ -138,6 +138,32 @@ def row(y, title):
 # ---------------------------------------------------------------------------
 CONTEXTS = [
     {
+        "key": "asrs-control",
+        "title": "WCS — AS/RS Control",
+        "uid": "warehouse-wcs-asrs-control",
+        # Fleet observability standard on asrs-control develop (its ADR 0004):
+        # otelchi spans plus RED metrics on the api binary, and the business
+        # counters/gauges its observability page names. Failed jobs by reason is
+        # the WCS row that matters: EQUIPMENT_FAULT opens an exception case and a
+        # rising EQUIPMENT_UNREACHABLE means the PLC link is dropping ACKs.
+        # asrs_control.outbox.lag drives the "Transactional outbox" row.
+        "service_regex": "asrs-control.*",
+        "loki_app": "asrs-control",
+        "outbox_lag_metric": "asrs_control_outbox_lag",
+        "business_metrics": [
+            (
+                "asrs_control_storage_jobs_failed_total",
+                "reason",
+                "Storage jobs failed, by reason. EQUIPMENT_FAULT opens an exception-management case; a rising EQUIPMENT_UNREACHABLE means the MQTT telegram link is dropping ACKs; CANCELLED counts cancellations.",
+            ),
+            (
+                "asrs_control_telegrams_retransmitted_total",
+                "telegram_type",
+                "PLC telegrams resent after 2s without an ACK, by type: a rising rate precedes EQUIPMENT_UNREACHABLE failures.",
+            ),
+        ],
+    },
+    {
         "key": "order-management",
         "title": "Order Management",
         "uid": "warehouse-order-management",
