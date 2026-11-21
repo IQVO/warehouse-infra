@@ -3,11 +3,15 @@
 # local kind cluster is ONE worker with the Docker VM's 10 CPUs; chart defaults
 # request 50-100m per container while real use is ~10% of that, so rolling
 # updates (maxSurge 1 per Deployment) could not schedule. Only requests.cpu is
-# lowered; limits and memory keep the chart defaults.
+# lowered; limits keep the chart defaults.
 # The Application's last value file (ADR 0002 D2); Helm deep-merges it.
+# Memory (capacity step 2, 2026-11-21): requests.memory = max(32Mi, 1.5 x the 24 h max working set
+# measured on k3s, rounded up to 16Mi); limits keep the chart defaults unless noted. Values-only:
+# ArgoCD rolls each touched Deployment when this file lands on develop.
 resources:
   requests:
     cpu: 25m
+    memory: 32Mi
 # The optional components (mcp, a2a) get the same treatment as the api: their
 # chart defaults request 100m while real use is a fraction; the packed lab
 # worker could not schedule them otherwise.
@@ -15,7 +19,9 @@ mcp:
   resources:
     requests:
       cpu: 25m
+      memory: 32Mi
 a2a:
   resources:
     requests:
       cpu: 25m
+      memory: 32Mi
