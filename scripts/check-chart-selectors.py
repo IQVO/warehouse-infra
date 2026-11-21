@@ -432,6 +432,19 @@ CHARTS: dict[str, dict[str, str]] = {
     "../../warehouse-ops-agent/charts/warehouse-ops-agent": {},
     "../../warehouse-console/charts/warehouse-console": {},
     "../../ecosystem/charts/ecosystem": {},
+    # asrs-control (WCS AS/RS controller, plan WCS-02): the api plus the two
+    # optional read-only agent components (mcp, a2a; its ADR 0005), each with
+    # its own Deployment+Service pair. Real Postgres and real Kafka only, so
+    # the chart refuses to render without a database source and brokers.
+    # Dummies, no password; the MQTT URL keeps its chart default.
+    "../../asrs-control/charts/asrs-control": {
+        "mcp.enabled": "true", "a2a.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+    },
+    # equipment-emulator (WCS test infrastructure, not a bounded context):
+    # one Deployment+Service, no optional components, no database.
+    "../../equipment-emulator/charts/equipment-emulator": {},
 }
 
 
