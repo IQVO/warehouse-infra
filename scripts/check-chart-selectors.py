@@ -445,6 +445,23 @@ CHARTS: dict[str, dict[str, str]] = {
     # equipment-emulator (WCS test infrastructure, not a bounded context):
     # one Deployment+Service, no optional components, no database.
     "../../equipment-emulator/charts/equipment-emulator": {},
+    # customer-returns (retail-network bounded context): the api plus the
+    # optional read-only agent components (mcp, a2a) and the analytics
+    # projector/reports pair, each with its own Deployment (+Service). Real
+    # Postgres and real Kafka only: the chart refuses to render without a
+    # database source, brokers, the four stable consumer groups, and (analytics
+    # on) an analytical DSN and consumer group. Dummies, no password.
+    "../../customer-returns/charts/customer-returns": {
+        "mcp.enabled": "true", "a2a.enabled": "true", "analytics.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.orderConsumerGroup": "customer-returns-order",
+        "config.topologyConsumerGroup": "customer-returns-topology",
+        "config.sourcingConsumerGroup": "customer-returns-sourcing",
+        "config.vendorConsumerGroup": "customer-returns-vendor",
+        "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
+        "analytics.projector.consumerGroup": "customer-returns-analytics",
+    },
 }
 
 
