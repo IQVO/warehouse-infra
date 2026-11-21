@@ -19,7 +19,7 @@ amends or supersedes an earlier one with its own ADR
 | [0009](0009-network-fulfillment-live-against-in-cluster-network.md) | network-fulfillment runs live against the in-cluster retail network | Proposed (2026-10-24). Replaces the "stub permanently" comment in `helm-values/network-fulfillment.yaml` |
 | [0010](0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted (2026-11-02). Seed script and values comment follow the renamed routes |
 | [0011](0011-deploy-to-an-existing-k3s-from-ghcr.md) | Deploy to an existing k3s cluster, with images from ghcr.io | Accepted (2026-11-08). k3s is the only deploy target (kind banned); images come from GitHub (publish-images, pinned) |
-| [0012](0012-agent-adapters-share-one-pod-per-context.md) | Agent adapters share one pod per context | Proposed (2026-11-21). Capacity step 3: optional `agents.colocate` (mcp + a2a in one `<ctx>-agents` pod); D1-D4 await the owner's go; the selector check guards it; nothing deployed changes |
+| [0012](0012-agent-adapters-share-one-pod-per-context.md) | Agent adapters share one pod per context | Accepted (2026-11-21). Capacity step 3: optional `agents.colocate` (mcp + a2a in one `<ctx>-agents` pod); D1-D4 decided by the owner (shared fate, release every repo, RollingUpdate, pin then flip); the selector check guards it; pilot asrs-control |
 
 ## Adding an ADR
 

@@ -2,11 +2,12 @@
 
 ## Status
 
-Proposed (2026-11-21). Capacity step 3 (plan `warehouse-systems/.hermes/plans/2026-11-21-capacity-step3-agents-pod.md`).
-Decisions D1 to D4 below are **proposed**; they need the owner's go before the first service chart PR. Nothing
-deployed changes with this ADR: no `helm-values/`, `terraform/apps.yaml`, image pin or Terraform resource is
-touched. Builds on [ADR 0011](0011-deploy-to-an-existing-k3s-from-ghcr.md) (the k3s target and its 110-pod node
-limit) and [ADR 0002](0002-application-delivery-boundary.md) (charts in the service repos, values here).
+Accepted (2026-11-21, decided by the owner). Proposed earlier the same day. Capacity step 3 (plan
+`warehouse-systems/.hermes/plans/2026-11-21-capacity-step3-agents-pod.md`). Decisions D1 to D4 below are
+**decided**. This ADR itself deploys nothing: each context changes only when its chart ships `agents.colocate` and
+`helm-values/<ctx>.yaml` turns it on (pilot asrs-control first). Builds on
+[ADR 0011](0011-deploy-to-an-existing-k3s-from-ghcr.md) (the k3s target and its 110-pod node limit) and
+[ADR 0002](0002-application-delivery-boundary.md) (charts in the service repos, values here).
 
 ## Context
 
@@ -52,19 +53,19 @@ limit) and [ADR 0002](0002-application-delivery-boundary.md) (charts in the serv
    with `agents.colocate=true`, and asserts that every Service's named `targetPort` resolves to exactly one
    containerPort of the one Deployment it selects.
 
-### Proposed decisions (owner's go needed)
+### Decisions (decided by the owner, 2026-11-21)
 
-- **D1, shared fate: accept it (recommended).** One agents pod per context: if either container is unready, both
+- **D1, shared fate: accepted.** One agents pod per context: if either container is unready, both
   the MCP and the A2A endpoint of that context are out of the Service endpoints, and mcp and a2a scale together
   (`replicas` = `mcp.replicaCount`). The api pod stays isolated. This gives up ADR-0008's "scale independently"
   between the two adapters for 35 pod slots; a context that ever needs separate scaling is un-flipped.
-- **D2, release every repo (recommended).** Every deploy uses a version that exists as a GitHub release/tag, so
+- **D2, release every repo: decided.** Every deploy uses a version that exists as a GitHub release/tag, so
   each chart PR ships through the normal develop -> main release (35 releases), even though ArgoCD reads the
   chart from `develop` and the image does not change. The lighter variant (no release for the chart-only change)
   is rejected under that rule.
-- **D3, RollingUpdate stays the default (recommended)** for `<ctx>-agents` after the cutover (no downtime on pin
+- **D3, RollingUpdate stays the default: decided** for `<ctx>-agents` after the cutover (no downtime on pin
   rolls); `agents.strategy: {type: Recreate}` is a per-app overlay lever only when no surge slot is free.
-- **D4, pin first, then flip (recommended).** Within a batch: release, publish, pin and apply the image on the
+- **D4, pin first, then flip: decided.** Within a batch: release, publish, pin and apply the image on the
   still-standalone layout first; flip `agents.colocate` in a separate PR afterwards. Flip-before-pin (the old
   pinned image already holds `/app/mcp` and `/app/a2a`) stays available when capacity is too tight to roll.
 
