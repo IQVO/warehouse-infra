@@ -96,9 +96,12 @@ resource "helm_release" "postgresql" {
         size = "3Gi"
       }
 
+      # Capacity step 2 (2026-11-21): 947Mi 24 h max working set = 92% of the
+      # 1Gi limit while requesting 256Mi (OOM risk). request = 1.25 x 24 h max
+      # (1216Mi), limit = 1.9 x 24 h max (1792Mi).
       resources = {
-        requests = { cpu = "100m", memory = "256Mi" }
-        limits   = { cpu = "1000m", memory = "1Gi" }
+        requests = { cpu = "100m", memory = "1216Mi" }
+        limits   = { cpu = "1000m", memory = "1792Mi" }
       }
     }
   })]
