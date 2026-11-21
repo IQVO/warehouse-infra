@@ -8,8 +8,8 @@
 # into istio-system alongside istiod (the conventional placement for a mesh
 # add-on, and the namespace already carries the "mesh" tier label).
 #
-# Gated on BOTH deploy_kiali and deploy_observability: Kiali is not useful
-# without a Prometheus to read from, and `external_services.prometheus.url`
+# Gated on deploy_kiali, deploy_istio and deploy_observability: Kiali is not
+# useful without istiod or without a Prometheus to read from, and `external_services.prometheus.url`
 # below hard-codes the in-cluster DNS name from observability.tf.
 #
 # auth.strategy = "anonymous": there is no IdP in this cluster (same call
@@ -19,7 +19,7 @@
 # ---------------------------------------------------------------------------
 
 resource "helm_release" "kiali" {
-  count = var.deploy_kiali && var.deploy_observability ? 1 : 0
+  count = var.deploy_kiali && var.deploy_istio && var.deploy_observability ? 1 : 0
 
   depends_on = [
     helm_release.istiod,

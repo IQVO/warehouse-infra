@@ -75,7 +75,7 @@ or synthetic.
   │   │  application, created by a Job: see "Databases")               │   │
   │   └───────────────────────────────────────────────────────────────┘   │
   │                                                                       │
-  │   ns: istio-system   istiod (mesh control plane; no sidecars)         │
+  │   ns: istio-system   Istio CRDs only (istiod, Kiali off: no sidecars) │
   │   ns: argocd         lean ArgoCD (no Dex, notifications, ApplicationSet) │
   └───────────────────────────────────────────────────────────────────────┘
 ```
@@ -1262,7 +1262,9 @@ resources, so Terraform detects and repairs drift
 ([ADR 0006](docs/adr/0006-declarative-gateway-api.md)); the CRDs themselves are k3s's own
 (ADR 0011).
 
-**Istio sidecars are off.** The mesh is installed (`istiod`, Kiali) but the applications namespace is
+**Istio sidecars are off.** Only the Istio CRDs (`istio-base`) are installed; `istiod` and Kiali are off
+(`deploy_istio = false`, `deploy_kiali = false`) because with no sidecars they serve nothing and each
+holds a pod slot. Set both to `true` to bring the control plane back. The applications namespace is
 `istio-injection=disabled`: a stock k3s node's inotify limit (128 instances, a host setting we may
 not change) is exhausted by the sidecars around 50 pods, and they also take ~100 containers from a
 node capped at 110 pods (ADR 0011). Sidecar mode rather than ambient stays the intended shape if
