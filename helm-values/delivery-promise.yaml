@@ -76,6 +76,11 @@ a2a:
     enabled: true
     path: /api/a2a/delivery-promise
 
+# Capacity step 3 (ADR 0012): cmd/mcp and cmd/a2a as the two containers of ONE delivery-promise-agents
+# Deployment (chart agents.colocate, IQVO/delivery-promise#101). The Services, routes and URLs are unchanged.
+agents:
+  colocate: true
+
 service:
   port: 80
   targetPort: 8080
