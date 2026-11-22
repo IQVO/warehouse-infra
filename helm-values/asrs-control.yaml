@@ -59,3 +59,9 @@ a2a:
   route:
     enabled: true
     path: /api/a2a/asrs-control
+
+# Capacity step 3 (ADR 0012, pilot): run cmd/mcp and cmd/a2a as the two containers of ONE asrs-control-agents
+# pod instead of two pods (-1 pod slot). The -mcp/-a2a Services, routes and URLs are unchanged. Rollback: remove
+# this block (ArgoCD recreates the standalone Deployments, then prunes the agents one).
+agents:
+  colocate: true
