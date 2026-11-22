@@ -1,0 +1,14 @@
+# CPU-request overlay for amr-fleet-control (generated from charts/amr-fleet-control/values.yaml on
+# develop): the api, mcp and a2a containers request 25m; limits and memory keep the chart defaults.
+# The Application's last value file (ADR 0002 D2); Helm deep-merges it.
+resources:
+  requests:
+    cpu: 25m
+mcp:
+  resources:
+    requests:
+      cpu: 25m
+a2a:
+  resources:
+    requests:
+      cpu: 25m

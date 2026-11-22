@@ -491,6 +491,15 @@ CHARTS: dict[str, dict[str, str]] = {
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
     },
+    # amr-fleet-control (WCS VDA 5050 master control, plan WCS-03): the api plus
+    # the two optional read-only agent components (mcp, a2a), standalone and
+    # (agents.colocate=true, ADR 0012) as one agents pod. Real Postgres and
+    # real Kafka only; dummies, no password; the MQTT URL keeps its default.
+    "../../amr-fleet-control/charts/amr-fleet-control": {
+        "mcp.enabled": "true", "a2a.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+    },
     # equipment-emulator (WCS test infrastructure, not a bounded context):
     # one Deployment+Service, no optional components, no database.
     "../../equipment-emulator/charts/equipment-emulator": {},

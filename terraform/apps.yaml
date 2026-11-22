@@ -106,6 +106,16 @@ applications:
     kind: other
     repo_owner: IQVO
 
+  # amr-fleet-control: the WCS VDA 5050 master control (single api Deployment:
+  # REST :8080 + the one MQTT fleet link + the transactional-outbox relay, plus a
+  # read-only MCP server (cmd/mcp) and a read-only A2A agent (cmd/a2a)). Speaks
+  # MQTT to the Mosquitto broker (10-platform/mosquitto.tf) beside the equipment
+  # emulator; no analytics read side, no console remote.
+  amr-fleet-control:
+    kind: service
+    repo_owner: IQVO
+    database: true
+
   ecosystem:
     kind: other
     repo_owner: IQVO

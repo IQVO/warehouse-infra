@@ -54,6 +54,7 @@ CHARTS := \
 	../storefront-bff/charts/storefront-bff \
 	../storefront-web/charts/storefront-web \
 	../asrs-control/charts/asrs-control \
+	../amr-fleet-control/charts/amr-fleet-control \
 	../equipment-emulator/charts/equipment-emulator \
 	../customer-returns/charts/customer-returns
 
