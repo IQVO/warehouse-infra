@@ -124,6 +124,11 @@ a2a:
   route:
     enabled: true
     path: /api/a2a/task-interleaving
+
+# Capacity step 3 (ADR 0012): cmd/mcp and cmd/a2a as the two containers of ONE task-interleaving-agents
+# Deployment (chart agents.colocate, IQVO/task-interleaving#84). The Services, routes and URLs are unchanged.
+agents:
+  colocate: true
 service:
   port: 80
   targetPort: 8080
