@@ -108,6 +108,11 @@ a2a:
     enabled: true
     path: /api/a2a/order-sourcing
 
+# Capacity step 3 (ADR 0012): cmd/mcp and cmd/a2a as the two containers of ONE order-sourcing-agents
+# Deployment (chart agents.colocate, IQVO/order-sourcing#85). The Services, routes and URLs are unchanged.
+agents:
+  colocate: true
+
 service:
   port: 80
   targetPort: 8080
