@@ -55,6 +55,7 @@ CHARTS := \
 	../storefront-web/charts/storefront-web \
 	../asrs-control/charts/asrs-control \
 	../amr-fleet-control/charts/amr-fleet-control \
+	../material-flow-control/charts/material-flow-control \
 	../equipment-emulator/charts/equipment-emulator \
 	../customer-returns/charts/customer-returns
 

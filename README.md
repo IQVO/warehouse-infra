@@ -142,6 +142,7 @@ Every bounded-context service's OLTP pod listens on container port `8080`
 |--------------------------------------------|------------------------|------------|
 | `<service>` (16 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master, inbound-receiving, slotting-optimization, pick-face-replenishment, task-interleaving, returns-processing, exception-management) | `80 → 8080` | OLTP REST API, routed by Kong — except returns-processing and exception-management, whose charts render no `gatewayApi` HTTPRoute yet (ClusterIP only; see their paragraph below) |
 | `amr-fleet-control`, `amr-fleet-control-mcp`, `amr-fleet-control-a2a` | `80 → 8080`, `8090 → 8090`, `8093 → 8093` | WCS VDA 5050 master control (plan WCS-03): OLTP REST API routed by Kong, plus its read-only MCP server and A2A agent, both served by the one `amr-fleet-control-agents` pod (`agents.colocate`, ADR 0012); MQTT to `mosquitto:1883` beside equipment-emulator |
+| `material-flow-control`, `material-flow-control-mcp`, `material-flow-control-a2a` | `80 → 8080`, `8090 → 8090`, `8093 → 8093` | WCS material flow controller (plan WCS-04): OLTP REST API routed by Kong (relationship 1, `POST /transport-requests`), plus its read-only MCP server and A2A agent, both served by the one `material-flow-control-agents` pod (`agents.colocate`, ADR 0012); consumes `warehouse.asrs-control.events` and `warehouse.amr-fleet-control.events`, calls asrs-control and amr-fleet-control over HTTP |
 | `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — every context whose `helm-values/<context>.yaml` sets `mcp.enabled` (all 16 above, plus network-fulfillment and network-inventory-planning) |
 | `<service>-reports`                        | `80 → 8092`             | Analytics read-only REST API (only where `analytics.enabled`, see `locals.tf`'s `analytics_services`) |
 | `<service>-frontend`                       | `80 → 8080`             | Module Federation remote, proxied by the web gateway at `/mfes/<context>/` |
@@ -738,6 +739,9 @@ collides head-on with the console shell's own client-side routes —
 | `http://localhost:8000/api/amr-fleet-control/*`           | `/api/amr-fleet-control` → `/*`      | `amr-fleet-control.warehouse-systems.svc.cluster.local`     |
 | `http://localhost:8000/api/mcp/amr-fleet-control`         | `/api/mcp/amr-fleet-control` → `/mcp` | `amr-fleet-control-mcp.warehouse-systems.svc.cluster.local:8090` |
 | `http://localhost:8000/api/a2a/amr-fleet-control/*`       | `/api/a2a/amr-fleet-control` → `/*`  | `amr-fleet-control-a2a.warehouse-systems.svc.cluster.local:8093` |
+| `http://localhost:8000/api/material-flow-control/*`       | `/api/material-flow-control` → `/*`  | `material-flow-control.warehouse-systems.svc.cluster.local` |
+| `http://localhost:8000/api/mcp/material-flow-control`     | `/api/mcp/material-flow-control` → `/mcp` | `material-flow-control-mcp.warehouse-systems.svc.cluster.local:8090` |
+| `http://localhost:8000/api/a2a/material-flow-control/*`   | `/api/a2a/material-flow-control` → `/*` | `material-flow-control-a2a.warehouse-systems.svc.cluster.local:8093` |
 | `http://localhost:8000/api/warehouse-ops-agent/*`         | `/api/warehouse-ops-agent` → `/*`    | `warehouse-ops-agent.warehouse-systems.svc.cluster.local`   |
 
 Container port 8080 is not an assumption: every `cmd/*/main.go` defaults

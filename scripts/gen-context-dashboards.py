@@ -182,6 +182,24 @@ CONTEXTS = [
         ],
     },
     {
+        "key": "material-flow-control",
+        "title": "WCS — Material Flow Control",
+        "uid": "warehouse-wcs-material-flow-control",
+        # WCS service on the fleet observability standard (ADR 0007): Go-runtime and otelchi RED metrics plus one
+        # business counter, material_flow_control.transports.ended (Prometheus: material_flow_control_transports_ended_total,
+        # purpose, outcome completed or failed, reason = the TransportFailed reason).
+        "service_regex": "material-flow-control.*",
+        "loki_app": "material-flow-control",
+        "outbox_lag_metric": "material_flow_control_outbox_lag_seconds",
+        "business_metrics": [
+            (
+                "material_flow_control_transports_ended_total",
+                "outcome",
+                "Transports ended, by purpose and outcome (completed or failed; failed carries the reason: CLARIFICATION, SUBSYSTEM_FAULT, CANCELLED or TIMEOUT). A rising SUBSYSTEM_FAULT means a subsystem refuses or fails legs; a rising CLARIFICATION means scans disagree with the container registry.",
+            ),
+        ],
+    },
+    {
         "key": "order-management",
         "title": "Order Management",
         "uid": "warehouse-order-management",

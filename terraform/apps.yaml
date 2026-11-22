@@ -116,6 +116,16 @@ applications:
     repo_owner: IQVO
     database: true
 
+  # material-flow-control: the WCS material flow controller (single api Deployment:
+  # REST :8080 + the asrs-control and amr-fleet-control fact consumers + the subsystem
+  # command dispatcher + the outbox relay, plus a read-only MCP server (cmd/mcp) and a
+  # read-only A2A agent (cmd/a2a)). Calls asrs-control and amr-fleet-control over HTTP;
+  # never speaks MQTT.
+  material-flow-control:
+    kind: service
+    repo_owner: IQVO
+    database: true
+
   ecosystem:
     kind: other
     repo_owner: IQVO
