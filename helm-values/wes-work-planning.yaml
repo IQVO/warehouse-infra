@@ -143,6 +143,11 @@ a2a:
   route:
     enabled: true
     path: /api/a2a/wes-work-planning
+
+# Capacity step 3 (ADR 0012): cmd/mcp and cmd/a2a as the two containers of ONE wes-work-planning-agents
+# Deployment (chart agents.colocate, IQVO/wes-work-planning#312). The Services, routes and URLs are unchanged.
+agents:
+  colocate: true
 pathCatalogue:
   content: ''
   enabled: false
