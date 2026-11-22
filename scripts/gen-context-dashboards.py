@@ -164,6 +164,24 @@ CONTEXTS = [
         ],
     },
     {
+        "key": "amr-fleet-control",
+        "title": "WCS — AMR Fleet Control",
+        "uid": "warehouse-wcs-amr-fleet-control",
+        # WCS service on the fleet observability standard (ADR 0005): Go-runtime and otelchi RED metrics plus one
+        # business counter, amr_fleet_control.legs.ended (Prometheus: amr_fleet_control_legs_ended_total, outcome
+        # completed or failed, reason = the LegFailed reason). No outbox-lag gauge. The Kong rows are live once the
+        # routes exist (kongPlugins.prometheus in helm-values/amr-fleet-control.yaml); pod-restart alerts from day one.
+        "service_regex": "amr-fleet-control.*",
+        "loki_app": "amr-fleet-control",
+        "business_metrics": [
+            (
+                "amr_fleet_control_legs_ended_total",
+                "outcome",
+                "Legs ended, by outcome (completed or failed; failed carries the reason: CANCELLED, ROBOT_BLOCKED, ROBOT_FAULT, ROBOT_OFFLINE, ORDER_REJECTED, PICK_FAILED, DROP_FAILED or MAP_VERSION_RETIRED). A rising ROBOT_BLOCKED means unresolved deadlocks or blocked aisles; a rising ORDER_REJECTED means the map and the robots' world disagree.",
+            ),
+        ],
+    },
+    {
         "key": "order-management",
         "title": "Order Management",
         "uid": "warehouse-order-management",

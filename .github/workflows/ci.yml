@@ -223,6 +223,11 @@ jobs:
           path: asrs-control
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/amr-fleet-control
+          ref: develop
+          path: amr-fleet-control
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/equipment-emulator
           ref: develop
           path: equipment-emulator
@@ -556,6 +561,11 @@ jobs:
           path: asrs-control
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          repository: IQVO/amr-fleet-control
+          ref: develop
+          path: amr-fleet-control
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
           repository: IQVO/equipment-emulator
           ref: develop
           path: equipment-emulator
@@ -811,6 +821,11 @@ jobs:
           repository: IQVO/asrs-control
           ref: develop
           path: asrs-control
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/amr-fleet-control
+          ref: develop
+          path: amr-fleet-control
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: IQVO/equipment-emulator

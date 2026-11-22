@@ -1,0 +1,60 @@
+# amr-fleet-control -- the WCS VDA 5050 master control (a domain-driven design study, not
+# associated with any company). Single api Deployment (exactly one replica, Recreate: the
+# single traffic controller of its fleet) plus the read-only mcp and a2a components.
+#
+# Real Postgres, Kafka and MQTT only (the chart refuses a render without a database source and
+# the brokers). It consumes no Kafka topic, so it has no consumer group; it produces
+# warehouse.amr-fleet-control.events and .analytics through the outbox. The brokers, the Gateway
+# parentRefs, the CORS origin and the Kong traces endpoint come from _platform.yaml; the image
+# tag from Terraform. Startup runs golang-migrate over MIGRATIONS_DATABASE_URL (the direct DSN in
+# the amr-fleet-control-db Secret); DATABASE_URL goes through PgBouncer. The map file is the
+# chart's default (config/map.example.yaml), whose port node ids are the equipment emulator's
+# world: change both together.
+
+database:
+  existingSecret: amr-fleet-control-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+
+mqtt:
+  url: tcp://mosquitto.warehouse-systems.svc.cluster.local:1883
+
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/amr-fleet-control
+      pathType: PathPrefix
+  stripPath: true
+
+# Read-only MCP server (cmd/mcp), Service amr-fleet-control-mcp:8090: Kong exposure
+# /api/mcp/amr-fleet-control, prefix rewritten to /mcp (the chart's mcp-route.yaml).
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/amr-fleet-control
+
+# Read-only A2A agent (cmd/a2a), Service amr-fleet-control-a2a:8093: Kong exposure
+# /api/a2a/amr-fleet-control, prefix rewritten to / (the chart's a2a-route.yaml).
+a2a:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/a2a/amr-fleet-control
+
+# Kong plugins rendered by the chart's kong-plugins.yaml and attached to every route
+# (fleet decision 2026-10-13). Origin and traces endpoint come from _platform.yaml.
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+
+# Capacity step 3 (ADR 0012, accepted; pilot asrs-control and batch 1 live): cmd/mcp and cmd/a2a run as the two
+# containers of ONE amr-fleet-control-agents pod from the first deploy (api + agents = 2 pods, not 3). The -mcp/-a2a
+# Services, routes and URLs are unchanged. Rollback: remove this block (ArgoCD creates the standalone Deployments,
+# then prunes the agents one).
+agents:
+  colocate: true
