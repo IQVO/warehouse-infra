@@ -335,7 +335,7 @@
     {
       "type": "timeseries",
       "title": "Outbox lag (age of the oldest unpublished event)",
-      "description": "asrs_control_outbox_lag: seconds since the oldest outbox_events row with published_at IS NULL was written, 0 when the outbox is drained (sampled at each metric collection). A steadily growing value means the relay is not publishing -- Kafka unreachable, or a head row failing until it reaches OUTBOX_MAX_ATTEMPTS and is parked (see this context's runbook for the re-arm SQL). Alert: WarehouseOutboxLagHigh.",
+      "description": "asrs_control_outbox_lag_seconds: seconds since the oldest outbox_events row with published_at IS NULL was written, 0 when the outbox is drained (sampled at each metric collection). A steadily growing value means the relay is not publishing -- Kafka unreachable, or a head row failing until it reaches OUTBOX_MAX_ATTEMPTS and is parked (see this context's runbook for the re-arm SQL). Alert: WarehouseOutboxLagHigh.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -359,7 +359,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max by (service_name) (asrs_control_outbox_lag{service_name=~\"asrs-control.*\"})",
+          "expr": "max by (service_name) (asrs_control_outbox_lag_seconds{service_name=~\"asrs-control.*\"})",
           "legendFormat": "{{service_name}}"
         }
       ]

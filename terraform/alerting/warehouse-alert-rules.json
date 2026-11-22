@@ -20,7 +20,7 @@
         },
         {
           "alert": "WarehouseOutboxLagHigh",
-          "expr": "max by (service_name) (asrs_control_outbox_lag{service_name=~\"asrs-control.*\"}) > 60",
+          "expr": "max by (service_name) (asrs_control_outbox_lag_seconds{service_name=~\"asrs-control.*\"}) > 60",
           "for": "5m",
           "labels": {
             "context": "asrs-control",

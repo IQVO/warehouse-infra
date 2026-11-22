@@ -163,6 +163,15 @@ class GeneratedDashboardsTest(unittest.TestCase):
         exprs = [e for _, e in prometheus_exprs(GEN.build_dashboard(ctx))]
         self.assertTrue(any("process_path_management_outbox_lag_seconds" in e for e in exprs))
 
+    def test_every_outbox_lag_metric_carries_the_seconds_suffix(self):
+        # Every outbox-lag gauge in the fleet is an OTel gauge with unit "s", which the Prometheus
+        # exporter names <instrument>_seconds. A name without the suffix reads nothing (asrs-control's
+        # entry said asrs_control_outbox_lag while Prometheus exposes asrs_control_outbox_lag_seconds).
+        for ctx in GEN.CONTEXTS:
+            metric = ctx.get("outbox_lag_metric")
+            if metric:
+                self.assertTrue(metric.endswith("_seconds"), f"{ctx['key']}: outbox_lag_metric {metric} lacks _seconds")
+
 
 
 class AlertRulesTest(unittest.TestCase):
