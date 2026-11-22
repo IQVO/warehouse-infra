@@ -146,10 +146,11 @@ CONTEXTS = [
         # counters/gauges its observability page names. Failed jobs by reason is
         # the WCS row that matters: EQUIPMENT_FAULT opens an exception case and a
         # rising EQUIPMENT_UNREACHABLE means the PLC link is dropping ACKs.
-        # asrs_control.outbox.lag drives the "Transactional outbox" row.
+        # asrs_control.outbox.lag (an OTel gauge with unit "s", so Prometheus exposes
+        # asrs_control_outbox_lag_seconds -- observed live) drives the "Transactional outbox" row.
         "service_regex": "asrs-control.*",
         "loki_app": "asrs-control",
-        "outbox_lag_metric": "asrs_control_outbox_lag",
+        "outbox_lag_metric": "asrs_control_outbox_lag_seconds",
         "business_metrics": [
             (
                 "asrs_control_storage_jobs_failed_total",
