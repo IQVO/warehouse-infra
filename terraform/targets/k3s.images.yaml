@@ -1,6 +1,6 @@
 # Written by scripts/k3s-pin-images.sh from a publish-images run (ADR 0011).
 # image: tag of ghcr.io/iqvo/warehouse-infra/<app>; frontend: tag of <app>-frontend.
-run: 44992663424
+run: 45001885906
 images:
   amr-fleet-control:
     image: 09a8f19-arm64
@@ -91,8 +91,8 @@ images:
     frontend: 64a6bd4-4de8513-arm64
     image: 64a6bd4-arm64
   returns-processing:
-    frontend: dbbe3d5-99062e8-arm64
-    image: dbbe3d5-arm64
+    frontend: e899bdc-4de8513-arm64
+    image: e899bdc-arm64
   seller-inbound:
     frontend: 1548013-99062e8-arm64
     image: 1548013-arm64
