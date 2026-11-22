@@ -140,6 +140,11 @@ a2a:
   route:
     enabled: true
     path: /api/a2a/slotting-optimization
+
+# Capacity step 3 (ADR 0012): cmd/mcp and cmd/a2a as the two containers of ONE slotting-optimization-agents
+# Deployment (chart agents.colocate, IQVO/slotting-optimization#105). The Services, routes and URLs are unchanged.
+agents:
+  colocate: true
 pathCatalogue:
   content: ''
   enabled: false
