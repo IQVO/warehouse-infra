@@ -93,6 +93,11 @@ a2a:
   route:
     enabled: true
     path: /api/a2a/network-fulfillment
+
+# Capacity step 3 (ADR 0012): cmd/mcp and cmd/a2a as the two containers of ONE network-fulfillment-agents
+# Deployment (chart agents.colocate, IQVO/network-fulfillment#204). The Services, routes and URLs are unchanged.
+agents:
+  colocate: true
 productTranslation:
   mappings:
     - networkProductId: lst-344aebc6-8145-453b-9992-5ea7f850b389
