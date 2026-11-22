@@ -154,6 +154,10 @@ a2a:
   route:
     enabled: true
     path: /api/a2a/fulfillment-execution
+# Capacity step 3 (ADR 0012): cmd/mcp and cmd/a2a as the two containers of ONE fulfillment-execution-agents
+# Deployment (chart agents.colocate, IQVO/fulfillment-execution#326). The Services, routes and URLs are unchanged.
+agents:
+  colocate: true
 pathCatalogue:
   content: ''
   enabled: false
