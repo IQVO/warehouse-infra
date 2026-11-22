@@ -2,16 +2,42 @@
 # The local kind cluster is ONE worker with the Docker VM's 10 CPUs; chart defaults request
 # 50-100m per container (~10 cores for 76 app containers) while real use is ~10% of that, so
 # rolling updates (maxSurge 1 per Deployment) could not schedule. Only requests.cpu is lowered;
-# limits and memory keep the chart defaults. The Application's last value file (after
-# _platform.yaml and <app>.yaml, ADR 0002 D2); Helm deep-merges it, so only requests.cpu changes.
+# limits keep the chart defaults. The Application's last value file (after
+# _platform.yaml and <app>.yaml, ADR 0002 D2); Helm deep-merges it, so only the requests set here change.
+# Memory (capacity step 2, 2026-11-21): requests.memory = max(32Mi, 1.5 x the 24 h max working set
+# measured on k3s, rounded up to 16Mi); limits keep the chart defaults unless noted. Values-only:
+# ArgoCD rolls each touched Deployment when this file lands on develop.
 frontend:
   resources:
     requests:
       cpu: 25m
+      memory: 32Mi
 mcp:
   resources:
     requests:
       cpu: 25m
+      memory: 32Mi
 resources:
   requests:
     cpu: 25m
+    memory: 32Mi
+
+# Same treatment for the optional components that still requested the chart default of
+# 100m while using 1-10m: the agent node has no CPU requests left and the server node no pod slot,
+# so rollouts and new replicas stayed Pending. Requests only; limits keep the chart defaults.
+a2a:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+analytics:
+  projector:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 32Mi
+  reports:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 32Mi

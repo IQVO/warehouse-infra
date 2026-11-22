@@ -223,9 +223,12 @@ resource "helm_release" "prometheus" {
 
       retention = "24h"
 
+      # Capacity step 2 (2026-11-21): 983Mi 24 h max working set = 96% of the
+      # 1Gi limit while requesting 256Mi (OOM risk). request = 1.25 x 24 h max
+      # (1280Mi), limit = 1.95 x 24 h max (1920Mi).
       resources = {
-        requests = { cpu = "100m", memory = "256Mi" }
-        limits   = { cpu = "1000m", memory = "1Gi" }
+        requests = { cpu = "100m", memory = "1280Mi" }
+        limits   = { cpu = "1000m", memory = "1920Mi" }
       }
     }
 

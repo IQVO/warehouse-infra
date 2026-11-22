@@ -138,6 +138,69 @@ def row(y, title):
 # ---------------------------------------------------------------------------
 CONTEXTS = [
     {
+        "key": "asrs-control",
+        "title": "WCS — AS/RS Control",
+        "uid": "warehouse-wcs-asrs-control",
+        # Fleet observability standard on asrs-control develop (its ADR 0004):
+        # otelchi spans plus RED metrics on the api binary, and the business
+        # counters/gauges its observability page names. Failed jobs by reason is
+        # the WCS row that matters: EQUIPMENT_FAULT opens an exception case and a
+        # rising EQUIPMENT_UNREACHABLE means the PLC link is dropping ACKs.
+        # asrs_control.outbox.lag (an OTel gauge with unit "s", so Prometheus exposes
+        # asrs_control_outbox_lag_seconds -- observed live) drives the "Transactional outbox" row.
+        "service_regex": "asrs-control.*",
+        "loki_app": "asrs-control",
+        "outbox_lag_metric": "asrs_control_outbox_lag_seconds",
+        "business_metrics": [
+            (
+                "asrs_control_storage_jobs_failed_total",
+                "reason",
+                "Storage jobs failed, by reason. EQUIPMENT_FAULT opens an exception-management case; a rising EQUIPMENT_UNREACHABLE means the MQTT telegram link is dropping ACKs; CANCELLED counts cancellations.",
+            ),
+            (
+                "asrs_control_telegrams_retransmitted_total",
+                "telegram_type",
+                "PLC telegrams resent after 2s without an ACK, by type: a rising rate precedes EQUIPMENT_UNREACHABLE failures.",
+            ),
+        ],
+    },
+    {
+        "key": "amr-fleet-control",
+        "title": "WCS — AMR Fleet Control",
+        "uid": "warehouse-wcs-amr-fleet-control",
+        # WCS service on the fleet observability standard (ADR 0005): Go-runtime and otelchi RED metrics plus one
+        # business counter, amr_fleet_control.legs.ended (Prometheus: amr_fleet_control_legs_ended_total, outcome
+        # completed or failed, reason = the LegFailed reason). No outbox-lag gauge. The Kong rows are live once the
+        # routes exist (kongPlugins.prometheus in helm-values/amr-fleet-control.yaml); pod-restart alerts from day one.
+        "service_regex": "amr-fleet-control.*",
+        "loki_app": "amr-fleet-control",
+        "business_metrics": [
+            (
+                "amr_fleet_control_legs_ended_total",
+                "outcome",
+                "Legs ended, by outcome (completed or failed; failed carries the reason: CANCELLED, ROBOT_BLOCKED, ROBOT_FAULT, ROBOT_OFFLINE, ORDER_REJECTED, PICK_FAILED, DROP_FAILED or MAP_VERSION_RETIRED). A rising ROBOT_BLOCKED means unresolved deadlocks or blocked aisles; a rising ORDER_REJECTED means the map and the robots' world disagree.",
+            ),
+        ],
+    },
+    {
+        "key": "material-flow-control",
+        "title": "WCS — Material Flow Control",
+        "uid": "warehouse-wcs-material-flow-control",
+        # WCS service on the fleet observability standard (ADR 0007): Go-runtime and otelchi RED metrics plus one
+        # business counter, material_flow_control.transports.ended (Prometheus: material_flow_control_transports_ended_total,
+        # purpose, outcome completed or failed, reason = the TransportFailed reason).
+        "service_regex": "material-flow-control.*",
+        "loki_app": "material-flow-control",
+        "outbox_lag_metric": "material_flow_control_outbox_lag_seconds",
+        "business_metrics": [
+            (
+                "material_flow_control_transports_ended_total",
+                "outcome",
+                "Transports ended, by purpose and outcome (completed or failed; failed carries the reason: CLARIFICATION, SUBSYSTEM_FAULT, CANCELLED or TIMEOUT). A rising SUBSYSTEM_FAULT means a subsystem refuses or fails legs; a rising CLARIFICATION means scans disagree with the container registry.",
+            ),
+        ],
+    },
+    {
         "key": "order-management",
         "title": "Order Management",
         "uid": "warehouse-order-management",

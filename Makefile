@@ -52,7 +52,12 @@ CHARTS := \
 	../shopping-cart/charts/shopping-cart \
 	../payment-provider-simulator/charts/payment-provider-simulator \
 	../storefront-bff/charts/storefront-bff \
-	../storefront-web/charts/storefront-web
+	../storefront-web/charts/storefront-web \
+	../asrs-control/charts/asrs-control \
+	../amr-fleet-control/charts/amr-fleet-control \
+	../material-flow-control/charts/material-flow-control \
+	../equipment-emulator/charts/equipment-emulator \
+	../customer-returns/charts/customer-returns
 
 .PHONY: help tf-fmt-check tf-validate helm-lint shellcheck chart-selector-check observability-check alert-rules-check seed-scripts-test mcp-conformance-test seed-network seed-network-dry-run seed-network-verify seed-network-translation seed-network-translation-check check check-all
 

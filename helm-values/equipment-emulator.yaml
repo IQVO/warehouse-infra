@@ -1,0 +1,31 @@
+# equipment-emulator — simulated AMR robots (VDA 5050) and AS/RS for the WCS.
+#
+# No database, no Kafka. It speaks MQTT to the Mosquitto broker that
+# terraform/10-platform/mosquitto.tf runs; nothing outside the WCS uses it.
+# The port nodeIds in the world are the contract amr-fleet-control's map must match.
+
+mqtt:
+  url: tcp://mosquitto.warehouse-systems.svc.cluster.local:1883
+
+config:
+  simSpeed: "1"
+
+world:
+  robots:
+    - {manufacturer: EMU, serialNumber: R1, startX: 0, startY: 0, mapId: S1, speed: 1.5, drainPerMeter: 0.02, chargePerSecond: 0.5, actionSeconds: 3}
+    - {manufacturer: EMU, serialNumber: R2, startX: 2, startY: 0, mapId: S1, speed: 1.5, drainPerMeter: 0.02, chargePerSecond: 0.5, actionSeconds: 3}
+    - {manufacturer: EMU, serialNumber: R3, startX: 4, startY: 0, mapId: S1, speed: 1.5, drainPerMeter: 0.02, chargePerSecond: 0.5, actionSeconds: 3}
+  asrs:
+    - id: ASRS1
+      aisles: 2
+      levels: 8
+      slots: 40
+      doubleDeep: true
+      baseSeconds: 6
+      perLevelSeconds: 1.5
+      perSlotSeconds: 0.2
+      ports:
+        - {id: IN1, aisle: 1, kind: INPUT, nodeId: ASRS1-IN1}
+        - {id: OUT1, aisle: 1, kind: OUTPUT, nodeId: ASRS1-OUT1}
+        - {id: IN2, aisle: 2, kind: INPUT, nodeId: ASRS1-IN2}
+        - {id: OUT2, aisle: 2, kind: OUTPUT, nodeId: ASRS1-OUT2}

@@ -40,6 +40,18 @@
 #                 EventCatalog); its image tag goes to image.tag.
 # ---------------------------------------------------------------------------
 applications:
+  # asrs-control: the WCS AS/RS controller (Generic, plan WCS-02) -- rack
+  # position assignment, one storage job per aisle at a time, port presentation,
+  # reshuffles and PackML equipment state over telegram protocol v1 on MQTT
+  # against equipment-emulator's AS/RS; CloudEvents on
+  # warehouse.asrs-control.events and .analytics. Cluster-internal until
+  # material-flow-control (plan WCS-04) becomes its caller; the /api route is
+  # ops/debug surface.
+  asrs-control:
+    kind: service
+    repo_owner: IQVO
+    database: true
+
   # customer-ordering: retail-network reference service (single api Deployment:
   # OLTP REST :8080 + transactional-outbox relay + local-copy consumers,
   # plus a read-only MCP server (cmd/mcp); still no analytics read side).
@@ -85,6 +97,34 @@ applications:
     repo_owner: IQVO
     database: true
     analytics: true
+
+  # equipment-emulator: simulated AMR robots (VDA 5050) and AS/RS (telegrams)
+  # for the WCS; speaks MQTT to the Mosquitto broker (10-platform/mosquitto.tf).
+  # `other`, not `service`: no database and no /api/<name> route (HTTP is only
+  # /healthz, /readyz and the fault-injection API, cluster-internal).
+  equipment-emulator:
+    kind: other
+    repo_owner: IQVO
+
+  # amr-fleet-control: the WCS VDA 5050 master control (single api Deployment:
+  # REST :8080 + the one MQTT fleet link + the transactional-outbox relay, plus a
+  # read-only MCP server (cmd/mcp) and a read-only A2A agent (cmd/a2a)). Speaks
+  # MQTT to the Mosquitto broker (10-platform/mosquitto.tf) beside the equipment
+  # emulator; no analytics read side, no console remote.
+  amr-fleet-control:
+    kind: service
+    repo_owner: IQVO
+    database: true
+
+  # material-flow-control: the WCS material flow controller (single api Deployment:
+  # REST :8080 + the asrs-control and amr-fleet-control fact consumers + the subsystem
+  # command dispatcher + the outbox relay, plus a read-only MCP server (cmd/mcp) and a
+  # read-only A2A agent (cmd/a2a)). Calls asrs-control and amr-fleet-control over HTTP;
+  # never speaks MQTT.
+  material-flow-control:
+    kind: service
+    repo_owner: IQVO
+    database: true
 
   ecosystem:
     kind: other

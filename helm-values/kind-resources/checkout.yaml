@@ -1,5 +1,18 @@
 # kind CPU-request overlay for checkout (see customer-ordering for the rationale).
-# Only requests.cpu is lowered; limits and memory keep the chart defaults.
+# Only requests.cpu is lowered; limits keep the chart defaults.
+# Memory (capacity step 2, 2026-11-21): requests.memory = max(32Mi, 1.5 x the 24 h max working set
+# measured on k3s, rounded up to 16Mi); limits keep the chart defaults unless noted. Values-only:
+# ArgoCD rolls each touched Deployment when this file lands on develop.
 resources:
   requests:
     cpu: 25m
+    memory: 32Mi
+
+# Same treatment for the optional components that still requested the chart default of
+# 100m while using 1-10m: the agent node has no CPU requests left and the server node no pod slot,
+# so rollouts and new replicas stayed Pending. Requests only; limits keep the chart defaults.
+a2a:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 48Mi

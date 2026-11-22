@@ -106,6 +106,11 @@ a2a:
   route:
     enabled: true
     path: /api/a2a/process-path-management
+
+# Capacity step 3 (ADR 0012): cmd/mcp and cmd/a2a as the two containers of ONE process-path-management-agents
+# Deployment (chart agents.colocate, IQVO/process-path-management#276). The Services, routes and URLs are unchanged.
+agents:
+  colocate: true
 pathCatalogue:
   content: ''
   enabled: false

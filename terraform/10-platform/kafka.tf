@@ -74,9 +74,13 @@ resource "helm_release" "kafka" {
       # recovery stopped for good (order-management exited; fulfillment-
       # execution's WorkReleased consumer silently stopped). Kafka CLI tools
       # run inside this same container (see AGENTS.md) and need headroom too.
+      # Capacity step 2 (2026-11-21): the broker sat at 1708Mi, 83% of the 2Gi
+      # limit, for the whole 24 h Prometheus window, while requesting 1Gi.
+      # request = 1.25 x 24 h max (2176Mi), limit = 1.8 x 24 h max (3Gi). With
+      # MaxRAMPercentage=75 the heap ceiling moves from 1.5Gi to 2.25Gi too.
       resources = {
-        requests = { cpu = "250m", memory = "1Gi" }
-        limits   = { cpu = "1000m", memory = "2Gi" }
+        requests = { cpu = "250m", memory = "2176Mi" }
+        limits   = { cpu = "1000m", memory = "3Gi" }
       }
     }
 

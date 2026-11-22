@@ -2,7 +2,7 @@
 """Chart selector conformance check.
 
 Renders every service-owning Helm chart in the fleet with ALL optional
-components enabled (analytics/frontend/mcp), then asserts every rendered
+components enabled (analytics/frontend/mcp/a2a), then asserts every rendered
 Service selects EXACTLY ONE Deployment.
 
 Why this exists: every chart's `<ctx>.selectorLabels` helper originally
@@ -25,8 +25,19 @@ lives in `scripts/`, but is invoked via `cd terraform && python3
 ../scripts/check-chart-selectors.py` from the Makefile / CI job so the
 chart paths match the sibling layout `../../<repo>/charts/<repo>`).
 
-Exit 0 if every Service selects exactly one Deployment; exit 1 (with the
-offending Service(s) named) otherwise.
+Second assertion (capacity step 3, the agents.colocate ADR): every Service
+port with a NAMED targetPort resolves to exactly one containerPort of the
+selected Deployment's pod. A pod that runs two containers (mcp + a2a in one
+`<ctx>-agents` pod) must not name both ports `http`, or the Service would
+silently route to the first container.
+
+Charts that ship both an mcp and an a2a component are rendered twice: as
+listed, and again with `agents.colocate=true` (the optional single agents
+pod). A chart that has not adopted that value ignores it and renders the
+same objects, so the second render is safe before the charts migrate.
+
+Exit 0 if every Service selects exactly one Deployment and every named
+targetPort resolves; exit 1 (with the offending Service(s) named) otherwise.
 """
 import subprocess
 import sys
@@ -42,20 +53,27 @@ RELEASE_NAME = "chart-conformance-check"
 # (same discipline the Makefile's CHARTS variable already follows) -- it is
 # not auto-discovered.
 CHARTS: dict[str, dict[str, str]] = {
+    # order-management: cmd/a2a (ADR-0046) refuses to render without a
+    # database and the analytics data product's DSN. Dummies, no password.
     "../../order-management/charts/order-management": {
+        "a2a.enabled": "true",
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/orders",
+        "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/analytics",
     },
     # inventory-storage and wes-work-planning: every binary runs on real
     # Postgres and real Kafka only, so the chart refuses to render without a
     # database source, kafka brokers and (analytics on) the analytical DSN.
     # Dummies, no password.
     "../../inventory-storage/charts/inventory-storage": {
+        "a2a.enabled": "true",
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
     },
     "../../wes-work-planning/charts/wes-work-planning": {
+        "a2a.enabled": "true",
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
@@ -64,11 +82,13 @@ CHARTS: dict[str, dict[str, str]] = {
     # on real Postgres and real Kafka only (ADR-0052: Postgres and Kafka are
     # the only runtime of every cmd binary); give it dummies (no password).
     "../../fulfillment-execution/charts/fulfillment-execution": {
+        "a2a.enabled": "true",
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
     },
     "../../workforce-management/charts/workforce-management": {
+        "a2a.enabled": "true",
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
         # This chart's templates fail to render at all without a database
         # URL or existingSecret -- see fleet skill note "workforce-management's
@@ -81,6 +101,7 @@ CHARTS: dict[str, dict[str, str]] = {
     # facility-layout: ADR 0039 (Postgres and Kafka are the only runtime);
     # analytics needs its own DSN and a stable consumer group too.
     "../../facility-layout/charts/facility-layout": {
+        "a2a.enabled": "true",
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
@@ -90,6 +111,7 @@ CHARTS: dict[str, dict[str, str]] = {
     # labor-performance: ADR 0034 (Postgres and Kafka are the only runtime);
     # the always-on fulfillment-events consumer needs a stable group id too.
     "../../labor-performance/charts/labor-performance": {
+        "a2a.enabled": "true",
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
@@ -98,6 +120,7 @@ CHARTS: dict[str, dict[str, str]] = {
     # process-path-management: ADR 0037 (Postgres and Kafka are the only
     # runtime); give it dummies (no password).
     "../../process-path-management/charts/process-path-management": {
+        "a2a.enabled": "true",
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
@@ -109,6 +132,7 @@ CHARTS: dict[str, dict[str, str]] = {
     # demand projection each need a stable group id / site id, so give it
     # dummies (no password).
     "../../warehouse-planning/charts/warehouse-planning": {
+        "a2a.enabled": "true",
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
         "kafka.enabled": "true", "kafka.brokers": "kafka.example.invalid:9092",
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
@@ -127,6 +151,7 @@ CHARTS: dict[str, dict[str, str]] = {
     # source, kafka and a stable consumer group id; ADR 0010), so give it the
     # same dummies (no password).
     "../../product-master/charts/product-master": {
+        "a2a.enabled": "true",
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
         "kafka.enabled": "true", "kafka.brokers": "kafka.example.invalid:9092",
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
@@ -139,6 +164,7 @@ CHARTS: dict[str, dict[str, str]] = {
     # and kafka; ADR 0011), plus two always-on consumers each need a stable
     # group id, so give it the same dummies (no password).
     "../../inbound-receiving/charts/inbound-receiving": {
+        "a2a.enabled": "true",
         "analytics.enabled": "true", "frontend.enabled": "true", "mcp.enabled": "true",
         "kafka.enabled": "true", "kafka.brokers": "kafka.example.invalid:9092",
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
@@ -160,6 +186,7 @@ CHARTS: dict[str, dict[str, str]] = {
     # need a stable group id, and analytics needs a DSN source, so give it
     # dummies (no password).
     "../../slotting-optimization/charts/slotting-optimization": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true", "analytics.enabled": "true",
         "analytics.url": "postgres://u@example.invalid:5432/analytics",
         "database.url": "postgres://u@example.invalid:5432/db",
@@ -177,12 +204,14 @@ CHARTS: dict[str, dict[str, str]] = {
     # only runtime), and analytics without a DSN source, so give them dummies
     # (no password).
     "../../pick-face-replenishment/charts/pick-face-replenishment": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true", "analytics.enabled": "true",
         "analytics.url": "postgres://u@example.invalid:5432/analytics",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
     },
     "../../task-interleaving/charts/task-interleaving": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true", "analytics.enabled": "true",
         "analytics.url": "postgres://u@example.invalid:5432/analytics",
         "database.url": "postgres://u@example.invalid:5432/db",
@@ -197,12 +226,14 @@ CHARTS: dict[str, dict[str, str]] = {
     # give them dummies (no password). Their consumer groups have non-empty
     # chart defaults, so none needs a --set.
     "../../returns-processing/charts/returns-processing": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true", "analytics.enabled": "true",
         "analytics.url": "postgres://u@example.invalid:5432/analytics",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
     },
     "../../exception-management/charts/exception-management": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true", "analytics.enabled": "true",
         "analytics.url": "postgres://u@example.invalid:5432/analytics",
         "database.url": "postgres://u@example.invalid:5432/db",
@@ -213,6 +244,7 @@ CHARTS: dict[str, dict[str, str]] = {
     # database source and refuses analytics without a DSN source and kafka, so
     # give it dummies (no password); routing templates are opt-in.
     "../../network-inventory-planning/charts/network-inventory-planning": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true", "analytics.enabled": "true",
         "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
         "kafka.enabled": "true",
@@ -227,6 +259,7 @@ CHARTS: dict[str, dict[str, str]] = {
     # crypto key it mandates gets the same dummy its own
     # charts/<ctx>/ci/default-values.yaml uses.
     "../../checkout/charts/checkout": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
@@ -237,6 +270,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.customerOrderingUrl": "http://customer-ordering.example.invalid",
     },
     "../../customer-payments/charts/customer-payments": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
@@ -246,16 +280,19 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.shippingAndTrackingConsumerGroup": "customer-payments-shipping-and-tracking",
     },
     "../../pricing/charts/pricing": {
+        "mcp.enabled": "true", "a2a.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.offerAvailabilityConsumerGroup": "pricing-offer-availability",
     },
     "../../product-content/charts/product-content": {
+        "mcp.enabled": "true", "a2a.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.offerAvailabilityConsumerGroup": "product-content-offer-availability",
     },
     "../../product-discovery/charts/product-discovery": {
+        "mcp.enabled": "true", "a2a.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.offerAvailabilityConsumerGroup": "product-discovery-offer-availability",
@@ -263,6 +300,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.pricingConsumerGroup": "product-discovery-pricing",
     },
     "../../shopping-cart/charts/shopping-cart": {
+        "mcp.enabled": "true", "a2a.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "deliveryPromise.url": "http://delivery-promise.example.invalid:8080",
@@ -285,6 +323,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.bffUrl": "http://storefront-bff.example.invalid",
     },
     "../../customer-ordering/charts/customer-ordering": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
@@ -294,12 +333,14 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.shippingConsumerGroup": "customer-ordering-shipping",
     },
     "../../delivery-promise/charts/delivery-promise": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.consumerGroup": "delivery-promise-consumer",
     },
     "../../last-mile-delivery/charts/last-mile-delivery": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
@@ -308,6 +349,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.shippingConsumerGroup": "last-mile-delivery-shipping",
     },
     "../../linehaul-transportation/charts/linehaul-transportation": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
@@ -316,6 +358,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.shippingAndTrackingConsumerGroup": "linehaul-transportation-shipping-and-tracking",
     },
     "../../node-performance/charts/node-performance": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
@@ -327,11 +370,13 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.sellerInboundConsumerGroup": "node-performance-seller-inbound",
     },
     "../../node-topology/charts/node-topology": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
     },
     "../../offer-availability/charts/offer-availability": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
@@ -340,6 +385,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.customerReturnsConsumerGroup": "offer-availability-customer-returns",
     },
     "../../order-sourcing/charts/order-sourcing": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
@@ -354,6 +400,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.vendorConnectivityConsumerGroup": "order-sourcing-vendor-connectivity",
     },
     "../../shipping-and-tracking/charts/shipping-and-tracking": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
@@ -366,6 +413,7 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.catalogConsumerGroup": "shipping-and-tracking-catalog",
     },
     "../../vendor-connectivity/charts/vendor-connectivity": {
+        "a2a.enabled": "true",
         "mcp.enabled": "true", "frontend.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
@@ -374,12 +422,14 @@ CHARTS: dict[str, dict[str, str]] = {
         "config.packagingConsumerGroup": "vendor-connectivity-packaging",
         "config.listingConsumerGroup": "vendor-connectivity-listing",
         "config.sourcingConsumerGroup": "vendor-connectivity-sourcing",
+        "config.customerReturnsConsumerGroup": "vendor-connectivity-customer-returns",
         "config.nodeTopologyUrl": "http://node-topology.example.invalid",
         "config.offerAvailabilityUrl": "http://offer-availability.example.invalid",
         "config.shippingAndTrackingUrl": "http://shipping-and-tracking.example.invalid",
         "config.nodePerformanceUrl": "http://node-performance.example.invalid",
     },
     "../../seller-inbound/charts/seller-inbound": {
+        "mcp.enabled": "true", "a2a.enabled": "true",
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
         "config.nodeConsumerGroup": "seller-inbound-node",
@@ -431,6 +481,54 @@ CHARTS: dict[str, dict[str, str]] = {
     "../../warehouse-ops-agent/charts/warehouse-ops-agent": {},
     "../../warehouse-console/charts/warehouse-console": {},
     "../../ecosystem/charts/ecosystem": {},
+    # asrs-control (WCS AS/RS controller, plan WCS-02): the api plus the two
+    # optional read-only agent components (mcp, a2a; its ADR 0005), each with
+    # its own Deployment+Service pair. Real Postgres and real Kafka only, so
+    # the chart refuses to render without a database source and brokers.
+    # Dummies, no password; the MQTT URL keeps its chart default.
+    "../../asrs-control/charts/asrs-control": {
+        "mcp.enabled": "true", "a2a.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+    },
+    # amr-fleet-control (WCS VDA 5050 master control, plan WCS-03): the api plus
+    # the two optional read-only agent components (mcp, a2a), standalone and
+    # (agents.colocate=true, ADR 0012) as one agents pod. Real Postgres and
+    # real Kafka only; dummies, no password; the MQTT URL keeps its default.
+    "../../amr-fleet-control/charts/amr-fleet-control": {
+        "mcp.enabled": "true", "a2a.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+    },
+    # material-flow-control (WCS material flow controller, plan WCS-04): the api
+    # plus the two optional read-only agent components (mcp, a2a), standalone and
+    # (agents.colocate=true, ADR 0012) as one agents pod. Real Postgres and real
+    # Kafka only; dummies, no password; the subsystem URLs keep their defaults.
+    "../../material-flow-control/charts/material-flow-control": {
+        "mcp.enabled": "true", "a2a.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+    },
+    # equipment-emulator (WCS test infrastructure, not a bounded context):
+    # one Deployment+Service, no optional components, no database.
+    "../../equipment-emulator/charts/equipment-emulator": {},
+    # customer-returns (retail-network bounded context): the api plus the
+    # optional read-only agent components (mcp, a2a) and the analytics
+    # projector/reports pair, each with its own Deployment (+Service). Real
+    # Postgres and real Kafka only: the chart refuses to render without a
+    # database source, brokers, the four stable consumer groups, and (analytics
+    # on) an analytical DSN and consumer group. Dummies, no password.
+    "../../customer-returns/charts/customer-returns": {
+        "mcp.enabled": "true", "a2a.enabled": "true", "analytics.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+        "kafka.brokers": "kafka.example.invalid:9092",
+        "config.orderConsumerGroup": "customer-returns-order",
+        "config.topologyConsumerGroup": "customer-returns-topology",
+        "config.sourcingConsumerGroup": "customer-returns-sourcing",
+        "config.vendorConsumerGroup": "customer-returns-vendor",
+        "analytics.database.projectorUrl": "postgres://p@example.invalid:5432/a",
+        "analytics.projector.consumerGroup": "customer-returns-analytics",
+    },
 }
 
 
@@ -451,15 +549,31 @@ def selector_selects_deployment(selector: dict, deployment: dict) -> bool:
     return True
 
 
-def check_chart(chart_path: str, extra_set: dict) -> list[str]:
+def resolve_target_port(service_port: dict, deployment: dict) -> list:
+    """The containerPorts a NAMED targetPort resolves to in `deployment`'s pod
+    (every container's ports whose name equals it). Kubernetes takes the first
+    match, so anything other than exactly one is a routing ambiguity or a
+    dangling name."""
+    name = service_port.get("targetPort")
+    containers = deployment["spec"]["template"]["spec"].get("containers") or []
+    return [
+        f"{c.get('name')}:{p.get('containerPort')}"
+        for c in containers
+        for p in (c.get("ports") or [])
+        if p.get("name") == name
+    ]
+
+
+def check_chart(chart_path: str, extra_set: dict, label: str = "") -> list[str]:
     """Returns a list of human-readable failure lines for this chart (empty
     list = chart is conformant)."""
+    where = f"{chart_path}{label}"
     args = ["helm", "template", RELEASE_NAME, chart_path]
     for key, value in extra_set.items():
         args += ["--set", f"{key}={value}"]
     result = subprocess.run(args, capture_output=True, text=True)
     if result.returncode != 0:
-        return [f"{chart_path}: helm template failed: {result.stderr.strip()[:500]}"]
+        return [f"{where}: helm template failed: {result.stderr.strip()[:500]}"]
 
     docs = [d for d in yaml.safe_load_all(result.stdout) if d]
     deployments = [d for d in docs if d.get("kind") == "Deployment"]
@@ -470,37 +584,59 @@ def check_chart(chart_path: str, extra_set: dict) -> list[str]:
         selector = (svc.get("spec") or {}).get("selector") or {}
         if not selector:
             continue
-        matched = [
-            d["metadata"]["name"]
-            for d in deployments
-            if selector_selects_deployment(selector, d)
-        ]
+        matched = [d for d in deployments if selector_selects_deployment(selector, d)]
         if len(matched) != 1:
             failures.append(
-                f"{chart_path}: Service {svc['metadata']['name']} selects "
-                f"{len(matched)} Deployment(s) (want exactly 1): {matched}"
+                f"{where}: Service {svc['metadata']['name']} selects "
+                f"{len(matched)} Deployment(s) (want exactly 1): "
+                f"{[d['metadata']['name'] for d in matched]}"
             )
+            continue
+        for port in svc["spec"].get("ports") or []:
+            if not isinstance(port.get("targetPort"), str):
+                continue  # numeric or defaulted: nothing to resolve by name
+            hits = resolve_target_port(port, matched[0])
+            if len(hits) != 1:
+                failures.append(
+                    f"{where}: Service {svc['metadata']['name']} port {port.get('port')} "
+                    f"targetPort {port['targetPort']!r} resolves to {len(hits)} containerPort(s) "
+                    f"of {matched[0]['metadata']['name']} (want exactly 1): {hits}"
+                )
     return failures
+
+
+def renders(extra_set: dict) -> list[tuple[str, dict]]:
+    """(label, --set map) pairs to render: the entry as listed, plus the
+    agents.colocate render when the entry enables both mcp and a2a."""
+    out = [("", extra_set)]
+    if extra_set.get("mcp.enabled") == "true" and extra_set.get("a2a.enabled") == "true":
+        out.append((" [agents.colocate=true]", {**extra_set, "agents.colocate": "true"}))
+    return out
 
 
 def main() -> int:
     all_failures = []
+    count = 0
     for chart_path, extra_set in CHARTS.items():
-        failures = check_chart(chart_path, extra_set)
-        if failures:
-            all_failures.extend(failures)
-        else:
-            print(f"OK   {chart_path}")
+        for label, sets in renders(extra_set):
+            count += 1
+            failures = check_chart(chart_path, sets, label)
+            if failures:
+                all_failures.extend(failures)
+            else:
+                print(f"OK   {chart_path}{label}")
 
     if all_failures:
         print()
-        print("FAIL — the following Services do not select exactly one Deployment:")
+        print("FAIL — the following Services do not select exactly one Deployment, "
+              "or a named targetPort does not resolve to exactly one containerPort:")
         for line in all_failures:
             print(f"  {line}")
         return 1
 
     print()
-    print(f"All {len(CHARTS)} charts conformant: every Service selects exactly one Deployment.")
+    print(f"All {len(CHARTS)} charts conformant ({count} renders): every Service selects exactly "
+          "one Deployment and every named targetPort resolves to exactly one containerPort.")
     return 0
 
 

@@ -1,0 +1,62 @@
+# material-flow-control -- the WCS material flow controller (a domain-driven design study, not
+# associated with any company). Single api Deployment (exactly one replica, Recreate: one dispatcher
+# and one pair of consumers) plus the read-only mcp and a2a components.
+#
+# Real Postgres, Kafka and both subsystems only (the chart refuses a render without them). It consumes
+# warehouse.asrs-control.events and warehouse.amr-fleet-control.events under the consumer groups
+# material-flow-control.asrs-control-events and material-flow-control.amr-fleet-control-events (the
+# chart defaults), and produces warehouse.material-flow-control.events and .analytics through the
+# outbox. The brokers, the Gateway parentRefs, the CORS origin and the Kong traces endpoint come from
+# _platform.yaml; the image tag from Terraform. The layout is the chart's default
+# (config/flow-layout.example.yaml), whose handoff points PK1, FWD1 and CLR1 amr-fleet-control's
+# cluster map does not have yet (plan 04 Q6, plan 06).
+
+database:
+  existingSecret: material-flow-control-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+
+subsystems:
+  asrsControlUrl: http://asrs-control.warehouse-systems.svc.cluster.local
+  amrFleetControlUrl: http://amr-fleet-control.warehouse-systems.svc.cluster.local
+
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/material-flow-control
+      pathType: PathPrefix
+  stripPath: true
+
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/mcp/material-flow-control
+
+a2a:
+  enabled: true
+  route:
+    enabled: true
+    path: /api/a2a/material-flow-control
+
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true
+
+# OpenTelemetry (the repo's ADR 0007): traces and metrics over OTLP/gRPC to the fleet Collector, as asrs-control and
+# amr-fleet-control do through their chart defaults. This chart defaults otel off, so without this block the three
+# binaries install no exporter and the dashboard's material_flow_control_transports_ended_total never fills.
+otel:
+  enabled: true
+  endpoint: otel-collector.observability.svc.cluster.local:4317
+
+# Capacity step 3 (ADR 0012, accepted; asrs-control, amr-fleet-control and batches 1-2 colocated): cmd/mcp and
+# cmd/a2a run as the two containers of ONE material-flow-control-agents pod from the first deploy (api + agents =
+# 2 pods, not 3). The -mcp/-a2a Services, routes and URLs are unchanged. Rollback: remove this block (ArgoCD
+# creates the standalone Deployments, then prunes the agents one).
+agents:
+  colocate: true

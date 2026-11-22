@@ -1,90 +1,98 @@
 # Written by scripts/k3s-pin-images.sh from a publish-images run (ADR 0011).
 # image: tag of ghcr.io/iqvo/warehouse-infra/<app>; frontend: tag of <app>-frontend.
-run: 43766292818
+run: 45005443253
 images:
+  amr-fleet-control:
+    image: 09a8f19-arm64
+  asrs-control:
+    image: a3e172d-arm64
   checkout:
     image: 1332afc-arm64
   customer-ordering:
-    frontend: 32ed1a0-99062e8-arm64
-    image: 32ed1a0-arm64
+    frontend: 1426ff6-4de8513-arm64
+    image: 1426ff6-arm64
   customer-payments:
     image: a18d5dd-arm64
   customer-returns:
-    image: 2657437-arm64
+    image: fb504b5-arm64
   delivery-promise:
-    frontend: e855ccd-99062e8-arm64
-    image: e855ccd-arm64
+    frontend: 422fced-4de8513-arm64
+    image: 422fced-arm64
   dock-scheduling:
-    image: d5db895-arm64
+    image: a1a029c-arm64
   ecosystem:
-    frontend: 482cec3-99062e8-arm64
+    frontend: 6f208a3-4de8513-arm64
+  equipment-emulator:
+    image: b58201e-arm64
   exception-management:
-    frontend: 594aa1e-99062e8-arm64
-    image: 594aa1e-arm64
+    frontend: 08a29bb-4de8513-arm64
+    image: 08a29bb-arm64
   facility-layout:
-    frontend: 1305245-308f597-arm64
-    image: 1305245-arm64
+    frontend: 273283a-4de8513-arm64
+    image: 273283a-arm64
   fulfillment-execution:
-    frontend: 3c027ab-05ba2d7-arm64
-    image: 3c027ab-arm64
+    frontend: 9019d1d-4de8513-arm64
+    image: 9019d1d-arm64
   inbound-receiving:
-    frontend: 1fad877-e238bf7-arm64
-    image: 1fad877-arm64
+    frontend: a7c0e39-4de8513-arm64
+    image: a7c0e39-arm64
   inventory-storage:
-    frontend: ffb4554-09a8835-arm64
-    image: ffb4554-arm64
+    frontend: 89deb13-4de8513-arm64
+    image: 89deb13-arm64
   labor-performance:
-    frontend: 5e48894-308f597-arm64
-    image: 5e48894-arm64
+    frontend: 87879d7-4de8513-arm64
+    image: 87879d7-arm64
   last-mile-delivery:
     frontend: a19c58a-99062e8-arm64
     image: a19c58a-arm64
   linehaul-transportation:
     frontend: 6298b25-e238bf7-arm64
     image: 6298b25-arm64
+  material-flow-control:
+    image: e3cc5db-arm64
   network-fulfillment:
-    frontend: a8d22de-05ba2d7-arm64
-    image: a8d22de-arm64
+    frontend: f4acb13-4de8513-arm64
+    image: f4acb13-arm64
   network-inventory-planning:
-    frontend: b95f4fe-308f597-arm64
-    image: b95f4fe-arm64
+    frontend: f73bb28-4de8513-arm64
+    image: f73bb28-arm64
   node-performance:
-    frontend: 4596553-8de41e9-arm64
-    image: 4596553-arm64
+    frontend: 8b3fb28-4de8513-arm64
+    image: 8b3fb28-arm64
   node-topology:
-    frontend: ff5a4a6-99062e8-arm64
-    image: ff5a4a6-arm64
+    frontend: f9cf37a-4de8513-arm64
+    image: f9cf37a-arm64
   offer-availability:
-    frontend: 5dbe313-99062e8-arm64
-    image: 5dbe313-arm64
+    frontend: 4fb4648-4de8513-arm64
+    image: 4fb4648-arm64
   order-management:
-    frontend: 303c107-308f597-arm64
-    image: 303c107-arm64
+    frontend: 02c4078-4de8513-arm64
+    image: 02c4078-arm64
   order-sourcing:
-    frontend: bcaf730-99062e8-arm64
-    image: bcaf730-arm64
+    frontend: f7508f8-4de8513-arm64
+    image: f7508f8-arm64
   outbound-shipping:
     image: 857edfd-arm64
   payment-provider-simulator:
     image: 2ef4afa-arm64
   pick-face-replenishment:
-    frontend: 3ecb696-308f597-arm64
-    image: 3ecb696-arm64
+    frontend: 1c14320-4de8513-arm64
+    image: 1c14320-arm64
   pricing:
     image: a145dbe-arm64
   process-path-management:
-    frontend: a336eaf-308f597-arm64
-    image: a336eaf-arm64
+    frontend: c0e37ed-4de8513-arm64
+    image: c0e37ed-arm64
   product-content:
     image: 40f7702-arm64
   product-discovery:
     image: 1e59738-arm64
   product-master:
-    frontend: c298ee4-308f597-arm64
-    image: c298ee4-arm64
+    frontend: 64a6bd4-4de8513-arm64
+    image: 64a6bd4-arm64
   returns-processing:
-    frontend: dbbe3d5-99062e8-arm64
-    image: dbbe3d5-arm64
+    frontend: e899bdc-4de8513-arm64
+    image: e899bdc-arm64
   seller-inbound:
     frontend: 1548013-99062e8-arm64
     image: 1548013-arm64
@@ -94,15 +102,15 @@ images:
   shopping-cart:
     image: 10747ea-arm64
   slotting-optimization:
-    frontend: 225fc76-308f597-arm64
-    image: 225fc76-arm64
+    frontend: 748599c-4de8513-arm64
+    image: 748599c-arm64
   storefront-bff:
     image: 892d495-arm64
   storefront-web:
     image: 7471de9-arm64
   task-interleaving:
-    frontend: 5913fc8-99062e8-arm64
-    image: 5913fc8-arm64
+    frontend: 6dfcaa1-4de8513-arm64
+    image: 6dfcaa1-arm64
   vendor-connectivity:
     frontend: 7aef347-99062e8-arm64
     image: 7aef347-arm64
@@ -111,13 +119,13 @@ images:
   warehouse-ops-agent:
     image: e33eb99-arm64
   warehouse-planning:
-    frontend: ef8b946-308f597-arm64
-    image: ef8b946-arm64
+    frontend: 239e306-4de8513-arm64
+    image: 239e306-arm64
   wes-work-planning:
-    frontend: ed7fc41-308f597-arm64
-    image: ed7fc41-arm64
+    frontend: 2a24a25-4de8513-arm64
+    image: 2a24a25-arm64
   workforce-management:
-    frontend: 4811e77-308f597-arm64
-    image: 4811e77-arm64
+    frontend: 9ee15f3-4de8513-arm64
+    image: 9ee15f3-arm64
   yard-management:
-    image: da1e30e-arm64
+    image: 44d605e-arm64

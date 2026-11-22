@@ -114,6 +114,11 @@ a2a:
   route:
     enabled: true
     path: /api/a2a/product-master
+
+# Capacity step 3 (ADR 0012): cmd/mcp and cmd/a2a as the two containers of ONE product-master-agents
+# Deployment (chart agents.colocate, IQVO/product-master#118). The Services, routes and URLs are unchanged.
+agents:
+  colocate: true
 pathCatalogue:
   content: ''
   enabled: false

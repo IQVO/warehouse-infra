@@ -1,0 +1,9 @@
+# CPU-request overlay for asrs-control (see checkout's file for the rationale).
+# Only requests.cpu is lowered; limits keep the chart defaults.
+# Memory (capacity step 2, 2026-11-21): requests.memory = max(32Mi, 1.5 x the 24 h max working set
+# measured on k3s, rounded up to 16Mi); limits keep the chart defaults unless noted. Values-only:
+# ArgoCD rolls each touched Deployment when this file lands on develop.
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi

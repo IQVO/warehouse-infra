@@ -69,6 +69,16 @@ observed:
 # (a new group would replay from the earliest retained message and rebuild the model).
 dockAppointments:
   consumerGroup: "warehouse-planning-dock-appointments"
+# Required by warehouse-planning's chart from its ADR 0022 on: the labour-standard consumer's
+# STABLE group id (warehouse.labor-performance.events: LaborStandardDefined/Revised). Landed
+# before the chart needs it; an unknown values key is ignored by the current chart.
+laborStandard:
+  consumerGroup: "warehouse-planning-labor-standards"
+# Required by warehouse-planning's chart from its ADR 0025 on: the process-flow consumer's STABLE group id
+# (warehouse.process-path-management.events: ProcessFlowDefined/Revised/Retired; PROCESS_FLOW_CONSUMER_GROUP).
+# Landed before the chart needs it; an unknown values key is ignored by the current chart.
+processFlow:
+  consumerGroup: "warehouse-planning-process-flows"
 
 # Analytics read side (ADR 0005). The projector's consumer group is a FIXED, stable id (fleet charter naming
 # `<ctx>-analytics`): a restarted pod resumes from its committed offsets, and a
@@ -137,6 +147,11 @@ a2a:
   route:
     enabled: true
     path: /api/a2a/warehouse-planning
+
+# Capacity step 3 (ADR 0012): cmd/mcp and cmd/a2a as the two containers of ONE warehouse-planning-agents
+# Deployment (chart agents.colocate, IQVO/warehouse-planning#167). The Services, routes and URLs are unchanged.
+agents:
+  colocate: true
 pathCatalogue:
   content: ''
   enabled: false

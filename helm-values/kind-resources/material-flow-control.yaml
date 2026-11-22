@@ -1,0 +1,13 @@
+# CPU-request overlay for material-flow-control (generated from charts/material-flow-control/values.yaml on
+# develop): the api, mcp and a2a containers request 25m; limits and memory keep the chart defaults.
+resources:
+  requests:
+    cpu: 25m
+mcp:
+  resources:
+    requests:
+      cpu: 25m
+a2a:
+  resources:
+    requests:
+      cpu: 25m
