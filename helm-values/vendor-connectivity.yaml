@@ -101,6 +101,11 @@ a2a:
     enabled: true
     path: /api/a2a/vendor-connectivity
 
+# Capacity step 3: cmd/mcp and cmd/a2a run as the two containers of one <release>-agents
+# Deployment (chart's agents.colocate). The Services -mcp/-a2a keep their names and ports but
+# select the agents pod; the standalone Deployments are pruned (PruneLast) after it serves.
+agents:
+  colocate: true
 service:
   port: 80
   targetPort: 8080
