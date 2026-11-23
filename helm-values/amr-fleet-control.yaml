@@ -8,8 +8,9 @@
 # parentRefs, the CORS origin and the Kong traces endpoint come from _platform.yaml; the image
 # tag from Terraform. Startup runs golang-migrate over MIGRATIONS_DATABASE_URL (the direct DSN in
 # the amr-fleet-control-db Secret); DATABASE_URL goes through PgBouncer. The map file is the
-# chart's default (config/map.example.yaml), whose port node ids are the equipment emulator's
-# world: change both together.
+# chart's default (config/map.example.yaml) -- version 2026-11-22.1, carrying the pick-face,
+# forward and clarification handoff points PK1/FWD1/CLR1 since plan 06 / v0.1.1 -- whose port
+# node ids are the equipment emulator's world: change both together.
 
 database:
   existingSecret: amr-fleet-control-db
