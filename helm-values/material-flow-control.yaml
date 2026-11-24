@@ -8,8 +8,8 @@
 # chart defaults), and produces warehouse.material-flow-control.events and .analytics through the
 # outbox. The brokers, the Gateway parentRefs, the CORS origin and the Kong traces endpoint come from
 # _platform.yaml; the image tag from Terraform. The layout is the chart's default
-# (config/flow-layout.example.yaml), whose handoff points PK1, FWD1 and CLR1 amr-fleet-control's
-# cluster map does not have yet (plan 04 Q6, plan 06).
+# (config/flow-layout.example.yaml), whose handoff points PK1/FWD1/CLR1 the cluster map has
+# carried since amr-fleet-control v0.1.1.
 
 database:
   existingSecret: material-flow-control-db

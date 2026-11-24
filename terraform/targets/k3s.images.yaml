@@ -1,9 +1,9 @@
 # Written by scripts/k3s-pin-images.sh from a publish-images run (ADR 0011).
 # image: tag of ghcr.io/iqvo/warehouse-infra/<app>; frontend: tag of <app>-frontend.
-run: 45013947082
+run: 45166113953
 images:
   amr-fleet-control:
-    image: 09a8f19-arm64
+    image: c9a54ba-arm64
   asrs-control:
     image: a3e172d-arm64
   checkout:
@@ -43,11 +43,11 @@ images:
     frontend: 87879d7-4de8513-arm64
     image: 87879d7-arm64
   last-mile-delivery:
-    frontend: a19c58a-99062e8-arm64
-    image: a19c58a-arm64
+    frontend: 85b2094-dac76f8-arm64
+    image: 85b2094-arm64
   linehaul-transportation:
-    frontend: 6298b25-e238bf7-arm64
-    image: 6298b25-arm64
+    frontend: e316af4-dac76f8-arm64
+    image: e316af4-arm64
   material-flow-control:
     image: e3cc5db-arm64
   network-fulfillment:
@@ -79,14 +79,14 @@ images:
     frontend: 1c14320-4de8513-arm64
     image: 1c14320-arm64
   pricing:
-    image: a145dbe-arm64
+    image: ccd232f-arm64
   process-path-management:
     frontend: c0e37ed-4de8513-arm64
     image: c0e37ed-arm64
   product-content:
-    image: 40f7702-arm64
+    image: 5aa0e73-arm64
   product-discovery:
-    image: 1e59738-arm64
+    image: e9ec34a-arm64
   product-master:
     frontend: 64a6bd4-4de8513-arm64
     image: 64a6bd4-arm64
@@ -94,13 +94,13 @@ images:
     frontend: e899bdc-4de8513-arm64
     image: e899bdc-arm64
   seller-inbound:
-    frontend: 1548013-99062e8-arm64
-    image: 1548013-arm64
+    frontend: ad1872b-dac76f8-arm64
+    image: ad1872b-arm64
   shipping-and-tracking:
-    frontend: 7274e3e-99062e8-arm64
-    image: 7274e3e-arm64
+    frontend: 4fa285a-dac76f8-arm64
+    image: 4fa285a-arm64
   shopping-cart:
-    image: 10747ea-arm64
+    image: 51976ab-arm64
   slotting-optimization:
     frontend: 748599c-4de8513-arm64
     image: 748599c-arm64
@@ -112,8 +112,8 @@ images:
     frontend: 6dfcaa1-4de8513-arm64
     image: 6dfcaa1-arm64
   vendor-connectivity:
-    frontend: 7aef347-99062e8-arm64
-    image: 7aef347-arm64
+    frontend: 88970b7-dac76f8-arm64
+    image: 88970b7-arm64
   warehouse-console:
     frontend: 298ec71-308f597-arm64
   warehouse-ops-agent:
