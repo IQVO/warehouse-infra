@@ -20,6 +20,7 @@ amends or supersedes an earlier one with its own ADR
 | [0010](0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted (2026-11-02). Seed script and values comment follow the renamed routes |
 | [0011](0011-deploy-to-an-existing-k3s-from-ghcr.md) | Deploy to an existing k3s cluster, with images from ghcr.io | Accepted (2026-11-08). k3s is the only deploy target (kind banned); images come from GitHub (publish-images, pinned) |
 | [0012](0012-agent-adapters-share-one-pod-per-context.md) | Agent adapters share one pod per context | Accepted (2026-11-21). Capacity step 3: optional `agents.colocate` (mcp + a2a in one `<ctx>-agents` pod); D1-D4 decided by the owner (shared fate, release every repo, RollingUpdate, pin then flip); the selector check guards it; pilot asrs-control |
+| [0013](0013-agent-router-platform-component.md) | Agent Router (Envoy AI Gateway) is a Terraform-managed platform component | Accepted (2026-11-25). Three `helm_release`s in `10-platform` (Envoy Gateway v1.10.0 + Agent Router v1.3.0), pinned per ADR 0011; coexists with Kong by GatewayClass; Gateways/routes/credentials are per-use-case application config |
 
 ## Adding an ADR
 
