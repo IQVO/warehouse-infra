@@ -88,6 +88,40 @@ variable "kong_namespace" {
   default     = "kong"
 }
 
+variable "envoy_gateway_namespace" {
+  description = "Namespace holding Envoy Gateway, the data plane Agent Router builds on (agent-router.tf)."
+  type        = string
+  default     = "envoy-gateway-system"
+}
+
+variable "agent_router_namespace" {
+  description = "Namespace holding the Agent Router (Envoy AI Gateway) controller and CRDs (agent-router.tf)."
+  type        = string
+  default     = "envoy-ai-gateway-system"
+}
+
+variable "envoy_gateway_chart_version" {
+  description = <<-EOT
+    Envoy Gateway chart version, pulled from the OCI registry
+    oci://docker.io/envoyproxy/gateway-helm. Pinned to the dependency
+    version the Agent Router v1.3.0 release notes declare (ADR 0011: a
+    version that exists as a GitHub release/tag).
+  EOT
+  type        = string
+  default     = "v1.10.0"
+}
+
+variable "agent_router_chart_version" {
+  description = <<-EOT
+    Agent Router (Envoy AI Gateway) chart version for both
+    ai-gateway-crds-helm and ai-gateway-helm, pulled from the OCI registry
+    oci://docker.io/envoyproxy. Pinned to the v1.3.0 GitHub release
+    (ADR 0011).
+  EOT
+  type        = string
+  default     = "v1.3.0"
+}
+
 # ---------------------------------------------------------------------------
 # Chart versions — all resolved against live registries, none guessed.
 # ---------------------------------------------------------------------------
