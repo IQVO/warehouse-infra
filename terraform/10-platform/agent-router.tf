@@ -134,3 +134,65 @@ resource "helm_release" "agent_router" {
   timeout = 600
   wait    = true
 }
+
+# ---------------------------------------------------------------------------
+# The Agent Router shared Gateway (ADR 0014) — the data-plane entry point the
+# fleet's A2A routes attach to.
+#
+# Envoy Gateway's chart does NOT create a GatewayClass: it only runs the
+# controller, which reconciles GatewayClasses whose controllerName is
+# gateway.envoyproxy.io/gatewayclass-controller (verified live after the
+# helm_release.envoy_gateway apply: `kubectl get gatewayclass` listed only
+# istio/istio-remote/kong). So both objects are declared here, following the
+# same kubectl_manifest pattern as the Kong GatewayClass/Gateway in
+# gateway-api.tf (declarative: a drift or deletion is a plan diff, not a
+# silent absence).
+#
+# The listener allows routes from EVERY namespace: the application charts
+# render their a2a HTTPRoutes in the apps namespace and attach them to this
+# Gateway cross-namespace via the parentRefs of helm-values/_platform.yaml
+# (the a2a anchor points here since ADR 0014). The Gateway API CRDs are
+# already the cluster's own (k3s gateway-api-crd HelmChart, see
+# gateway-api.tf's header comment) — nothing to install.
+# ---------------------------------------------------------------------------
+
+resource "kubectl_manifest" "agent_router_gateway_class" {
+  depends_on = [helm_release.envoy_gateway]
+
+  yaml_body = yamlencode({
+    apiVersion = "gateway.networking.k8s.io/v1"
+    kind       = "GatewayClass"
+    metadata = {
+      name = "eg"
+    }
+    spec = {
+      controllerName = "gateway.envoyproxy.io/gatewayclass-controller"
+    }
+  })
+}
+
+resource "kubectl_manifest" "agent_router_gateway" {
+  depends_on = [kubectl_manifest.agent_router_gateway_class]
+
+  yaml_body = yamlencode({
+    apiVersion = "gateway.networking.k8s.io/v1"
+    kind       = "Gateway"
+    metadata = {
+      name      = "agent-router"
+      namespace = var.envoy_gateway_namespace
+    }
+    spec = {
+      gatewayClassName = kubectl_manifest.agent_router_gateway_class.name
+      listeners = [{
+        name     = "http"
+        protocol = "HTTP"
+        port     = 80
+        allowedRoutes = {
+          namespaces = {
+            from = "All"
+          }
+        }
+      }]
+    }
+  })
+}
