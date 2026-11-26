@@ -11,6 +11,7 @@
 #
 #     UI          http://localhost:80      Nginx web gateway
 #     API         http://localhost:8000    Kong
+#     A2A agents  http://localhost:8010    Agent Router (Envoy Gateway, ADR 0014)
 #     Grafana     http://localhost:3000    Jaeger  http://localhost:16686
 #     Prometheus  http://localhost:9090    Kiali   http://localhost:20001
 #
@@ -26,7 +27,7 @@
 set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then
-  for p in "${EDGE_UI_PORT:-80}" "${EDGE_API_PORT:-8000}" "${EDGE_GRAFANA_PORT:-3000}" "${EDGE_JAEGER_PORT:-16686}" "${EDGE_PROMETHEUS_PORT:-9090}" "${EDGE_KIALI_PORT:-20001}"; do
+  for p in "${EDGE_UI_PORT:-80}" "${EDGE_API_PORT:-8000}" "${EDGE_A2A_PORT:-8010}" "${EDGE_GRAFANA_PORT:-3000}" "${EDGE_JAEGER_PORT:-16686}" "${EDGE_PROMETHEUS_PORT:-9090}" "${EDGE_KIALI_PORT:-20001}"; do
     if [[ "${p}" -lt 1024 ]]; then
       echo "==> port ${p} is privileged: re-running under sudo" >&2
       exec sudo -E env "KUBECONFIG=${KUBECONFIG:-${HOME}/.kube/config}" "$0" "$@"
@@ -39,6 +40,7 @@ APPS_NS="${APPS_NAMESPACE:-warehouse-systems}"
 KONG_NS="${KONG_NAMESPACE:-kong}"
 OBS_NS="${OBSERVABILITY_NAMESPACE:-observability}"
 MESH_NS="${ISTIO_NAMESPACE:-istio-system}"
+EG_NS="${ENVOY_GATEWAY_NAMESPACE:-envoy-gateway-system}"
 
 k() { kubectl --context "${CONTEXT}" "$@"; }
 
@@ -64,9 +66,35 @@ edge() {
 
 trap 'kill "${pids[@]}" 2>/dev/null || true' EXIT INT TERM
 
+# edge_selector <local port> <namespace> <label selector> <service port> <label>
+# Like edge(), but for a Service whose name is generated, not fixed: Envoy
+# Gateway names the data-plane Service it provisions for a Gateway
+# envoy-<gateway>-<hash>, so the Agent Router edge resolves it through the
+# owning-gateway labels (ADR 0014). Re-resolved inside the restart loop: a
+# re-provisioned data plane can carry a new name.
+edge_selector() {
+  local port="$1" ns="$2" selector="$3" remote="$4" label="$5"
+  if ! k -n "${ns}" get svc -l "${selector}" -o name 2>/dev/null | grep -q .; then
+    echo "  skip ${label}: no svc matching '${selector}' in ${ns}" >&2
+    return 0
+  fi
+  (
+    while true; do
+      svc="$(k -n "${ns}" get svc -l "${selector}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+      if [[ -n "${svc}" ]]; then
+        k -n "${ns}" port-forward --address 127.0.0.1 "svc/${svc}" "${port}:${remote}" >/dev/null 2>&1 || true
+      fi
+      sleep 2
+    done
+  ) &
+  pids+=("$!")
+  echo "  ${label}: http://localhost:${port}" >&2
+}
+
 echo "==> forwarding from context ${CONTEXT} (127.0.0.1 only)" >&2
 edge "${EDGE_UI_PORT:-80}" "${APPS_NS}" web-gateway 80 "UI (Nginx)"
 edge "${EDGE_API_PORT:-8000}" "${KONG_NS}" kong-kong-proxy 80 "API (Kong)"
+edge_selector "${EDGE_A2A_PORT:-8010}" "${EG_NS}" "gateway.envoyproxy.io/owning-gateway-name=agent-router" 80 "A2A (Agent Router)"
 edge "${EDGE_GRAFANA_PORT:-3000}" "${OBS_NS}" grafana 3000 "Grafana"
 edge "${EDGE_JAEGER_PORT:-16686}" "${OBS_NS}" jaeger 16686 "Jaeger"
 edge "${EDGE_PROMETHEUS_PORT:-9090}" "${OBS_NS}" prometheus-server 9090 "Prometheus"

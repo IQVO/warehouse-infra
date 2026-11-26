@@ -14,7 +14,8 @@
 # the collector here, never in HCL.
 
 # The shared Kong Gateway (terraform/10-platform/gateway-api.tf) every route attaches to: the
-# API routes, the MCP routes, the A2A agent routes and the analytics reports routes.
+# API routes, the MCP routes and the analytics reports routes. NOT the A2A
+# routes: those moved to the Agent Router (ADR 0014, the a2a anchor below).
 gatewayApi:
   parentRefs: &gateway
     - name: warehouse-gateway
@@ -25,9 +26,16 @@ mcp:
   route:
     parentRefs: *gateway
 
+# ADR 0014: A2A traffic is exposed through the Agent Router (Envoy Gateway),
+# not Kong. parentRefs target the shared agent-router Gateway declared in
+# terraform/10-platform/agent-router.tf; that Gateway must be Programmed
+# before this anchor is changed (ordering is ADR 0014 decision 5).
 a2a:
   route:
-    parentRefs: *gateway
+    parentRefs: &agentRouterGateway
+      - name: agent-router
+        namespace: envoy-gateway-system
+        sectionName: http
 
 analytics:
   reports:
