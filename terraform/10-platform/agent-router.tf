@@ -156,6 +156,36 @@ resource "helm_release" "agent_router" {
 # gateway-api.tf's header comment) — nothing to install.
 # ---------------------------------------------------------------------------
 
+# The data plane's Service MUST be ClusterIP (ADR 0011's exposure rule:
+# NodePort/LoadBalancer answer on the node's LAN address and the fleet is
+# unauthenticated). Envoy Gateway's default is LoadBalancer, and on k3s that
+# also spawns one klipper svclb pod PER NODE — observed live after the
+# gateway landed (two svclb pods on a pod-capped cluster, and :80 published
+# on the LAN). This EnvoyProxy config, attached to the GatewayClass via
+# parametersRef, is EG's supported way to change the data-plane Service type.
+resource "kubectl_manifest" "agent_router_envoyproxy" {
+  depends_on = [helm_release.envoy_gateway]
+
+  yaml_body = yamlencode({
+    apiVersion = "gateway.envoyproxy.io/v1alpha1"
+    kind       = "EnvoyProxy"
+    metadata = {
+      name      = "agent-router-proxy-config"
+      namespace = var.envoy_gateway_namespace
+    }
+    spec = {
+      provider = {
+        type = "Kubernetes"
+        kubernetes = {
+          envoyService = {
+            type = "ClusterIP"
+          }
+        }
+      }
+    }
+  })
+}
+
 resource "kubectl_manifest" "agent_router_gateway_class" {
   depends_on = [helm_release.envoy_gateway]
 
@@ -167,6 +197,12 @@ resource "kubectl_manifest" "agent_router_gateway_class" {
     }
     spec = {
       controllerName = "gateway.envoyproxy.io/gatewayclass-controller"
+      parametersRef = {
+        group     = "gateway.envoyproxy.io"
+        kind      = "EnvoyProxy"
+        name      = kubectl_manifest.agent_router_envoyproxy.name
+        namespace = var.envoy_gateway_namespace
+      }
     }
   })
 }
