@@ -210,6 +210,22 @@ resource "kubectl_manifest" "agent_router_gateway_class" {
 resource "kubectl_manifest" "agent_router_gateway" {
   depends_on = [kubectl_manifest.agent_router_gateway_class]
 
+  # Every MCP and A2A route attaches to the parentRefs in
+  # helm-values/_platform.yaml (ADR 0014 for A2A, ADR 0015 for MCP): they must
+  # name this Gateway's name, namespace and listener. The REST routes are
+  # Kong's and are checked on the Kong Gateway in gateway-api.tf.
+  lifecycle {
+    precondition {
+      condition = alltrue([
+        for ref in concat(
+          local.platform.a2a.route.parentRefs,
+          local.platform.mcp.route.parentRefs,
+        ) : ref.name == "agent-router" && ref.namespace == var.envoy_gateway_namespace && ref.sectionName == "http"
+      ])
+      error_message = "helm-values/_platform.yaml a2a and mcp parentRefs must all point at Gateway agent-router in namespace ${var.envoy_gateway_namespace}, listener http."
+    }
+  }
+
   yaml_body = yamlencode({
     apiVersion = "gateway.networking.k8s.io/v1"
     kind       = "Gateway"
