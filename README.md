@@ -22,9 +22,11 @@ the other:
 ```
 http://localhost        ->  Nginx web gateway  ->  console shell + /mfes/<context>/ remotes + /catalog/ (EventCatalog)
 http://localhost:8000   ->  Kong               ->  /api/<context> REST APIs
+http://localhost:8010   ->  Agent Router       ->  /api/mcp/<context> MCP servers, /api/a2a/<context> A2A agents
 ```
 
-Kong never serves HTML/CSS/JavaScript; the web gateway never proxies an API.
+Kong never serves HTML/CSS/JavaScript; the web gateway never proxies an API. REST goes
+through Kong, MCP and A2A through the Agent Router (Envoy Gateway; ADR 0014, ADR 0015).
 Both bind to `127.0.0.1` only, because every REST and MCP endpoint here is
 currently unauthenticated. The rationale, the rejected alternatives and the
 consequences (CORS becomes load-bearing) are in
@@ -106,7 +108,8 @@ below.
 |-----------------------------------|--------------------------------------------|------------|
 | `http://localhost` (`:80`)        | `web-gateway` (`warehouse-systems`)        | **Product UI** — Nginx web gateway: console shell + `/mfes/<context>/` remotes |
 | `http://localhost/catalog/` (`:80`) | `web-gateway` -> `ecosystem` (`warehouse-systems`) | **EventCatalog** — architecture catalog at `/catalog/` (base-prefixed SSG, bytes only) |
-| `http://localhost:8000`           | `kong-kong-proxy` (`kong`)                 | **Product API** — Kong HTTP proxy, `/api/<context>/*` |
+| `http://localhost:8000`           | `kong-kong-proxy` (`kong`)                 | **Product API** — Kong HTTP proxy, `/api/<context>/*` (REST only) |
+| `http://localhost:8010`           | `envoy-agent-router-*` (`envoy-gateway-system`) | **Agent edge** — Agent Router (Envoy Gateway): MCP at `/api/mcp/<context>`, A2A at `/api/a2a/<context>` |
 | `http://localhost:3000`           | `grafana` (`observability`)                | Grafana (`admin` / `var.grafana_admin_password`, default `admin`) |
 | `http://localhost:16686`          | `jaeger` (`observability`)                 | Jaeger query UI |
 | `http://localhost:9090`           | `prometheus-server` (`observability`)      | Prometheus UI |

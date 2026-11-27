@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted (2026-11-26, decided by the owner)
+Accepted (2026-11-26, decided by the owner). Decision 4 amended by ADR 0015: the MCP routes
+also moved to the Agent Router
 
 ## Context
 

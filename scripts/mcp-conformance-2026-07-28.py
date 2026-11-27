@@ -24,7 +24,7 @@ endpoint. Per server it checks, with no `initialize` and no session id:
 Targets: `--target name=url` (repeatable), and/or `--base <prefix>` which probes
 `<prefix>/<name>` for every MCP service derived from the same source
 scripts/run-mcp-acceptance.sh uses (scripts/exposure_inventory.py --kind mcps;
-needs PyYAML), e.g. `--base http://localhost:8000/api/mcp` (the Kong form).
+needs PyYAML), e.g. `--base http://localhost:8010/api/mcp` (the Agent Router form, ADR 0015).
 
 Exit status: 0 = no FAIL, 1 = at least one FAIL, 2 = usage error.
 Session ids, headers and credentials in URLs are never printed.
@@ -316,7 +316,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--target", action="append", default=[], type=parse_target, metavar="NAME=URL",
                         help="explicit endpoint, repeatable")
     parser.add_argument("--base", help="probe <BASE>/<name> for every MCP service derived from "
-                        "scripts/exposure_inventory.py (e.g. http://localhost:8000/api/mcp)")
+                        "scripts/exposure_inventory.py (e.g. http://localhost:8010/api/mcp)")
     parser.add_argument("--require-authority", action="store_true",
                         help="FAIL (instead of WARN) when a tool lacks a valid com.warehouse/authority")
     parser.add_argument("--timeout", type=float, default=10.0, help="per-request timeout in seconds (default 10)")

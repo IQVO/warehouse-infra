@@ -107,15 +107,15 @@ resource "kubectl_manifest" "gateway_class" {
 resource "kubectl_manifest" "gateway" {
   count = var.deploy_gateway_api ? 1 : 0
 
-  # Every application's routes attach to the parentRefs in
+  # Every REST route (API + analytics reports) attaches to the parentRefs in
   # helm-values/_platform.yaml: they must name this Gateway's namespace and
-  # listener.
+  # listener. MCP and A2A routes are the Agent Router's (ADR 0014/0015, checked
+  # on its own Gateway in agent-router.tf).
   lifecycle {
     precondition {
       condition = alltrue([
         for ref in concat(
           local.platform.gatewayApi.parentRefs,
-          local.platform.mcp.route.parentRefs,
           local.platform.analytics.reports.route.parentRefs,
         ) : ref.name == local.gateway_name && ref.namespace == var.kong_namespace && ref.sectionName == "http"
       ])

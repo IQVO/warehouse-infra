@@ -11,7 +11,7 @@
 #
 #     UI          http://localhost:80      Nginx web gateway
 #     API         http://localhost:8000    Kong
-#     A2A agents  http://localhost:8010    Agent Router (Envoy Gateway, ADR 0014)
+#     MCP + A2A   http://localhost:8010    Agent Router (Envoy Gateway, ADR 0014/0015)
 #     Grafana     http://localhost:3000    Jaeger  http://localhost:16686
 #     Prometheus  http://localhost:9090    Kiali   http://localhost:20001
 #
@@ -94,7 +94,7 @@ edge_selector() {
 echo "==> forwarding from context ${CONTEXT} (127.0.0.1 only)" >&2
 edge "${EDGE_UI_PORT:-80}" "${APPS_NS}" web-gateway 80 "UI (Nginx)"
 edge "${EDGE_API_PORT:-8000}" "${KONG_NS}" kong-kong-proxy 80 "API (Kong)"
-edge_selector "${EDGE_A2A_PORT:-8010}" "${EG_NS}" "gateway.envoyproxy.io/owning-gateway-name=agent-router" 80 "A2A (Agent Router)"
+edge_selector "${EDGE_A2A_PORT:-8010}" "${EG_NS}" "gateway.envoyproxy.io/owning-gateway-name=agent-router" 80 "MCP + A2A (Agent Router)"
 edge "${EDGE_GRAFANA_PORT:-3000}" "${OBS_NS}" grafana 3000 "Grafana"
 edge "${EDGE_JAEGER_PORT:-16686}" "${OBS_NS}" jaeger 16686 "Jaeger"
 edge "${EDGE_PROMETHEUS_PORT:-9090}" "${OBS_NS}" prometheus-server 9090 "Prometheus"
