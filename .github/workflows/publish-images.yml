@@ -140,6 +140,8 @@ jobs:
           # @warehouse/ui-kit is a sibling checkout the frontend Dockerfiles
           # take as a named context (uikit=./uikit).
           build-contexts: ${{ matrix.kind != 'service' && 'uikit=./uikit' || '' }}
+          # A standalone UI (apps.yaml web_path) gets its Vite base here; empty for every other image.
+          build-args: ${{ matrix.build_args || '' }}
           platforms: ${{ inputs.platform }}
           push: true
           provenance: false

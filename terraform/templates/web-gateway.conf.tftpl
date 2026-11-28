@@ -76,6 +76,31 @@ http {
     }
 
 %{ endfor ~}
+%{ for site in sites ~}
+    # ---- ${site.name} (standalone web UI, apps.yaml web_path) ----
+    # Built with Vite base ${site.path}/, so every asset URL it emits already
+    # carries the prefix; strip it so the UI's own nginx sees root-relative
+    # paths (/assets/..., /config.json) and applies its SPA fallback. Bytes
+    # only: the UI calls its API through Kong, never through this gateway.
+    # Relative Location: this gateway listens on 8080 behind the :80
+    # port-forward, so an absolute redirect would send the browser to :8080.
+    location = ${site.path} {
+      absolute_redirect off;
+      return 301 ${site.path}/;
+    }
+
+    location ^~ ${site.path}/ {
+      set $upstream_${site.upstream_var} ${site.service_host};
+      rewrite ^${site.path}/(.*)$ /$1 break;
+      proxy_pass http://$upstream_${site.upstream_var}:${site.service_port};
+      proxy_http_version 1.1;
+      proxy_set_header Host              $host;
+      proxy_set_header X-Real-IP         $remote_addr;
+      proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+%{ endfor ~}
     # ---- the EventCatalog (ecosystem) ----
     # Built with Astro base "/catalog/", so every asset and internal link it
     # emits already carries the prefix: plain proxying, no rewrite. Like the

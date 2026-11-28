@@ -38,6 +38,12 @@
 #                 image the chart names (ADR 0011).
 #   site          true: a static site built from the repo root (console,
 #                 EventCatalog); its image tag goes to image.tag.
+#   web_path      a standalone web UI (NOT a console remote) built from the
+#                 repo's web/Dockerfile with VITE_BASE=<web_path>: published
+#                 as <app>-frontend like a remote, its tag goes to
+#                 web.image.tag, and the web gateway serves it at this path
+#                 prefix (e.g. /assets-control/). The chart's web.enabled
+#                 must be true in helm-values/<app>.yaml.
 # ---------------------------------------------------------------------------
 applications:
   # asrs-control: the WCS AS/RS controller (Generic, plan WCS-02) -- rack
@@ -164,6 +170,18 @@ applications:
     database: true
     analytics: true
     frontend_remote: inbound_mfe
+
+  # iqvo-assets-control: the design-time architecture registry and map of the
+  # fleet (platform; reads contracts from git, never the cluster). api (REST
+  # :8080 + import worker, migrations at boot, Postgres only, no Kafka), a
+  # read-only MCP server (cmd/mcp, Agent Router) and a standalone web UI
+  # (web/, nginx) the web gateway serves at /assets-control/ -- not a console
+  # remote, so web_path instead of frontend_remote.
+  iqvo-assets-control:
+    kind: service
+    repo_owner: IQVO
+    database: true
+    web_path: /assets-control/
 
   inventory-storage:
     kind: service

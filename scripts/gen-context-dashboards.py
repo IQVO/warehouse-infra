@@ -201,6 +201,18 @@ CONTEXTS = [
         ],
     },
     {
+        "key": "iqvo-assets-control",
+        "title": "Platform — IQVO Assets Control",
+        "uid": "warehouse-iqvo-assets-control",
+        # Platform service (the fleet's design-time architecture registry). cmd/api instruments nothing yet (no
+        # OTel exporter, no business counter), so the business row is empty and the service RED/Go-runtime rows
+        # stay empty until it does; the Kong rows read the chart's prometheus KongPlugin on the api route.
+        "service_regex": "iqvo-assets-control.*",
+        "loki_app": "iqvo-assets-control",
+        "runbook_url": "https://github.com/IQVO/iqvo-assets-control/blob/develop/docs/operations/runbook.md",
+        "business_metrics": [],
+    },
+    {
         "key": "order-management",
         "title": "Order Management",
         "uid": "warehouse-order-management",

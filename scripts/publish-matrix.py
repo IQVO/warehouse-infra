@@ -7,10 +7,11 @@ of terraform/apps.yaml -- the same three shapes modules/application knows:
   service   build_image != false   <repo>/Dockerfile          -> <app>
             or publish_image: true  (an image kind does not build but k3s needs for arm64)
   frontend  frontend_remote set    <repo>/web/Dockerfile      -> <app>-frontend
+            or web_path set         (a standalone UI, built with VITE_BASE=<web_path>)
   site      site: true             <repo>/Dockerfile          -> <app>-frontend
 
 Usage: publish-matrix.py [--apps "a b c"]   (default: every application)
-Output: JSON {"include": [{app, owner, kind, dir, name}, ...]} on stdout.
+Output: JSON {"include": [{app, owner, kind, dir, name[, build_args]}, ...]} on stdout.
 """
 import argparse
 import json
@@ -32,6 +33,10 @@ def entries(apps):
             out.append({"app": app, "owner": owner, "kind": "site", "dir": ".", "name": f"{app}-frontend"})
         elif a.get("frontend_remote"):
             out.append({"app": app, "owner": owner, "kind": "frontend", "dir": "web", "name": f"{app}-frontend"})
+        elif a.get("web_path"):
+            # A standalone UI served under a path prefix: Vite bakes the base in at build time.
+            out.append({"app": app, "owner": owner, "kind": "frontend", "dir": "web", "name": f"{app}-frontend",
+                        "build_args": f"VITE_BASE={a['web_path']}"})
     return out
 
 

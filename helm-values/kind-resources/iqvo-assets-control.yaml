@@ -1,0 +1,19 @@
+# CPU-request overlay for iqvo-assets-control (generated from iqvo-assets-control/charts/iqvo-assets-control/values.yaml
+# on the chart PR): the api requests 50m by default, so it drops to 25m; mcp and web already request 25m.
+# Memory (capacity step 2): requests.memory = max(32Mi, 1.5 x the 24 h max working set) -- no measurement yet
+# (never deployed), so every component starts at the 32Mi floor; re-measure after a day on k3s. Limits keep
+# the chart defaults. The Application's last value file (after _platform.yaml and <app>.yaml, ADR 0002 D2).
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+mcp:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+web:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
