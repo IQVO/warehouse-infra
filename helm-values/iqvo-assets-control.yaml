@@ -1,0 +1,52 @@
+# iqvo-assets-control -- the design-time architecture registry and map of the IQVO fleet (platform; a
+# domain-driven design study, not associated with any company). It reads the fleet's contracts from GitHub
+# (IQVO/ecosystem, each repo's system/ bundle and contracts/pinned.json), never the running cluster.
+#
+# Three components from its chart (charts/iqvo-assets-control):
+#   - api: REST :8080 + the import worker (claims queued imports with FOR UPDATE SKIP LOCKED), migrations at
+#     boot. Real Postgres only (the chart refuses a render without a database); no Kafka at all (plan D2).
+#     Kong route /api/iqvo-assets-control (gatewayApi), with the chart's KongPlugins.
+#   - mcp: the read-only MCP server (cmd/mcp, every tool L1) on the Agent Router (ADR 0015):
+#     /api/mcp/iqvo-assets-control -> /mcp. The parentRefs come from _platform.yaml.
+#   - web: the standalone UI (web/, nginx-unprivileged), Service iqvo-assets-control-frontend, served by the
+#     Nginx web gateway at /assets-control/ (apps.yaml web_path; never through Kong). Its /config.json points
+#     at the API through Kong's host origin (the split localhost edge: the page on http://localhost, the API
+#     on http://localhost:8000), so the chart's cors KongPlugin grants _platform.yaml's origin.
+#
+# Image tags (api: image.tag, web: web.image.tag) come from Terraform (terraform/targets/k3s.images.yaml).
+# GITHUB_TOKEN is optional and not wired: the importer runs anonymously until a token Secret exists
+# (github.existingSecret).
+
+database:
+  existingSecret: iqvo-assets-control-db
+  existingSecretKey: DATABASE_URL
+  migrationsExistingSecretKey: MIGRATIONS_DATABASE_URL
+
+gatewayApi:
+  enabled: true
+  hosts:
+    - path: /api/iqvo-assets-control
+      pathType: PathPrefix
+  stripPath: true
+
+mcp:
+  enabled: true
+  # ORCHESTRATOR: set to the released version (e.g. "0.1.0") together with the image pin. Empty = the chart's
+  # appVersion; cmd/mcp publishes it as the server card's version (MCP_SERVER_VERSION).
+  serverVersion: ""
+  route:
+    enabled: true
+    path: /api/mcp/iqvo-assets-control
+
+web:
+  enabled: true
+  config:
+    apiBaseUrl: http://localhost:8000/api/iqvo-assets-control
+
+kongPlugins:
+  cors:
+    enabled: true
+  opentelemetry:
+    enabled: true
+  prometheus:
+    enabled: true

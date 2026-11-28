@@ -32,6 +32,17 @@ locals {
     for name, a in local.registry : name => { remote_name = a.frontend_remote } if try(a.frontend_remote, null) != null
   } : {}
 
+  # Standalone web UIs (apps.yaml web_path): an application's own site next to
+  # its API, served at a path prefix of the default server (not under
+  # /mfes/, it is not a console remote). Its chart names the Service
+  # <release>-frontend, like a remote's; web.enabled switches it on.
+  web_sites = var.deploy_frontends ? {
+    for name, a in local.registry : name => {
+      path         = a.web_path
+      service_host = "${name}-frontend.${var.apps_namespace}.svc.cluster.local"
+    } if try(a.web_path, null) != null
+  } : {}
+
   console_release_name = "warehouse-console"
 
   # Service DNS the web gateway proxies to. Every one of these is ClusterIP:
@@ -106,6 +117,15 @@ locals {
     storefront_host         = "storefront.localhost"
     storefront_service_host = local.storefront_service_host
     storefront_service_port = 80
+    sites = [
+      for name, site in local.web_sites : {
+        name         = name
+        path         = trimsuffix(site.path, "/")
+        upstream_var = replace(name, "-", "_")
+        service_host = site.service_host
+        service_port = 80
+      }
+    ]
     remotes = [
       for name, fe in local.frontend_remotes : {
         context      = name
@@ -163,6 +183,22 @@ resource "kubernetes_deployment" "web_gateway" {
         try(yamldecode(file("${path.module}/../../helm-values/${name}.yaml")).frontend.enabled, false)
       ])
       error_message = "Every context in local.frontend_remotes must set frontend.enabled: true in its helm-values file."
+    }
+    # The gateway proxies each web_path to its application's standalone UI;
+    # the chart only runs it when the values file switches web.enabled on.
+    precondition {
+      condition = alltrue([
+        for name in keys(local.web_sites) :
+        try(yamldecode(file("${path.module}/../../helm-values/${name}.yaml")).web.enabled, false)
+      ])
+      error_message = "Every application with a web_path in apps.yaml must set web.enabled: true in its helm-values file."
+    }
+    precondition {
+      condition = alltrue([
+        for name, site in local.web_sites :
+        startswith(site.path, "/") && endswith(site.path, "/") && !startswith(site.path, "/mfes/") && !startswith(site.path, "/api") && site.path != "/" && site.path != "/catalog/"
+      ])
+      error_message = "apps.yaml web_path must be \"/<prefix>/\" and must not take /, /api, /mfes/ or /catalog/."
     }
   }
 

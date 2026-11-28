@@ -20,7 +20,7 @@ The product has **two independent host-facing edges**, and neither proxies to
 the other:
 
 ```
-http://localhost        ->  Nginx web gateway  ->  console shell + /mfes/<context>/ remotes + /catalog/ (EventCatalog)
+http://localhost        ->  Nginx web gateway  ->  console shell + /mfes/<context>/ remotes + /catalog/ (EventCatalog) + /assets-control/ (IQVO Assets Control UI)
 http://localhost:8000   ->  Kong               ->  /api/<context> REST APIs
 http://localhost:8010   ->  Agent Router       ->  /api/mcp/<context> MCP servers, /api/a2a/<context> A2A agents
 ```
@@ -108,6 +108,7 @@ below.
 |-----------------------------------|--------------------------------------------|------------|
 | `http://localhost` (`:80`)        | `web-gateway` (`warehouse-systems`)        | **Product UI** — Nginx web gateway: console shell + `/mfes/<context>/` remotes |
 | `http://localhost/catalog/` (`:80`) | `web-gateway` -> `ecosystem` (`warehouse-systems`) | **EventCatalog** — architecture catalog at `/catalog/` (base-prefixed SSG, bytes only) |
+| `http://localhost/assets-control/` (`:80`) | `web-gateway` -> `iqvo-assets-control-frontend` (`warehouse-systems`) | **IQVO Assets Control** — the design-time architecture map's standalone UI (apps.yaml `web_path`, bytes only; its API goes through Kong) |
 | `http://localhost:8000`           | `kong-kong-proxy` (`kong`)                 | **Product API** — Kong HTTP proxy, `/api/<context>/*` (REST only) |
 | `http://localhost:8010`           | `envoy-agent-router-*` (`envoy-gateway-system`) | **Agent edge** — Agent Router (Envoy Gateway): MCP at `/api/mcp/<context>`, A2A at `/api/a2a/<context>` |
 | `http://localhost:3000`           | `grafana` (`observability`)                | Grafana (`admin` / `var.grafana_admin_password`, default `admin`) |
@@ -146,6 +147,7 @@ Every bounded-context service's OLTP pod listens on container port `8080`
 | `<service>` (16 of: order-management, inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, facility-layout, labor-performance, process-path-management, warehouse-planning, product-master, inbound-receiving, slotting-optimization, pick-face-replenishment, task-interleaving, returns-processing, exception-management) | `80 → 8080` | OLTP REST API, routed by Kong — except returns-processing and exception-management, whose charts render no `gatewayApi` HTTPRoute yet (ClusterIP only; see their paragraph below) |
 | `amr-fleet-control`, `amr-fleet-control-mcp`, `amr-fleet-control-a2a` | `80 → 8080`, `8090 → 8090`, `8093 → 8093` | WCS VDA 5050 master control (plan WCS-03): OLTP REST API routed by Kong, plus its read-only MCP server and A2A agent, both served by the one `amr-fleet-control-agents` pod (`agents.colocate`, ADR 0012); MQTT to `mosquitto:1883` beside equipment-emulator |
 | `material-flow-control`, `material-flow-control-mcp`, `material-flow-control-a2a` | `80 → 8080`, `8090 → 8090`, `8093 → 8093` | WCS material flow controller (plan WCS-04): OLTP REST API routed by Kong (relationship 1, `POST /transport-requests`), plus its read-only MCP server and A2A agent, both served by the one `material-flow-control-agents` pod (`agents.colocate`, ADR 0012); consumes `warehouse.asrs-control.events` and `warehouse.amr-fleet-control.events`, calls asrs-control and amr-fleet-control over HTTP |
+| `iqvo-assets-control`, `iqvo-assets-control-mcp`, `iqvo-assets-control-frontend` | `80 → 8080`, `8090 → 8090`, `80 → 8080` | Platform: the design-time architecture registry and map (reads the fleet's contracts from GitHub, never the cluster): REST API + import worker routed by Kong, its read-only MCP server on the Agent Router, and its standalone UI served by the web gateway at `/assets-control/`; Postgres only, no Kafka |
 | `<service>-mcp`                            | `8090 → 8090`          | MCP server (Streamable HTTP at `/` and `/mcp`) — every context whose `helm-values/<context>.yaml` sets `mcp.enabled` (all 16 above, plus network-fulfillment and network-inventory-planning) |
 | `<service>-reports`                        | `80 → 8092`             | Analytics read-only REST API (only where `analytics.enabled`, see `locals.tf`'s `analytics_services`) |
 | `<service>-frontend`                       | `80 → 8080`             | Module Federation remote, proxied by the web gateway at `/mfes/<context>/` |
@@ -746,6 +748,8 @@ collides head-on with the console shell's own client-side routes —
 | `http://localhost:8000/api/mcp/material-flow-control`     | `/api/mcp/material-flow-control` → `/mcp` | `material-flow-control-mcp.warehouse-systems.svc.cluster.local:8090` |
 | `http://localhost:8000/api/a2a/material-flow-control/*`   | `/api/a2a/material-flow-control` → `/*` | `material-flow-control-a2a.warehouse-systems.svc.cluster.local:8093` |
 | `http://localhost:8000/api/warehouse-ops-agent/*`         | `/api/warehouse-ops-agent` → `/*`    | `warehouse-ops-agent.warehouse-systems.svc.cluster.local`   |
+| `http://localhost:8000/api/iqvo-assets-control/*`         | `/api/iqvo-assets-control` → `/*`    | `iqvo-assets-control.warehouse-systems.svc.cluster.local`   |
+| `http://localhost:8010/api/mcp/iqvo-assets-control` (Agent Router) | `/api/mcp/iqvo-assets-control` → `/mcp` | `iqvo-assets-control-mcp.warehouse-systems.svc.cluster.local:8090` |
 
 Container port 8080 is not an assumption: every `cmd/*/main.go` defaults
 `HTTP_ADDR` to `":8080"` and every Dockerfile `EXPOSE`s 8080.
@@ -760,10 +764,14 @@ curl -i http://localhost:8000/api/inventory-storage/healthz
 |---------------------------------------|---------------------------------------------------------------|
 | `http://localhost/`                   | `warehouse-console.warehouse-systems.svc.cluster.local`       |
 | `http://localhost/mfes/<context>/*`   | `<context>-frontend.warehouse-systems.svc.cluster.local`      |
+| `http://localhost/assets-control/*`   | `iqvo-assets-control-frontend.warehouse-systems.svc.cluster.local` |
 
 The gateway strips `/mfes/<context>` before proxying, so each remote's own nginx
 sees root-relative paths. Each remote is built with Vite base
-`/mfes/<context>/`, which keeps its chunks inside its own namespace.
+`/mfes/<context>/`, which keeps its chunks inside its own namespace. A standalone
+UI (apps.yaml `web_path`, today only iqvo-assets-control at `/assets-control/`) is
+proxied the same way: its prefix is stripped and its image is built with that
+Vite base (publish-images passes `VITE_BASE=<web_path>`).
 
 `scripts/tf.sh platform output routes`, `frontend_routes` and `product_endpoints` print the
 live tables for the ports you actually applied.

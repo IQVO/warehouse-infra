@@ -509,6 +509,14 @@ CHARTS: dict[str, dict[str, str]] = {
         "database.url": "postgres://u@example.invalid:5432/db",
         "kafka.brokers": "kafka.example.invalid:9092",
     },
+    # iqvo-assets-control (platform: the design-time architecture registry):
+    # the api plus the optional read-only mcp and the standalone web UI
+    # (component frontend, Service <release>-frontend, served by the web
+    # gateway at /assets-control/). Real Postgres only: a dummy, no password.
+    "../../iqvo-assets-control/charts/iqvo-assets-control": {
+        "mcp.enabled": "true", "web.enabled": "true",
+        "database.url": "postgres://u@example.invalid:5432/db",
+    },
     # equipment-emulator (WCS test infrastructure, not a bounded context):
     # one Deployment+Service, no optional components, no database.
     "../../equipment-emulator/charts/equipment-emulator": {},

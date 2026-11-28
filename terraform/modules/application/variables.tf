@@ -73,8 +73,9 @@ variable "frontend" {
     Set when the application has a frontend image, <registry prefix>/<name>-frontend,
     tagged var.registry.frontend_tag. values_key says which chart value receives
     the tag: "frontend" (frontend.image.tag, a Module Federation remote next to
-    the API) or "image" (image.tag, an application that IS the static site: the
-    console shell, the EventCatalog).
+    the API), "web" (web.image.tag, a standalone web UI next to the API,
+    apps.yaml web_path) or "image" (image.tag, an application that IS the
+    static site: the console shell, the EventCatalog).
   EOT
   type = object({
     values_key = optional(string, "frontend")
@@ -82,8 +83,8 @@ variable "frontend" {
   default = null
 
   validation {
-    condition     = var.frontend == null || contains(["frontend", "image"], try(var.frontend.values_key, ""))
-    error_message = "frontend.values_key must be \"frontend\" or \"image\"."
+    condition     = var.frontend == null || contains(["frontend", "web", "image"], try(var.frontend.values_key, ""))
+    error_message = "frontend.values_key must be \"frontend\", \"web\" or \"image\"."
   }
 }
 

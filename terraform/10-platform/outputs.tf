@@ -36,9 +36,10 @@ output "platform" {
 
     gateway_ready = local.gateway_ready
 
-    # The applications that have a Module Federation frontend image (apps.yaml
-    # frontend_remote); their tags come from the lock file (ADR 0011).
-    frontend_apps = sort(keys(local.frontend_remotes))
+    # The applications that have a frontend image next to their API (apps.yaml
+    # frontend_remote, or web_path for a standalone UI); their tags come from
+    # the lock file (ADR 0011).
+    frontend_apps = sort(concat(keys(local.frontend_remotes), keys(local.web_sites)))
   }
   sensitive = true
 }
@@ -68,6 +69,10 @@ output "frontend_routes" {
     {
       for name, fe in local.frontend_remotes :
       "${local.web_origin}/mfes/${name}/" => "${local.frontend_service_host[name]}:80"
+    },
+    {
+      for name, site in local.web_sites :
+      "${local.web_origin}${site.path}" => "${site.service_host}:80"
     },
   ) : {}
 }

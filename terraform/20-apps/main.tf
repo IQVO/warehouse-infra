@@ -66,8 +66,12 @@ locals {
   # lock file, the image from ghcr.io. Nothing is built here (ADR 0011).
   image = try(local.a.build_image, true) || try(local.a.publish_image, false) ? {} : null
 
+  # A standalone web UI (apps.yaml web_path) is decided from the registry
+  # here, like a site: its tag goes to web.image.tag.
   frontend = try(local.a.site, false) ? (
     var.deploy_frontends ? { values_key = "image" } : null
+    ) : try(local.a.web_path, null) != null ? (
+    var.deploy_frontends ? { values_key = "web" } : null
     ) : (
     contains(local.platform.frontend_apps, local.app_name) ? {} : null
   )

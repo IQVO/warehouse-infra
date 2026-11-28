@@ -20,6 +20,7 @@ Nothing is auto-discovered.
    - Anything else: `kind: other`. Static sites say `build_image: false` and `site: true`; an image pulled from a registry says `build_image: false`. A secret whose value comes from a Terraform variable goes in `local.application_secrets` (`terraform/20-apps/main.tf`).
 3. If it has a projector/reports pair: `analytics: true` (or `analytics: { secret_keys: [...] }` when its chart reads fewer keys than the default pair). That gives it the analytics database and the `<svc>-analytics-db` Secret.
 4. If its repo ships a frontend remote: `frontend_remote: <module-federation name>` for the image build and the web gateway route.
+   A standalone web UI next to the API (not a console remote, e.g. iqvo-assets-control) takes `web_path: /<prefix>/` instead: publish-images builds `web/` as `<app>-frontend` with `VITE_BASE=<web_path>`, the tag goes to the chart's `web.image.tag`, the web gateway serves it at that prefix, and `web.enabled: true` is required in its values file.
 5. Values: create `helm-values/<app>.yaml` (its complete configuration: copy a sibling's routes, MCP, analytics, Kong plugin blocks) and `helm-values/kind-resources/<app>.yaml` (generated CPU overlay; see that directory's README). The plan fails while either is missing. Credentials come from `existingSecret` (`<app>-db`, `<app>-analytics-db`), never a value; image tags never appear here.
 6. Keep the hand-maintained chart lists in sync: `CHARTS` in the `Makefile` and `CHARTS` in `scripts/check-chart-selectors.py`.
 

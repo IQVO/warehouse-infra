@@ -60,6 +60,11 @@ locals {
     local.frontend_image_tag == null || try(var.frontend.values_key, "") != "image" ? {} : {
       image = merge(try(var.helm_values.image, {}), local.frontend_image_repository, { tag = local.frontend_image_tag })
     },
+    local.frontend_image_tag == null || try(var.frontend.values_key, "") != "web" ? {} : {
+      web = merge(try(var.helm_values.web, {}), {
+        image = merge(try(var.helm_values.web.image, {}), local.frontend_image_repository, { tag = local.frontend_image_tag })
+      })
+    },
   )
 }
 
